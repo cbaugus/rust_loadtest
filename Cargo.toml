@@ -1,0 +1,20 @@
+[package]
+name = "rust_loadtest"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = { version = "0.12", features = ["blocking", "json"] } # Or just "blocking" if you don't need json
+tokio = { version = "1", features = ["full"] } # "full" includes everything you need for async main
+prometheus = "0.13"
+hyper = { version = "0.14", features = ["full"] } # For the HTTP server
+lazy_static = "1.4"
+
+
+#rand = "0.8.4"
+#base64 = "0.13.0"
+#log = "0.4.14"
+#env_logger = "0.9.0"
+#trust-dns-resolver = "0.20.1"
