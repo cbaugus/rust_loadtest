@@ -3,13 +3,14 @@ extern crate lazy_static;
 
 use reqwest;
 use tokio::{self, time::{self, Duration}};
-use std::collections::HashMap;
+use std::collections::HashMap; // Not used in this snippet, but kept if you need it elsewhere
 use std::sync::{Arc, Mutex};
 use prometheus::{Encoder, Gauge, IntCounter, IntCounterVec, Opts, Registry, TextEncoder};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use std::env;
-use std::str::FromStr; // Needed for parsing enums from strings
+use std::str::FromStr; // Needed for parsing numbers from strings
+
 
 // Define Prometheus metrics
 lazy_static::lazy_static! {
@@ -25,27 +26,139 @@ lazy_static::lazy_static! {
         Gauge::new("concurrent_requests", "Number of HTTP requests currently in flight").unwrap();
 }
 
-// --- NEW: Enum for different load models ---
-#[derive(Debug, PartialEq, Eq, Clone)]
-enum LoadModel {
-    Concurrent,
-    Rps,
-    RampRps,
+// --- NEW: Enum for different load models with their data ---
+#[derive(Debug, Clone)] // Removed PartialEq, Eq because f64 doesn't implement them reliably
+pub enum LoadModel {
+    Concurrent, // No specific RPS limit, just max concurrency
+    Rps { target_rps: f64 }, // Fixed RPS target
+    RampRps { // Linear ramp up/down
+        min_rps: f64,
+        max_rps: f64,
+        ramp_duration: Duration, // Total duration for the ramp profile (e.g., 2 hours for the 1/3, 1/8, remainder pattern)
+    },
+    DailyTraffic { // Complex daily traffic pattern
+        min_rps: f64,             // Base load (e.g., night-time traffic)
+        mid_rps: f64,             // Mid-level load (e.g., afternoon traffic)
+        max_rps: f64,             // Peak load (e.g., morning rush)
+        cycle_duration: Duration, // Duration of one full daily cycle (e.g., Duration::from_hours(24))
+        // Ratios defining the segments within one cycle. Sum of ratios should be <= 1.0
+        morning_ramp_ratio: f64,    // From min_rps to max_rps
+        peak_sustain_ratio: f64,    // Hold max_rps
+        mid_decline_ratio: f64,     // From max_rps to mid_rps
+        mid_sustain_ratio: f64,     // Hold mid_rps
+        evening_decline_ratio: f64, // From mid_rps to min_rps
+        // (Night sustain is implied by the end of the cycle)
+    },
 }
 
-impl FromStr for LoadModel {
-    type Err = String;
+// --- NEW: calculate_current_rps method for LoadModel ---
+impl LoadModel {
+    // Helper function to calculate the current target RPS based on the model and elapsed time
+    // This function will be called repeatedly by each worker task.
+    pub fn calculate_current_rps(&self, elapsed_total_secs: f64, overall_test_duration_secs: f64) -> f64 {
+        match self {
+            LoadModel::Concurrent => f64::MAX, // As fast as possible per task, limited by concurrency
+            LoadModel::Rps { target_rps } => *target_rps,
+            LoadModel::RampRps { min_rps, max_rps, ramp_duration } => {
+                let total_ramp_secs = ramp_duration.as_secs_f64(); // This should be overall_test_duration_secs usually
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "concurrent" => Ok(LoadModel::Concurrent),
-            "rps" => Ok(LoadModel::Rps),
-            "ramp-rps" => Ok(LoadModel::RampRps),
-            _ => Err(format!("Invalid LOAD_MODEL: '{}'. Use 'concurrent', 'rps', or 'ramp-rps'.", s)),
+                let mut current_target_rps = 0.0;
+
+                if total_ramp_secs > 0.0 {
+                    let one_third_duration = total_ramp_secs / 3.0;
+
+                    if elapsed_total_secs <= one_third_duration {
+                        // Ramp-up phase (first 1/3)
+                        current_target_rps = min_rps + (max_rps - min_rps) * (elapsed_total_secs / one_third_duration);
+                    } else if elapsed_total_secs <= 2.0 * one_third_duration {
+                        // Max load phase (middle 1/3)
+                        current_target_rps = *max_rps;
+                    } else {
+                        // Ramp-down phase (last 1/3)
+                        let ramp_down_elapsed = elapsed_total_secs - 2.0 * one_third_duration;
+                        current_target_rps = max_rps - (max_rps - min_rps) * (ramp_down_elapsed / one_third_duration);
+                        // Ensure it doesn't go below min_rps
+                        if current_target_rps < *min_rps {
+                            current_target_rps = *min_rps;
+                        }
+                    }
+                } else {
+                    current_target_rps = *max_rps; // If duration is 0, just use max_rps
+                }
+                current_target_rps
+            },
+            LoadModel::DailyTraffic {
+                min_rps,
+                mid_rps,
+                max_rps,
+                cycle_duration,
+                morning_ramp_ratio,
+                peak_sustain_ratio,
+                mid_decline_ratio,
+                mid_sustain_ratio,
+                evening_decline_ratio,
+            } => {
+                let cycle_duration_secs = cycle_duration.as_secs_f64();
+                // Ensure the elapsed time wraps around the cycle duration
+                let time_in_cycle = elapsed_total_secs % cycle_duration_secs;
+
+                // Calculate absolute time boundaries for each segment within the cycle
+                let morning_ramp_end = cycle_duration_secs * morning_ramp_ratio;
+                let peak_sustain_end = morning_ramp_end + (cycle_duration_secs * peak_sustain_ratio);
+                let mid_decline_end = peak_sustain_end + (cycle_duration_secs * mid_decline_ratio);
+                let mid_sustain_end = mid_decline_end + (cycle_duration_secs * mid_sustain_ratio);
+                let evening_decline_end = mid_sustain_end + (cycle_duration_secs * evening_decline_ratio);
+                // Night sustain implicitly lasts until cycle_duration_secs
+
+                let mut current_target_rps = *min_rps; // Default to min_rps (night)
+
+                if cycle_duration_secs <= 0.0 {
+                    return *max_rps; // Handle zero cycle duration, default to max
+                }
+
+                if time_in_cycle < morning_ramp_end {
+                    // Phase 1: Morning Ramp-up (min_rps to max_rps)
+                    let ramp_elapsed = time_in_cycle;
+                    let ramp_duration = morning_ramp_end;
+                    if ramp_duration > 0.0 {
+                        current_target_rps = min_rps + (max_rps - min_rps) * (ramp_elapsed / ramp_duration);
+                    } else {
+                        current_target_rps = *max_rps; // Instant ramp to max if duration is zero
+                    }
+                } else if time_in_cycle < peak_sustain_end {
+                    // Phase 2: Peak Sustain (max_rps)
+                    current_target_rps = *max_rps;
+                } else if time_in_cycle < mid_decline_end {
+                    // Phase 3: Mid-Day Decline (max_rps to mid_rps)
+                    let decline_elapsed = time_in_cycle - peak_sustain_end;
+                    let decline_duration = mid_decline_end - peak_sustain_end;
+                    if decline_duration > 0.0 {
+                        current_target_rps = max_rps - (max_rps - mid_rps) * (decline_elapsed / decline_duration);
+                    } else {
+                        current_target_rps = *mid_rps; // Instant decline to mid if duration is zero
+                    }
+                } else if time_in_cycle < mid_sustain_end {
+                    // Phase 4: Mid-Day Sustain (mid_rps)
+                    current_target_rps = *mid_rps;
+                } else if time_in_cycle < evening_decline_end {
+                    // Phase 5: Evening Decline (mid_rps to min_rps)
+                    let decline_elapsed = time_in_cycle - mid_sustain_end;
+                    let decline_duration = evening_decline_end - mid_sustain_end;
+                    if decline_duration > 0.0 {
+                        current_target_rps = mid_rps - (mid_rps - min_rps) * (decline_elapsed / decline_duration);
+                    } else {
+                        current_target_rps = *min_rps; // Instant decline to min if duration is zero
+                    }
+                } else {
+                    // Phase 6: Night Sustain (min_rps) - implicit until end of cycle
+                    current_target_rps = *min_rps;
+                }
+                current_target_rps
+            },
         }
     }
 }
-// --- END NEW: Enum for different load models ---
+// --- END NEW: calculate_current_rps method ---
 
 
 // --- Function to parse the duration string (copy-pasted from previous answer) ---
@@ -59,7 +172,7 @@ fn parse_duration_string(s: &str) -> Result<Duration, String> {
     let unit_char = s.chars().last().unwrap();
     let value_str = &s[0..s.len() - 1];
 
-    let value = match u64::from_str(value_str) { // Ensure u64 here
+    let value = match u64::from_str(value_str) {
         Ok(v) => v,
         Err(_) => return Err(format!("Invalid numeric value in duration: '{}'", value_str)),
     };
@@ -92,47 +205,75 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let num_concurrent_tasks: usize = num_concurrent_tasks_str.parse()
         .expect("NUM_CONCURRENT_TASKS must be a valid number");
 
-    let test_duration_str = env::var("TEST_DURATION")
+    let overall_test_duration_str = env::var("TEST_DURATION")
         .unwrap_or_else(|_| "2h".to_string());
-    let test_duration = parse_duration_string(&test_duration_str)
-        .expect(&format!("Invalid TEST_DURATION format: '{}'. Use formats like '10m', '5h', '3d'.", test_duration_str));
+    let overall_test_duration = parse_duration_string(&overall_test_duration_str)
+        .expect(&format!("Invalid TEST_DURATION format: '{}'. Use formats like '10m', '5h', '3d'.", overall_test_duration_str));
 
-    // --- NEW: Read new load model related environment variables ---
-    let load_model_str = env::var("LOAD_MODEL")
-        .unwrap_or_else(|_| "concurrent".to_string());
-    let load_model: LoadModel = load_model_str.parse()
-        .expect("Invalid LOAD_MODEL environment variable");
 
-    let target_rps_str = env::var("TARGET_RPS")
-        .unwrap_or_else(|_| "0".to_string()); // Default to 0, meaning no RPS limit if not set
-    let target_rps: f64 = target_rps_str.parse()
-        .expect("TARGET_RPS must be a valid number");
+    // --- NEW: Load Model Configuration from Environment Variables ---
+    let load_model = {
+        let model_type = env::var("LOAD_MODEL_TYPE")
+            .unwrap_or_else(|_| "Concurrent".to_string()); // Default to Concurrent
 
-    let min_rps_str = env::var("MIN_RPS")
-        .unwrap_or_else(|_| "0".to_string());
-    let min_rps: f64 = min_rps_str.parse()
-        .expect("MIN_RPS must be a valid number");
+        match model_type.as_str() {
+            "Concurrent" => LoadModel::Concurrent,
+            "Rps" => {
+                let target_rps: f64 = env::var("TARGET_RPS")
+                    .expect("TARGET_RPS must be set for Rps model").parse()?;
+                LoadModel::Rps { target_rps }
+            },
+            "RampRps" => {
+                let min_rps: f64 = env::var("MIN_RPS")
+                    .expect("MIN_RPS must be set for RampRps").parse()?;
+                let max_rps: f64 = env::var("MAX_RPS")
+                    .expect("MAX_RPS must be set for RampRps").parse()?;
+                let ramp_duration_str = env::var("RAMP_DURATION") // Use RAMP_DURATION for this specific model's ramp
+                    .unwrap_or_else(|_| overall_test_duration_str.clone()).to_string(); // Default to overall test duration
+                let ramp_duration = parse_duration_string(&ramp_duration_str)?;
+                LoadModel::RampRps { min_rps, max_rps, ramp_duration }
+            },
+            "DailyTraffic" => {
+                let min_rps: f64 = env::var("DAILY_MIN_RPS")
+                    .expect("DAILY_MIN_RPS must be set for DailyTraffic model").parse()?;
+                let mid_rps: f64 = env::var("DAILY_MID_RPS")
+                    .expect("DAILY_MID_RPS must be set for DailyTraffic model").parse()?;
+                let max_rps: f64 = env::var("DAILY_MAX_RPS")
+                    .expect("DAILY_MAX_RPS must be set for DailyTraffic model").parse()?;
+                let cycle_duration_str = env::var("DAILY_CYCLE_DURATION")
+                    .expect("DAILY_CYCLE_DURATION must be set for DailyTraffic model");
+                let cycle_duration = parse_duration_string(&cycle_duration_str)?;
 
-    let max_rps_str = env::var("MAX_RPS")
-        .unwrap_or_else(|_| "0".to_string());
-    let max_rps: f64 = max_rps_str.parse()
-        .expect("MAX_RPS must be a valid number");
-    // --- END NEW: Read new load model related environment variables ---
+                // Ratios for DailyTraffic segments (sum should be <= 1.0)
+                let morning_ramp_ratio: f64 = env::var("MORNING_RAMP_RATIO").unwrap_or_else(|_| "0.125".to_string()).parse()?;
+                let peak_sustain_ratio: f64 = env::var("PEAK_SUSTAIN_RATIO").unwrap_or_else(|_| "0.167".to_string()).parse()?;
+                let mid_decline_ratio: f64 = env::var("MID_DECLINE_RATIO").unwrap_or_else(|_| "0.125".to_string()).parse()?;
+                let mid_sustain_ratio: f64 = env::var("MID_SUSTAIN_RATIO").unwrap_or_else(|_| "0.167".to_string()).parse()?;
+                let evening_decline_ratio: f64 = env::var("EVENING_DECLINE_RATIO").unwrap_or_else(|_| "0.167".to_string()).parse()?;
+
+                // Basic validation of ratios
+                let total_ratios = morning_ramp_ratio + peak_sustain_ratio + mid_decline_ratio + mid_sustain_ratio + evening_decline_ratio;
+                if total_ratios > 1.0 {
+                    eprintln!("Warning: Sum of DailyTraffic segment ratios exceeds 1.0 (Total: {}). Night sustain phase will be negative or very short.", total_ratios);
+                }
+
+                LoadModel::DailyTraffic {
+                    min_rps, mid_rps, max_rps, cycle_duration,
+                    morning_ramp_ratio, peak_sustain_ratio, mid_decline_ratio,
+                    mid_sustain_ratio, evening_decline_ratio,
+                }
+            },
+            _ => panic!("Unknown LOAD_MODEL_TYPE: {}", model_type),
+        }
+    };
+    // --- END NEW: Load Model Configuration ---
 
 
     println!("Starting load test:");
     println!("  Target URL: {}", url);
     println!("  Concurrent Tasks: {}", num_concurrent_tasks);
-    println!("  Test Duration: {:?}", test_duration);
-    println!("  (Total seconds: {})", test_duration.as_secs());
+    println!("  Overall Test Duration: {:?}", overall_test_duration);
     println!("  Load Model: {:?}", load_model);
-    match load_model {
-        LoadModel::Rps => println!("  Target RPS: {}", target_rps),
-        LoadModel::RampRps => {
-            println!("  Ramping RPS from {} to {}", min_rps, max_rps);
-        },
-        _ => {}
-    }
 
 
     // Start the Prometheus metrics HTTP server in a separate Tokio task
@@ -167,26 +308,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Main loop to run for a duration
     let start_time = time::Instant::now();
+    let overall_test_duration_secs = overall_test_duration.as_secs_f64(); // Get this once
 
     let mut handles = Vec::new();
     for i in 0..num_concurrent_tasks {
         let client_clone = client.clone();
         let url_clone = url.to_string();
-        let test_duration_clone = test_duration.clone();
+        let overall_test_duration_clone = overall_test_duration.clone();
         let start_time_clone = start_time.clone();
         let load_model_clone = load_model.clone(); // Clone load model for each task
-        let target_rps_clone = target_rps;
-        let min_rps_clone = min_rps;
-        let max_rps_clone = max_rps;
+        let num_concurrent_tasks_clone = num_concurrent_tasks.clone(); // Clone for use in worker task
 
         let handle = tokio::spawn(async move {
             loop {
+                let elapsed_total_secs = time::Instant::now().duration_since(start_time_clone).as_secs_f64();
+
                 // Check if the total test duration has passed for this task
-                if time::Instant::now().duration_since(start_time_clone) >= test_duration_clone {
-                    println!("Task {} stopping after duration limit.", i);
+                if elapsed_total_secs >= overall_test_duration_clone.as_secs_f64() {
+                    println!("Task {} stopping after overall duration limit.", i);
                     break; // Exit this task's loop
                 }
 
+                // Calculate current target RPS based on the chosen load model and elapsed time
+                let current_target_rps = load_model_clone.calculate_current_rps(elapsed_total_secs, overall_test_duration_clone.as_secs_f64());
+
+                // Calculate delay per task to achieve the current_target_rps
+                // Handle division by zero or extremely small RPS
+                let delay_ms = if current_target_rps > 0.0 {
+                    (num_concurrent_tasks_clone as f64 * 1000.0 / current_target_rps).round() as u64
+                } else {
+                    u64::MAX // Effectively stop requests for this task if RPS is 0
+                };
+
+                // Add metrics tracking as before
                 CONCURRENT_REQUESTS.inc();
                 REQUEST_TOTAL.inc();
 
@@ -202,76 +356,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 }
                 CONCURRENT_REQUESTS.dec();
 
-                // --- NEW: Apply delay based on load model ---
-                let mut delay_ms = 10; // Default small delay to prevent busy-loop
-
-                match load_model_clone {
-                    LoadModel::Rps => {
-                        if target_rps_clone > 0.0 {
-                            let rps_per_task = target_rps_clone / num_concurrent_tasks as f64;
-                            if rps_per_task > 0.0 {
-                                delay_ms = (1000.0 / rps_per_task) as u64;
-                            } else {
-                                delay_ms = u64::MAX; // Effectively stop if RPS per task is 0
-                            }
-                        }
-                    },
-                    LoadModel::RampRps => {
-                        if max_rps_clone > 0.0 {
-                            let elapsed_time_secs = time::Instant::now().duration_since(start_time_clone).as_secs_f64();
-                            let total_duration_secs = test_duration_clone.as_secs_f64();
-
-                            let mut current_target_rps = 0.0;
-
-                            if total_duration_secs > 0.0 {
-                                let one_third_duration = total_duration_secs / 3.0;
-
-                                if elapsed_time_secs <= one_third_duration {
-                                    // Ramp-up phase (first 1/3)
-                                    current_target_rps = min_rps_clone + (max_rps_clone - min_rps_clone) * (elapsed_time_secs / one_third_duration);
-                                } else if elapsed_time_secs <= 2.0 * one_third_duration {
-                                    // Max load phase (middle 1/3)
-                                    current_target_rps = max_rps_clone;
-                                } else {
-                                    // Ramp-down phase (last 1/3)
-                                    let ramp_down_elapsed = elapsed_time_secs - 2.0 * one_third_duration;
-                                    current_target_rps = max_rps_clone - (max_rps_clone - min_rps_clone) * (ramp_down_elapsed / one_third_duration);
-                                    // Ensure it doesn't go below min_rps
-                                    if current_target_rps < min_rps_clone {
-                                        current_target_rps = min_rps_clone;
-                                    }
-                                }
-                            } else {
-                                current_target_rps = max_rps_clone; // If duration is 0, just use max_rps
-                            }
-
-                            // Ensure current_target_rps is not negative or extremely small before division
-                            if current_target_rps < 0.0 {
-                                current_target_rps = 0.0;
-                            }
-
-                            let rps_per_task = current_target_rps / num_concurrent_tasks as f64;
-                            if rps_per_task > 0.0 {
-                                delay_ms = (1000.0 / rps_per_task) as u64;
-                            } else {
-                                delay_ms = u64::MAX; // Effectively stop if RPS per task is 0 (or very close to it)
-                            }
-                        }
-                    },
-                    LoadModel::Concurrent => {
-                        // No specific RPS-based delay, rely on `num_concurrent_tasks`
-                        // and the default small delay.
-                    }
+                // Apply the calculated delay
+                if delay_ms > 0 && delay_ms != u64::MAX {
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                } else if delay_ms == u64::MAX {
+                    tokio::time::sleep(Duration::from_secs(3600)).await; // Sleep for a very long time if RPS is 0
                 }
-                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                // --- END NEW: Apply delay based on load model ---
+                // If delay_ms is 0, no sleep, burst as fast as possible.
             }
         });
         handles.push(handle);
     }
 
     // Wait for the total test duration to pass
-    tokio::time::sleep(test_duration).await;
+    tokio::time::sleep(overall_test_duration).await;
     println!("Main test duration completed. Signalling tasks to stop.");
 
     // The program will exit here, and all spawned tasks will be dropped.
