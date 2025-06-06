@@ -52,12 +52,12 @@ Example docker run command:
 
 ```bash
 docker run --rm \
-  -e TARGET_URL="[http://jsonplaceholder.typicode.com/todos/1](http://jsonplaceholder.typicode.com/todos/1)" \
+  -e TARGET_URL="http://jsonplaceholder.typicode.com/todos/1" \
   -e NUM_CONCURRENT_TASKS="50" \
   -e TEST_DURATION="5m" \
   -e LOAD_MODEL_TYPE="Concurrent" \
   cbaugus/rust-loadtester:latest
-  ````
+```
 
 ### 2. RPS (Requests Per Second) Model
 LOAD_MODEL_TYPE="Rps"
@@ -69,17 +69,15 @@ Additional Environment Variable:
 TARGET_RPS (Required for Rps model): The desired total requests per second (e.g., 200).
 Example docker run command:
 
-Bash
-
 ```bash
 docker run --rm \
-  -e TARGET_URL="[http://jsonplaceholder.typicode.com/todos/1](http://jsonplaceholder.typicode.com/todos/1)" \
+  -e TARGET_URL="http://jsonplaceholder.typicode.com/todos/1" \
   -e NUM_CONCURRENT_TASKS="100" \
   -e TEST_DURATION="5m" \
   -e LOAD_MODEL_TYPE="Rps" \
   -e TARGET_RPS="200" \
   cbaugus/rust-loadtester:latest
-  ```
+```
 
 ### 3. RampRps (Ramping Requests Per Second) Model
 LOAD_MODEL_TYPE="RampRps"
@@ -93,11 +91,9 @@ MAX_RPS (Required for RampRps model): The peak RPS during the test (e.g., 500).
 RAMP_DURATION (Optional, default: TEST_DURATION): The total duration over which the ramp-up/sustain/ramp-down profile should occur. If this is shorter than TEST_DURATION, the load will remain at MIN_RPS after the ramp profile completes until TEST_DURATION is met.
 Example docker run command:
 
-Bash
-
 ```bash
 docker run --rm \
-  -e TARGET_URL="[http://jsonplaceholder.typicode.com/todos/1](http://jsonplaceholder.typicode.com/todos/1)" \
+  -e TARGET_URL="http://jsonplaceholder.typicode.com/todos/1" \
   -e NUM_CONCURRENT_TASKS="150" \
   -e TEST_DURATION="15m" \
   -e LOAD_MODEL_TYPE="RampRps" \
@@ -132,7 +128,7 @@ Example docker run command:
 
 ```bash
 docker run --rm \
-  -e TARGET_URL="[https://your-service.com/daily-endpoint](https://your-service.com/daily-endpoint)" \
+  -e TARGET_URL="https://your-service.com/daily-endpoint" \
   -e NUM_CONCURRENT_TASKS="200" \
   -e TEST_DURATION="48h" \
   -e LOAD_MODEL_TYPE="DailyTraffic" \
@@ -149,7 +145,7 @@ docker run --rm \
 ```
 
 ## Monitoring Metrics
-we exposes Prometheus metrics on port 9090.
+The tool exposes Prometheus metrics on port 9090.
 
 To access these metrics:
 
@@ -157,6 +153,6 @@ Ensure port 9090 is accessible: If running locally, it's usually fine. If runnin
 Access the metrics endpoint: Open your browser or use curl to access http://<CONTAINER_IP_OR_HOST_IP>:9090/metrics.
 Example curl command (from the host machine running Docker):
 
-Bash
-
+```bash
 curl http://localhost:9090/metrics
+```

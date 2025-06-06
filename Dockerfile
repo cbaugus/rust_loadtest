@@ -3,23 +3,15 @@ WORKDIR /usr/src/app
 COPY . .
 RUN cargo install --path .
 
-
-#RUN apt-get update && apt-get install -y pkg-config libssl-dev ca-certificates && \
-#    cargo build --release
-
 # --- Stage 2: Create the final, smaller runtime image ---
 # Use a minimal base image for the final runtime
-FROM debian:bullseye
+FROM debian:bullseye-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-	libssl1.1  \
-    pkg-config \
-    libssl-dev \
-	openssl \
-	libc6 \
-	ca-certificates \
-	&& apt-get autoremove -y
-
+       libssl1.1 \
+       ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /usr/local/bin
