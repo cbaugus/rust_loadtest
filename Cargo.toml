@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.12", features = ["blocking", "json"] } # Or just "blocking" if you don't need json
+reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"] } # Or just "blocking" if you don't need json
 tokio = { version = "1", features = ["full"] } # "full" includes everything you need for async main
 prometheus = "0.13"
 hyper = { version = "0.14", features = ["full"] } # For the HTTP server

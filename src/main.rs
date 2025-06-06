@@ -194,7 +194,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     prometheus::default_registry().register(Box::new(REQUEST_STATUS_CODES.clone()))?;
     prometheus::default_registry().register(Box::new(CONCURRENT_REQUESTS.clone()))?;
 
-    let client = reqwest::Client::new();
+    // --- NEW: Configure reqwest::Client for HTTPS and TLS verification ---
+    let skip_tls_verify_str = env::var("SKIP_TLS_VERIFY").unwrap_or_else(|_| "false".to_string());
+    let skip_tls_verify = skip_tls_verify_str.to_lowercase() == "true";
+
+    let client_builder = reqwest::Client::builder();
+
+    let client = if skip_tls_verify {
+        println!("WARNING: Skipping TLS certificate verification.");
+        client_builder
+            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_hostnames(true) // Often needed with invalid certs
+            .build()?
+    } else {
+        client_builder.build()?
+    };
+    // --- END NEW: Configure reqwest::Client ---
 
     // --- READ FROM ENVIRONMENT VARIABLES ---
     let url = env::var("TARGET_URL")
@@ -274,6 +289,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  Concurrent Tasks: {}", num_concurrent_tasks);
     println!("  Overall Test Duration: {:?}", overall_test_duration);
     println!("  Load Model: {:?}", load_model);
+    println!("  Skip TLS Verify: {}", skip_tls_verify); // Display setting
 
 
     // Start the Prometheus metrics HTTP server in a separate Tokio task
@@ -350,6 +366,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         REQUEST_STATUS_CODES.with_label_values(&[&status]).inc();
                     },
                     Err(e) => {
+                        // For network errors, we might want a specific label
                         REQUEST_STATUS_CODES.with_label_values(&["error"]).inc();
                         eprintln!("Task {}: Request to {} failed: {}", i, url_clone, e);
                     }
