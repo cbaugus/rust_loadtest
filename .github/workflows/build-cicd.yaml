@@ -2,8 +2,6 @@ name: build deploy to nomad
 
 on:
   push:
-    branches:
-      - '''*''' # Build on all branches
 
 #Build
 jobs:
