@@ -6,12 +6,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"] } # Or just "blocking" if you don't need json
+reqwest = { version = "0.12", features = ["json", "rustls-tls-native-roots"], default-features = false } # Using rustls-tls-native-roots
 tokio = { version = "1", features = ["full"] } # "full" includes everything you need for async main
 prometheus = "0.13"
 hyper = { version = "0.14", features = ["full"] } # For the HTTP server
 lazy_static = "1.4"
-
+rustls = "0.22.2" # For custom TLS configurations
+tokio-rustls = "0.25.0" # Tokio integration for Rustls
+pem = "3.0.0" # For parsing PEM encoded keys/certs
+rustls-pemfile = "2.0.0" # For reading PEM files for rustls
+serde = { version = "1.0", features = ["derive"] } # For deserializing config if needed
+serde_json = "1.0" # For JSON parsing if needed
+thiserror = "1.0" # For error handling
 
 #rand = "0.8.4"
 #base64 = "0.13.0"

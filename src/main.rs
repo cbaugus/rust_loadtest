@@ -10,7 +10,10 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use std::env;
 use std::str::FromStr; // Needed for parsing numbers from strings
-
+use std::fs::File;
+use std::io::{Read, Cursor}; // Added Cursor
+use reqwest::Identity;
+use rustls_pemfile::{certs, pkcs8_private_keys};
 
 // Define Prometheus metrics
 lazy_static::lazy_static! {
@@ -198,7 +201,75 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let skip_tls_verify_str = env::var("SKIP_TLS_VERIFY").unwrap_or_else(|_| "false".to_string());
     let skip_tls_verify = skip_tls_verify_str.to_lowercase() == "true";
 
-    let client_builder = reqwest::Client::builder();
+    let mut client_builder = reqwest::Client::builder();
+
+    // --- mTLS Configuration ---
+    let client_cert_path_env = env::var("CLIENT_CERT_PATH").ok();
+    let client_key_path_env = env::var("CLIENT_KEY_PATH").ok();
+
+    if let (Some(cert_path), Some(key_path)) = (client_cert_path_env.as_ref(), client_key_path_env.as_ref()) {
+        println!("Attempting to load mTLS certificate from: {}", cert_path);
+        println!("Attempting to load mTLS private key from: {}", key_path);
+
+        let mut cert_file = File::open(cert_path)
+            .map_err(|e| format!("Failed to open client certificate file '{}': {}", cert_path, e))?;
+        let mut cert_pem_buf = Vec::new();
+        cert_file.read_to_end(&mut cert_pem_buf)
+            .map_err(|e| format!("Failed to read client certificate file '{}': {}", cert_path, e))?;
+
+        let mut key_file = File::open(key_path)
+            .map_err(|e| format!("Failed to open client key file '{}': {}", key_path, e))?;
+        let mut key_pem_buf = Vec::new();
+        key_file.read_to_end(&mut key_pem_buf)
+            .map_err(|e| format!("Failed to read client key file '{}': {}", key_path, e))?;
+
+        // Validate certificate PEM
+        let mut cert_pem_cursor = Cursor::new(cert_pem_buf.as_slice());
+        match rustls_pemfile::certs(&mut cert_pem_cursor) {
+            Ok(certs) if certs.is_empty() => {
+                return Err(format!("No PEM certificates found in {}", cert_path).into());
+            }
+            Err(e) => {
+                return Err(format!("Failed to parse PEM certificates from '{}': {}", cert_path, e).into());
+            }
+            Ok(_) => { /* Valid certs found */ }
+        }
+
+        // Validate private key PEM (must be PKCS#8)
+        let mut key_pem_cursor = Cursor::new(key_pem_buf.as_slice());
+        match rustls_pemfile::pkcs8_private_keys(&mut key_pem_cursor) {
+            Ok(keys) if keys.is_empty() => {
+                return Err(format!("No PKCS#8 private keys found in '{}'. Ensure the file contains a valid PEM-encoded PKCS#8 private key.", key_path).into());
+            }
+            Err(e) => {
+                return Err(format!("Failed to parse private key from '{}' as PKCS#8: {}. Please ensure the key is PEM-encoded and in PKCS#8 format. You might need to convert it (e.g., using 'openssl pkcs8 -topk8 ...').", key_path, e).into());
+            }
+            Ok(_) => { /* Valid PKCS#8 key found */ }
+        }
+
+        // Combine certificate PEM and key PEM into one buffer for reqwest::Identity.
+        let mut combined_pem_buf = Vec::new();
+        combined_pem_buf.extend_from_slice(&cert_pem_buf);
+        if !cert_pem_buf.ends_with(b"\n") && !key_pem_buf.starts_with(b"\n") {
+            combined_pem_buf.push(b'\n'); // Add a newline separator if not present
+        }
+        combined_pem_buf.extend_from_slice(&key_pem_buf);
+
+        let identity = reqwest::Identity::from_pem(&combined_pem_buf)
+            .map_err(|e| format!("Failed to create reqwest::Identity from PEM (cert+key): {}. Ensure the key is PKCS#8 and the certificate is valid.", e))?;
+
+        client_builder = client_builder.identity(identity);
+        println!("Successfully configured mTLS with client certificate and key.");
+
+    } else if client_cert_path_env.is_some() != client_key_path_env.is_some() {
+        // Only one of the two paths is set, which is an error
+        if client_cert_path_env.is_some() {
+            return Err("CLIENT_CERT_PATH is set, but CLIENT_KEY_PATH is missing for mTLS.".into());
+        } else {
+            return Err("CLIENT_KEY_PATH is set, but CLIENT_CERT_PATH is missing for mTLS.".into());
+        }
+    }
+    // --- END mTLS Configuration ---
 
     let client = if skip_tls_verify {
         println!("WARNING: Skipping TLS certificate verification.");
@@ -289,7 +360,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  Concurrent Tasks: {}", num_concurrent_tasks);
     println!("  Overall Test Duration: {:?}", overall_test_duration);
     println!("  Load Model: {:?}", load_model);
-    println!("  Skip TLS Verify: {}", skip_tls_verify); // Display setting
+    println!("  Skip TLS Verify: {}", skip_tls_verify);
+    if env::var("CLIENT_CERT_PATH").is_ok() && env::var("CLIENT_KEY_PATH").is_ok() {
+        println!("  mTLS Enabled: Yes (using CLIENT_CERT_PATH and CLIENT_KEY_PATH)");
+    } else {
+        println!("  mTLS Enabled: No (CLIENT_CERT_PATH or CLIENT_KEY_PATH not set, or only one was set)");
+    }
 
 
     // Start the Prometheus metrics HTTP server in a separate Tokio task

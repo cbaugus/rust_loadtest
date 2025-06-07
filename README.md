@@ -40,6 +40,9 @@ TARGET_URL (Required): The full URL of the endpoint you want to load test (e.g.,
 NUM_CONCURRENT_TASKS (Optional, default: 10): The maximum number of concurrent HTTP requests (worker tasks) that the load generator will attempt to maintain. This acts as a concurrency limit.
 TEST_DURATION (Optional, default: 2h): The total duration for which the load test will run. Accepts values like 10m (10 minutes), 1h (1 hour), 3d (3 days).
 SKIP_TLS_VERIFY (Optional, default: false): Set to "true" to skip TLS/SSL certificate verification for HTTPS endpoints. Use with caution, primarily for testing environments with self-signed certificates.
+CLIENT_CERT_PATH (Optional): Path to the client's PEM-encoded public certificate file for mTLS.
+CLIENT_KEY_PATH (Optional): Path to the client's PEM-encoded PKCS#8 private key file for mTLS. Both `CLIENT_CERT_PATH` and `CLIENT_KEY_PATH` must be provided to enable mTLS.
+
 Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:
 
@@ -142,6 +145,36 @@ docker run --rm \
   -e MID_SUSTAIN_RATIO="0.20" \
   -e EVENING_DECLINE_RATIO="0.10" \
   cbaugus/rust-loadtester:latest
+```
+
+### Using mTLS (Mutual TLS)
+
+To enable mTLS, you need to provide both a client certificate and a client private key. The private key **must be in PKCS#8 format**.
+
+1.  **Mount your certificate and key**: When running in Docker, ensure your certificate and key files are mounted into the container (e.g., using `-v /path/on/host/cert.pem:/path/in/container/cert.pem`).
+2.  **Set Environment Variables**:
+    *   `CLIENT_CERT_PATH`: Set this to the path *inside the container* where your client certificate PEM file is located.
+    *   `CLIENT_KEY_PATH`: Set this to the path *inside the container* where your client private key (PKCS#8 PEM) file is located.
+
+Example `docker run` command with mTLS:
+
+```bash
+docker run --rm \
+  -v /local/path/to/client.crt:/etc/ssl/certs/client.crt \
+  -v /local/path/to/client_pkcs8.key:/etc/ssl/private/client_pkcs8.key \
+  -e TARGET_URL="https://your-secure-service.com/api/data" \
+  -e CLIENT_CERT_PATH="/etc/ssl/certs/client.crt" \
+  -e CLIENT_KEY_PATH="/etc/ssl/private/client_pkcs8.key" \
+  -e NUM_CONCURRENT_TASKS="50" \
+  -e TEST_DURATION="10m" \
+  -e LOAD_MODEL_TYPE="Concurrent" \
+  cbaugus/rust-loadtester:latest
+```
+
+**Important Note on Private Key Format:**
+If your private key is not in PKCS#8 format (e.g., it's a traditional PKCS#1 RSA key), you'll need to convert it. You can do this using OpenSSL:
+```bash
+openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in your_original_private_key.pem -out your_private_key_pkcs8.pem
 ```
 
 ## Monitoring Metrics

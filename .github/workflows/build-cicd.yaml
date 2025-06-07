@@ -3,8 +3,7 @@ name: build deploy to nomad
 on:
   push:
     branches:
-      - main
-      - dev
+      - '''*''' # Build on all branches
 
 #Build
 jobs:
@@ -23,14 +22,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Determine Docker tag
+        id: docker_meta
+        run: |
+          BRANCH_NAME=$(echo ${{ github.ref_name }} | sed 's/[^a-zA-Z0-9.-]/-/g')
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "TAG=latest" >> $GITHUB_OUTPUT
+          else
+            echo "TAG=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64 # Add linux/arm64 for M3/ARM CPUs
           push: true
-          tags: cbaugus/rust_loadtest:latest
+          tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}
 
 
 #  #Deploy
