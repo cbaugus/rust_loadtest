@@ -1,9 +1,7 @@
-#[macro_use]
 extern crate lazy_static;
 
 use reqwest;
 use tokio::{self, time::{self, Duration}};
-use std::collections::HashMap; // Not used in this snippet, but kept if you need it elsewhere
 use std::sync::{Arc, Mutex};
 use prometheus::{Encoder, Gauge, IntCounter, IntCounterVec, Opts, Registry, TextEncoder, Histogram};
 use hyper::service::{make_service_fn, service_fn};
@@ -11,9 +9,8 @@ use hyper::{Body, Request, Response, Server};
 use std::env;
 use std::str::FromStr; // Needed for parsing numbers from strings
 use std::fs::File;
-use std::io::Read; // Removed unused imports
-use reqwest::Identity;
-use rustls_pemfile; // Simplified import
+use std::io::Read;
+use rustls_pemfile;
 
 // Define Prometheus metrics
 lazy_static::lazy_static! {
@@ -63,7 +60,7 @@ pub enum LoadModel {
 impl LoadModel {
     // Helper function to calculate the current target RPS based on the model and elapsed time
     // This function will be called repeatedly by each worker task.
-    pub fn calculate_current_rps(&self, elapsed_total_secs: f64, overall_test_duration_secs: f64) -> f64 {
+    pub fn calculate_current_rps(&self, elapsed_total_secs: f64, _overall_test_duration_secs: f64) -> f64 {
         match self {
             LoadModel::Concurrent => f64::MAX, // As fast as possible per task, limited by concurrency
             LoadModel::Rps { target_rps } => *target_rps,
