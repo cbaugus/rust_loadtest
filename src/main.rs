@@ -11,9 +11,9 @@ use hyper::{Body, Request, Response, Server};
 use std::env;
 use std::str::FromStr; // Needed for parsing numbers from strings
 use std::fs::File;
-use std::io::{Read, Cursor}; // Added Cursor
+use std::io::Read; // Removed unused imports
 use reqwest::Identity;
-use rustls_pemfile::{certs, pkcs8_private_keys};
+use rustls_pemfile; // Simplified import
 
 // Define Prometheus metrics
 lazy_static::lazy_static! {
@@ -224,27 +224,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .map_err(|e| format!("Failed to read client key file '{}': {}", key_path, e))?;
 
         // Validate certificate PEM
-        let mut cert_pem_cursor = Cursor::new(cert_pem_buf.as_slice());
-        match rustls_pemfile::certs(&mut cert_pem_cursor) {
-            Ok(certs) if certs.is_empty() => {
-                return Err(format!("No PEM certificates found in {}", cert_path).into());
-            }
-            Err(e) => {
+        let mut cert_pem_cursor = std::io::Cursor::new(cert_pem_buf.as_slice());
+        let certs_result: Vec<_> = rustls_pemfile::certs(&mut cert_pem_cursor).collect();
+        if certs_result.is_empty() {
+            return Err(format!("No PEM certificates found in {}", cert_path).into());
+        }
+        for cert in certs_result {
+            if let Err(e) = cert {
                 return Err(format!("Failed to parse PEM certificates from '{}': {}", cert_path, e).into());
             }
-            Ok(_) => { /* Valid certs found */ }
         }
 
         // Validate private key PEM (must be PKCS#8)
-        let mut key_pem_cursor = Cursor::new(key_pem_buf.as_slice());
-        match rustls_pemfile::pkcs8_private_keys(&mut key_pem_cursor) {
-            Ok(keys) if keys.is_empty() => {
-                return Err(format!("No PKCS#8 private keys found in '{}'. Ensure the file contains a valid PEM-encoded PKCS#8 private key.", key_path).into());
+        let mut key_pem_cursor = std::io::Cursor::new(key_pem_buf.as_slice());
+        let keys_result: Vec<_> = rustls_pemfile::pkcs8_private_keys(&mut key_pem_cursor).collect();
+        if keys_result.is_empty() {
+            return Err(format!("No PKCS#8 private keys found in '{}'. Ensure the file contains a valid PEM-encoded PKCS#8 private key.", key_path).into());
+        }
+        for key in keys_result {
+            if let Err(e) = key {
+                return Err(format!("Failed to parse private key from '{}' as PKCS#8: {}. Please ensure the key is PEM-encoded and in PKCS#8 format.", key_path, e).into());
             }
-            Err(e) => {
-                return Err(format!("Failed to parse private key from '{}' as PKCS#8: {}. Please ensure the key is PEM-encoded and in PKCS#8 format. You might need to convert it (e.g., using 'openssl pkcs8 -topk8 ...').", key_path, e).into());
-            }
-            Ok(_) => { /* Valid PKCS#8 key found */ }
         }
 
         // Combine certificate PEM and key PEM into one buffer for reqwest::Identity.
@@ -400,7 +400,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Main loop to run for a duration
     let start_time = time::Instant::now();
-    let overall_test_duration_secs = overall_test_duration.as_secs_f64(); // Get this once
+    let _overall_test_duration_secs = overall_test_duration.as_secs_f64(); // Fixed unused variable warnings
 
     let mut handles = Vec::new();
     for i in 0..num_concurrent_tasks {
