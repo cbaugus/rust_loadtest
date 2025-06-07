@@ -171,6 +171,22 @@ docker run --rm \
   cbaugus/rust-loadtester:latest
 ```
 
+
+### Using custom headers
+
+To use custom headers: Set the CUSTOM_HEADERS environment variable when running your application (e.g., in your docker run command):
+
+```bash
+docker run --rm \\
+-e TARGET_URL="http://your-target.com/api" \\
+-e CUSTOM_HEADERS="Authorization: Bearer your_token,X-Api-Key:your_api_key" \\
+# ... other environment variables ...
+cbaugus/rust-loadtester:latest
+```
+`
+This will send the specified Authorization and X-Api-Key headers with every request made by the load tester.
+
+
 **Important Note on Private Key Format:**
 If your private key is not in PKCS#8 format (e.g., it's a traditional PKCS#1 RSA key), you'll need to convert it. You can do this using OpenSSL:
 ```bash
@@ -189,3 +205,4 @@ Example curl command (from the host machine running Docker):
 ```bash
 curl http://localhost:9090/metrics
 ```
+

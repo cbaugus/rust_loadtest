@@ -1,6 +1,7 @@
 extern crate lazy_static;
 
 use reqwest;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue}; // Added
 use tokio::{self, time::{self, Duration}};
 use std::sync::{Arc, Mutex};
 use prometheus::{Encoder, Gauge, IntCounter, IntCounterVec, Opts, Registry, TextEncoder, Histogram};
@@ -269,6 +270,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     // --- END mTLS Configuration ---
 
+    // --- NEW: Custom Headers Configuration ---
+    let custom_headers_str = env::var("CUSTOM_HEADERS").unwrap_or_else(|_| "".to_string());
+    let mut parsed_headers = HeaderMap::new();
+
+    if !custom_headers_str.is_empty() {
+        println!("Attempting to parse CUSTOM_HEADERS: {}", custom_headers_str);
+        for header_pair_str in custom_headers_str.split(',') {
+            let header_pair_str_trimmed = header_pair_str.trim();
+            if header_pair_str_trimmed.is_empty() {
+                continue; // Skip empty parts (e.g., due to trailing comma or multiple commas)
+            }
+            let parts: Vec<&str> = header_pair_str_trimmed.splitn(2, ':').collect();
+            if parts.len() == 2 {
+                let name_str = parts[0].trim();
+                let value_str = parts[1].trim();
+
+                if name_str.is_empty() {
+                    return Err(format!("Invalid header format: Header name cannot be empty in '{}'.", header_pair_str_trimmed).into());
+                }
+
+                let header_name = HeaderName::from_str(name_str)
+                    .map_err(|e| format!("Invalid header name: {}. Name: '{}'", e, name_str))?;
+                let header_value = HeaderValue::from_str(value_str)
+                    .map_err(|e| format!("Invalid header value for '{}': {}. Value: '{}'", name_str, e, value_str))?;
+                parsed_headers.insert(header_name, header_value);
+            } else {
+                return Err(format!("Invalid header format in CUSTOM_HEADERS: '{}'. Expected 'Name:Value'.", header_pair_str_trimmed).into());
+            }
+        }
+    }
+
+    // Apply headers to client_builder if any were parsed
+    if !parsed_headers.is_empty() {
+        client_builder = client_builder.default_headers(parsed_headers.clone()); // Clone for logging later
+        println!("Successfully configured custom default headers.");
+    }
+    // --- END NEW: Custom Headers Configuration ---
+
     let client = if skip_tls_verify {
         println!("WARNING: Skipping TLS certificate verification.");
         client_builder
@@ -363,6 +402,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         println!("  mTLS Enabled: Yes (using CLIENT_CERT_PATH and CLIENT_KEY_PATH)");
     } else {
         println!("  mTLS Enabled: No (CLIENT_CERT_PATH or CLIENT_KEY_PATH not set, or only one was set)");
+    }
+
+    if !custom_headers_str.is_empty() {
+        if !parsed_headers.is_empty() {
+            println!("  Custom Headers Enabled: Yes");
+            for (name, value) in parsed_headers.iter() {
+                println!("    {}: {}", name, value.to_str().unwrap_or("<non-ASCII or sensitive value>"));
+            }
+        } else {
+             println!("  Custom Headers Enabled: No (CUSTOM_HEADERS was set but resulted in no valid headers or was empty after parsing)");
+        }
+    } else {
+        println!("  Custom Headers Enabled: No (CUSTOM_HEADERS not set)");
     }
 
 
