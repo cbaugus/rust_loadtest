@@ -1,19 +1,16 @@
-#[macro_use]
 extern crate lazy_static;
 
 use reqwest;
 use tokio::{self, time::{self, Duration}};
-use std::collections::HashMap; // Not used in this snippet, but kept if you need it elsewhere
 use std::sync::{Arc, Mutex};
-use prometheus::{Encoder, Gauge, IntCounter, IntCounterVec, Opts, Registry, TextEncoder};
+use prometheus::{Encoder, Gauge, IntCounter, IntCounterVec, Opts, Registry, TextEncoder, Histogram};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use std::env;
 use std::str::FromStr; // Needed for parsing numbers from strings
 use std::fs::File;
-use std::io::{Read, Cursor}; // Added Cursor
-use reqwest::Identity;
-use rustls_pemfile::{certs, pkcs8_private_keys};
+use std::io::Read;
+use rustls_pemfile;
 
 // Define Prometheus metrics
 lazy_static::lazy_static! {
@@ -27,6 +24,11 @@ lazy_static::lazy_static! {
         .unwrap();
     static ref CONCURRENT_REQUESTS: Gauge =
         Gauge::new("concurrent_requests", "Number of HTTP requests currently in flight").unwrap();
+    static ref REQUEST_DURATION_SECONDS: Histogram =
+        Histogram::with_opts(prometheus::HistogramOpts::new(
+            "request_duration_seconds",
+            "HTTP request latencies in seconds."
+        )).unwrap();
 }
 
 // --- NEW: Enum for different load models with their data ---
@@ -58,14 +60,13 @@ pub enum LoadModel {
 impl LoadModel {
     // Helper function to calculate the current target RPS based on the model and elapsed time
     // This function will be called repeatedly by each worker task.
-    pub fn calculate_current_rps(&self, elapsed_total_secs: f64, overall_test_duration_secs: f64) -> f64 {
+    pub fn calculate_current_rps(&self, elapsed_total_secs: f64, _overall_test_duration_secs: f64) -> f64 {
         match self {
             LoadModel::Concurrent => f64::MAX, // As fast as possible per task, limited by concurrency
             LoadModel::Rps { target_rps } => *target_rps,
             LoadModel::RampRps { min_rps, max_rps, ramp_duration } => {
-                let total_ramp_secs = ramp_duration.as_secs_f64(); // This should be overall_test_duration_secs usually
-
-                let mut current_target_rps = 0.0;
+                let total_ramp_secs = ramp_duration.as_secs_f64();
+                let current_target_rps: f64; // Declare without initial assignment
 
                 if total_ramp_secs > 0.0 {
                     let one_third_duration = total_ramp_secs / 3.0;
@@ -79,11 +80,12 @@ impl LoadModel {
                     } else {
                         // Ramp-down phase (last 1/3)
                         let ramp_down_elapsed = elapsed_total_secs - 2.0 * one_third_duration;
-                        current_target_rps = max_rps - (max_rps - min_rps) * (ramp_down_elapsed / one_third_duration);
+                        let mut rps = max_rps - (max_rps - min_rps) * (ramp_down_elapsed / one_third_duration);
                         // Ensure it doesn't go below min_rps
-                        if current_target_rps < *min_rps {
-                            current_target_rps = *min_rps;
+                        if rps < *min_rps {
+                            rps = *min_rps;
                         }
+                        current_target_rps = rps;
                     }
                 } else {
                     current_target_rps = *max_rps; // If duration is 0, just use max_rps
@@ -102,29 +104,24 @@ impl LoadModel {
                 evening_decline_ratio,
             } => {
                 let cycle_duration_secs = cycle_duration.as_secs_f64();
-                // Ensure the elapsed time wraps around the cycle duration
                 let time_in_cycle = elapsed_total_secs % cycle_duration_secs;
 
-                // Calculate absolute time boundaries for each segment within the cycle
                 let morning_ramp_end = cycle_duration_secs * morning_ramp_ratio;
                 let peak_sustain_end = morning_ramp_end + (cycle_duration_secs * peak_sustain_ratio);
                 let mid_decline_end = peak_sustain_end + (cycle_duration_secs * mid_decline_ratio);
                 let mid_sustain_end = mid_decline_end + (cycle_duration_secs * mid_sustain_ratio);
                 let evening_decline_end = mid_sustain_end + (cycle_duration_secs * evening_decline_ratio);
-                // Night sustain implicitly lasts until cycle_duration_secs
 
-                let mut current_target_rps = *min_rps; // Default to min_rps (night)
+                let current_target_rps: f64; // Declare without initial assignment
 
                 if cycle_duration_secs <= 0.0 {
-                    return *max_rps; // Handle zero cycle duration, default to max
-                }
-
-                if time_in_cycle < morning_ramp_end {
+                    current_target_rps = *max_rps; // Handle zero cycle duration, default to max
+                } else if time_in_cycle < morning_ramp_end {
                     // Phase 1: Morning Ramp-up (min_rps to max_rps)
                     let ramp_elapsed = time_in_cycle;
-                    let ramp_duration = morning_ramp_end;
-                    if ramp_duration > 0.0 {
-                        current_target_rps = min_rps + (max_rps - min_rps) * (ramp_elapsed / ramp_duration);
+                    let ramp_duration_segment = morning_ramp_end;
+                    if ramp_duration_segment > 0.0 {
+                        current_target_rps = min_rps + (max_rps - min_rps) * (ramp_elapsed / ramp_duration_segment);
                     } else {
                         current_target_rps = *max_rps; // Instant ramp to max if duration is zero
                     }
@@ -134,9 +131,9 @@ impl LoadModel {
                 } else if time_in_cycle < mid_decline_end {
                     // Phase 3: Mid-Day Decline (max_rps to mid_rps)
                     let decline_elapsed = time_in_cycle - peak_sustain_end;
-                    let decline_duration = mid_decline_end - peak_sustain_end;
-                    if decline_duration > 0.0 {
-                        current_target_rps = max_rps - (max_rps - mid_rps) * (decline_elapsed / decline_duration);
+                    let decline_duration_segment = mid_decline_end - peak_sustain_end;
+                    if decline_duration_segment > 0.0 {
+                        current_target_rps = max_rps - (max_rps - mid_rps) * (decline_elapsed / decline_duration_segment);
                     } else {
                         current_target_rps = *mid_rps; // Instant decline to mid if duration is zero
                     }
@@ -146,9 +143,9 @@ impl LoadModel {
                 } else if time_in_cycle < evening_decline_end {
                     // Phase 5: Evening Decline (mid_rps to min_rps)
                     let decline_elapsed = time_in_cycle - mid_sustain_end;
-                    let decline_duration = evening_decline_end - mid_sustain_end;
-                    if decline_duration > 0.0 {
-                        current_target_rps = mid_rps - (mid_rps - min_rps) * (decline_elapsed / decline_duration);
+                    let decline_duration_segment = evening_decline_end - mid_sustain_end;
+                    if decline_duration_segment > 0.0 {
+                        current_target_rps = mid_rps - (mid_rps - min_rps) * (decline_elapsed / decline_duration_segment);
                     } else {
                         current_target_rps = *min_rps; // Instant decline to min if duration is zero
                     }
@@ -196,6 +193,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     prometheus::default_registry().register(Box::new(REQUEST_TOTAL.clone()))?;
     prometheus::default_registry().register(Box::new(REQUEST_STATUS_CODES.clone()))?;
     prometheus::default_registry().register(Box::new(CONCURRENT_REQUESTS.clone()))?;
+    prometheus::default_registry().register(Box::new(REQUEST_DURATION_SECONDS.clone()))?;
 
     // --- NEW: Configure reqwest::Client for HTTPS and TLS verification ---
     let skip_tls_verify_str = env::var("SKIP_TLS_VERIFY").unwrap_or_else(|_| "false".to_string());
@@ -224,27 +222,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .map_err(|e| format!("Failed to read client key file '{}': {}", key_path, e))?;
 
         // Validate certificate PEM
-        let mut cert_pem_cursor = Cursor::new(cert_pem_buf.as_slice());
-        match rustls_pemfile::certs(&mut cert_pem_cursor) {
-            Ok(certs) if certs.is_empty() => {
-                return Err(format!("No PEM certificates found in {}", cert_path).into());
-            }
-            Err(e) => {
+        let mut cert_pem_cursor = std::io::Cursor::new(cert_pem_buf.as_slice());
+        let certs_result: Vec<_> = rustls_pemfile::certs(&mut cert_pem_cursor).collect();
+        if certs_result.is_empty() {
+            return Err(format!("No PEM certificates found in {}", cert_path).into());
+        }
+        for cert in certs_result {
+            if let Err(e) = cert {
                 return Err(format!("Failed to parse PEM certificates from '{}': {}", cert_path, e).into());
             }
-            Ok(_) => { /* Valid certs found */ }
         }
 
         // Validate private key PEM (must be PKCS#8)
-        let mut key_pem_cursor = Cursor::new(key_pem_buf.as_slice());
-        match rustls_pemfile::pkcs8_private_keys(&mut key_pem_cursor) {
-            Ok(keys) if keys.is_empty() => {
-                return Err(format!("No PKCS#8 private keys found in '{}'. Ensure the file contains a valid PEM-encoded PKCS#8 private key.", key_path).into());
+        let mut key_pem_cursor = std::io::Cursor::new(key_pem_buf.as_slice());
+        let keys_result: Vec<_> = rustls_pemfile::pkcs8_private_keys(&mut key_pem_cursor).collect();
+        if keys_result.is_empty() {
+            return Err(format!("No PKCS#8 private keys found in '{}'. Ensure the file contains a valid PEM-encoded PKCS#8 private key.", key_path).into());
+        }
+        for key in keys_result {
+            if let Err(e) = key {
+                return Err(format!("Failed to parse private key from '{}' as PKCS#8: {}. Please ensure the key is PEM-encoded and in PKCS#8 format.", key_path, e).into());
             }
-            Err(e) => {
-                return Err(format!("Failed to parse private key from '{}' as PKCS#8: {}. Please ensure the key is PEM-encoded and in PKCS#8 format. You might need to convert it (e.g., using 'openssl pkcs8 -topk8 ...').", key_path, e).into());
-            }
-            Ok(_) => { /* Valid PKCS#8 key found */ }
         }
 
         // Combine certificate PEM and key PEM into one buffer for reqwest::Identity.
@@ -400,7 +398,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Main loop to run for a duration
     let start_time = time::Instant::now();
-    let overall_test_duration_secs = overall_test_duration.as_secs_f64(); // Get this once
+    let _overall_test_duration_secs = overall_test_duration.as_secs_f64(); // Fixed unused variable warnings
 
     let mut handles = Vec::new();
     for i in 0..num_concurrent_tasks {
@@ -436,6 +434,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 CONCURRENT_REQUESTS.inc();
                 REQUEST_TOTAL.inc();
 
+                let request_start_time = time::Instant::now(); // Start timer
+
                 match client_clone.get(&url_clone).send().await {
                     Ok(response) => {
                         let status = response.status().as_u16().to_string();
@@ -447,6 +447,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         eprintln!("Task {}: Request to {} failed: {}", i, url_clone, e);
                     }
                 }
+                REQUEST_DURATION_SECONDS.observe(request_start_time.elapsed().as_secs_f64()); // Observe duration
                 CONCURRENT_REQUESTS.dec();
 
                 // Apply the calculated delay
