@@ -5,7 +5,7 @@ use reqwest;
 use tokio::{self, time::{self, Duration}};
 use std::collections::HashMap; // Not used in this snippet, but kept if you need it elsewhere
 use std::sync::{Arc, Mutex};
-use prometheus::{Encoder, Gauge, IntCounter, IntCounterVec, Opts, Registry, TextEncoder};
+use prometheus::{Encoder, Gauge, IntCounter, IntCounterVec, Opts, Registry, TextEncoder, Histogram};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use std::env;
@@ -27,6 +27,11 @@ lazy_static::lazy_static! {
         .unwrap();
     static ref CONCURRENT_REQUESTS: Gauge =
         Gauge::new("concurrent_requests", "Number of HTTP requests currently in flight").unwrap();
+    static ref REQUEST_DURATION_SECONDS: Histogram =
+        Histogram::with_opts(prometheus::HistogramOpts::new(
+            "request_duration_seconds",
+            "HTTP request latencies in seconds."
+        )).unwrap();
 }
 
 // --- NEW: Enum for different load models with their data ---
@@ -196,6 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     prometheus::default_registry().register(Box::new(REQUEST_TOTAL.clone()))?;
     prometheus::default_registry().register(Box::new(REQUEST_STATUS_CODES.clone()))?;
     prometheus::default_registry().register(Box::new(CONCURRENT_REQUESTS.clone()))?;
+    prometheus::default_registry().register(Box::new(REQUEST_DURATION_SECONDS.clone()))?;
 
     // --- NEW: Configure reqwest::Client for HTTPS and TLS verification ---
     let skip_tls_verify_str = env::var("SKIP_TLS_VERIFY").unwrap_or_else(|_| "false".to_string());
@@ -436,6 +442,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 CONCURRENT_REQUESTS.inc();
                 REQUEST_TOTAL.inc();
 
+                let request_start_time = time::Instant::now(); // Start timer
+
                 match client_clone.get(&url_clone).send().await {
                     Ok(response) => {
                         let status = response.status().as_u16().to_string();
@@ -447,6 +455,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         eprintln!("Task {}: Request to {} failed: {}", i, url_clone, e);
                     }
                 }
+                REQUEST_DURATION_SECONDS.observe(request_start_time.elapsed().as_secs_f64()); // Observe duration
                 CONCURRENT_REQUESTS.dec();
 
                 // Apply the calculated delay
