@@ -65,9 +65,8 @@ impl LoadModel {
             LoadModel::Concurrent => f64::MAX, // As fast as possible per task, limited by concurrency
             LoadModel::Rps { target_rps } => *target_rps,
             LoadModel::RampRps { min_rps, max_rps, ramp_duration } => {
-                let total_ramp_secs = ramp_duration.as_secs_f64(); // This should be overall_test_duration_secs usually
-
-                let mut current_target_rps = 0.0;
+                let total_ramp_secs = ramp_duration.as_secs_f64();
+                let current_target_rps: f64; // Declare without initial assignment
 
                 if total_ramp_secs > 0.0 {
                     let one_third_duration = total_ramp_secs / 3.0;
@@ -81,11 +80,12 @@ impl LoadModel {
                     } else {
                         // Ramp-down phase (last 1/3)
                         let ramp_down_elapsed = elapsed_total_secs - 2.0 * one_third_duration;
-                        current_target_rps = max_rps - (max_rps - min_rps) * (ramp_down_elapsed / one_third_duration);
+                        let mut rps = max_rps - (max_rps - min_rps) * (ramp_down_elapsed / one_third_duration);
                         // Ensure it doesn't go below min_rps
-                        if current_target_rps < *min_rps {
-                            current_target_rps = *min_rps;
+                        if rps < *min_rps {
+                            rps = *min_rps;
                         }
+                        current_target_rps = rps;
                     }
                 } else {
                     current_target_rps = *max_rps; // If duration is 0, just use max_rps
@@ -104,29 +104,24 @@ impl LoadModel {
                 evening_decline_ratio,
             } => {
                 let cycle_duration_secs = cycle_duration.as_secs_f64();
-                // Ensure the elapsed time wraps around the cycle duration
                 let time_in_cycle = elapsed_total_secs % cycle_duration_secs;
 
-                // Calculate absolute time boundaries for each segment within the cycle
                 let morning_ramp_end = cycle_duration_secs * morning_ramp_ratio;
                 let peak_sustain_end = morning_ramp_end + (cycle_duration_secs * peak_sustain_ratio);
                 let mid_decline_end = peak_sustain_end + (cycle_duration_secs * mid_decline_ratio);
                 let mid_sustain_end = mid_decline_end + (cycle_duration_secs * mid_sustain_ratio);
                 let evening_decline_end = mid_sustain_end + (cycle_duration_secs * evening_decline_ratio);
-                // Night sustain implicitly lasts until cycle_duration_secs
 
-                let mut current_target_rps = *min_rps; // Default to min_rps (night)
+                let current_target_rps: f64; // Declare without initial assignment
 
                 if cycle_duration_secs <= 0.0 {
-                    return *max_rps; // Handle zero cycle duration, default to max
-                }
-
-                if time_in_cycle < morning_ramp_end {
+                    current_target_rps = *max_rps; // Handle zero cycle duration, default to max
+                } else if time_in_cycle < morning_ramp_end {
                     // Phase 1: Morning Ramp-up (min_rps to max_rps)
                     let ramp_elapsed = time_in_cycle;
-                    let ramp_duration = morning_ramp_end;
-                    if ramp_duration > 0.0 {
-                        current_target_rps = min_rps + (max_rps - min_rps) * (ramp_elapsed / ramp_duration);
+                    let ramp_duration_segment = morning_ramp_end;
+                    if ramp_duration_segment > 0.0 {
+                        current_target_rps = min_rps + (max_rps - min_rps) * (ramp_elapsed / ramp_duration_segment);
                     } else {
                         current_target_rps = *max_rps; // Instant ramp to max if duration is zero
                     }
@@ -136,9 +131,9 @@ impl LoadModel {
                 } else if time_in_cycle < mid_decline_end {
                     // Phase 3: Mid-Day Decline (max_rps to mid_rps)
                     let decline_elapsed = time_in_cycle - peak_sustain_end;
-                    let decline_duration = mid_decline_end - peak_sustain_end;
-                    if decline_duration > 0.0 {
-                        current_target_rps = max_rps - (max_rps - mid_rps) * (decline_elapsed / decline_duration);
+                    let decline_duration_segment = mid_decline_end - peak_sustain_end;
+                    if decline_duration_segment > 0.0 {
+                        current_target_rps = max_rps - (max_rps - mid_rps) * (decline_elapsed / decline_duration_segment);
                     } else {
                         current_target_rps = *mid_rps; // Instant decline to mid if duration is zero
                     }
@@ -148,9 +143,9 @@ impl LoadModel {
                 } else if time_in_cycle < evening_decline_end {
                     // Phase 5: Evening Decline (mid_rps to min_rps)
                     let decline_elapsed = time_in_cycle - mid_sustain_end;
-                    let decline_duration = evening_decline_end - mid_sustain_end;
-                    if decline_duration > 0.0 {
-                        current_target_rps = mid_rps - (mid_rps - min_rps) * (decline_elapsed / decline_duration);
+                    let decline_duration_segment = evening_decline_end - mid_sustain_end;
+                    if decline_duration_segment > 0.0 {
+                        current_target_rps = mid_rps - (mid_rps - min_rps) * (decline_elapsed / decline_duration_segment);
                     } else {
                         current_target_rps = *min_rps; // Instant decline to min if duration is zero
                     }
