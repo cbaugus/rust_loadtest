@@ -42,6 +42,7 @@ TEST_DURATION (Optional, default: 2h): The total duration for which the load tes
 SKIP_TLS_VERIFY (Optional, default: false): Set to "true" to skip TLS/SSL certificate verification for HTTPS endpoints. Use with caution, primarily for testing environments with self-signed certificates.
 CLIENT_CERT_PATH (Optional): Path to the client's PEM-encoded public certificate file for mTLS.
 CLIENT_KEY_PATH (Optional): Path to the client's PEM-encoded PKCS#8 private key file for mTLS. Both `CLIENT_CERT_PATH` and `CLIENT_KEY_PATH` must be provided to enable mTLS.
+RESOLVE_TARGET_ADDR (Optional): Allows overriding DNS resolution for the `TARGET_URL`. The format is `"hostname:ip_address:port"`. For example, if `TARGET_URL` is `http://example.com/api` and `RESOLVE_TARGET_ADDR` is set to `"example.com:192.168.1.50:8080"`, all requests to `example.com` will be directed to `192.168.1.50` on port `8080`. This is useful for targeting services not in DNS or for specific routing during tests.
 
 Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:
@@ -205,4 +206,3 @@ Example curl command (from the host machine running Docker):
 ```bash
 curl http://localhost:9090/metrics
 ```
-
