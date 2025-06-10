@@ -2,6 +2,7 @@ extern crate lazy_static;
 
 use reqwest;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue}; // Added
+use std::net::SocketAddr; // Added for DNS override
 use tokio::{self, time::{self, Duration}};
 use std::sync::{Arc, Mutex};
 use prometheus::{Encoder, Gauge, IntCounter, IntCounterVec, Opts, Registry, TextEncoder, Histogram};
@@ -201,6 +202,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let skip_tls_verify = skip_tls_verify_str.to_lowercase() == "true";
 
     let mut client_builder = reqwest::Client::builder();
+
+    // --- NEW: DNS Override Configuration ---
+    // Reads RESOLVE_TARGET_ADDR="hostname:ip_address:port"
+    // Example: "example.com:192.168.1.10:8080"
+    // This means any request to "example.com" (regardless of port in URL)
+    // will be directed to 192.168.1.10:8080.
+    if let Ok(resolve_str) = env::var("RESOLVE_TARGET_ADDR") {
+        if !resolve_str.is_empty() {
+            println!("Attempting to apply DNS override from RESOLVE_TARGET_ADDR: {}", resolve_str);
+            let parts: Vec<&str> = resolve_str.split(':').collect();
+            if parts.len() == 3 {
+                let hostname_to_override = parts[0].trim();
+                let ip_to_resolve_to = parts[1].trim();
+                let port_to_connect_to_str = parts[2].trim();
+
+                if hostname_to_override.is_empty() {
+                    return Err("RESOLVE_TARGET_ADDR: hostname part cannot be empty. Format: 'hostname:ip:port'".into());
+                }
+                if ip_to_resolve_to.is_empty() {
+                    return Err("RESOLVE_TARGET_ADDR: IP address part cannot be empty. Format: 'hostname:ip:port'".into());
+                }
+                if port_to_connect_to_str.is_empty() {
+                    return Err("RESOLVE_TARGET_ADDR: port part cannot be empty. Format: 'hostname:ip:port'".into());
+                }
+
+                match port_to_connect_to_str.parse::<u16>() {
+                    Ok(port_to_connect_to) => {
+                        let socket_addr_str = format!("{}:{}", ip_to_resolve_to, port_to_connect_to);
+                        match socket_addr_str.parse::<SocketAddr>() {
+                            Ok(socket_addr) => {
+                                client_builder = client_builder.resolve(hostname_to_override, socket_addr);
+                                println!("Successfully configured DNS override: '{}' will resolve to {}", hostname_to_override, socket_addr);
+                            }
+                            Err(e) => {
+                                return Err(format!("Failed to parse IP/Port '{}' into SocketAddr for RESOLVE_TARGET_ADDR: {}. Ensure IP and port are valid. Format: 'hostname:ip:port'", socket_addr_str, e).into());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        return Err(format!("Failed to parse port '{}' in RESOLVE_TARGET_ADDR: {}. Must be a valid u16. Format: 'hostname:ip:port'", port_to_connect_to_str, e).into());
+                    }
+                }
+            } else {
+                // RESOLVE_TARGET_ADDR is set and not empty, but format is wrong.
+                return Err(format!("RESOLVE_TARGET_ADDR environment variable ('{}') is not in the expected format 'hostname:ip:port'", resolve_str).into());
+            }
+        } else {
+            // RESOLVE_TARGET_ADDR is set but empty.
+            println!("RESOLVE_TARGET_ADDR is set but empty, no DNS override will be applied.");
+        }
+        // If RESOLVE_TARGET_ADDR is not set at all, env::var("RESOLVE_TARGET_ADDR") returns Err,
+        // and this whole 'if let' block is skipped, which is the correct behavior (no override).
+    }
+    // --- END NEW: DNS Override Configuration ---
 
     // --- mTLS Configuration ---
     let client_cert_path_env = env::var("CLIENT_CERT_PATH").ok();
