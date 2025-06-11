@@ -573,6 +573,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tokio::time::sleep(overall_test_duration).await;
     println!("Main test duration completed. Signalling tasks to stop.");
 
+    // Add a brief pause to allow in-flight metrics to be updated by worker threads
+    // before we collect and print the final metrics.
+    // This is a pragmatic approach; for very high precision, a more complex
+    // synchronization mechanism with worker tasks would be needed.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    println!("Collecting and printing final metrics...");
+
+    // Gather and print final metrics
+    let final_metrics_output = {
+        let encoder = TextEncoder::new();
+        let metric_families = registry_arc.lock().unwrap().gather();
+        let mut buffer = Vec::new();
+        encoder.encode(&metric_families, &mut buffer).unwrap();
+        String::from_utf8(buffer).unwrap_or_else(|e| {
+            eprintln!("Error encoding metrics to UTF-8: {}", e);
+            String::from("# ERROR ENCODING METRICS TO UTF-8")
+        })
+    };
+
+    println!("\n--- FINAL METRICS ---\n{}", final_metrics_output);
+    println!("--- END OF FINAL METRICS ---\n");
+
     // The program will exit here, and all spawned tasks will be dropped.
     Ok(())
 }
