@@ -595,6 +595,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("\n--- FINAL METRICS ---\n{}", final_metrics_output);
     println!("--- END OF FINAL METRICS ---\n");
 
+    println!("Pausing for 2 minutes to allow final Prometheus scrape...");
+    tokio::time::sleep(Duration::from_secs(120)).await;
+    println!("2-minute pause complete. Exiting.");
+
     // The program will exit here, and all spawned tasks will be dropped.
     Ok(())
 }
