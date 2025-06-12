@@ -16,21 +16,35 @@ use rustls_pemfile;
 
 // Define Prometheus metrics
 lazy_static::lazy_static! {
+    static ref METRIC_NAMESPACE: String =
+        env::var("METRIC_NAMESPACE").unwrap_or_else(|_| "rust_loadtest".to_string());
+
     static ref REQUEST_TOTAL: IntCounter =
-        IntCounter::new("requests_total", "Total number of HTTP requests made").unwrap();
+        IntCounter::with_opts(
+            Opts::new("requests_total", "Total number of HTTP requests made")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
     static ref REQUEST_STATUS_CODES: IntCounterVec =
         IntCounterVec::new(
-            Opts::new("requests_status_codes_total", "Number of HTTP requests by status code"),
+            Opts::new("requests_status_codes_total", "Number of HTTP requests by status code")
+                .namespace(METRIC_NAMESPACE.as_str()),
             &["status_code"]
-        )
-        .unwrap();
+        ).unwrap();
+
     static ref CONCURRENT_REQUESTS: Gauge =
-        Gauge::new("concurrent_requests", "Number of HTTP requests currently in flight").unwrap();
+        Gauge::with_opts(
+            Opts::new("concurrent_requests", "Number of HTTP requests currently in flight")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
     static ref REQUEST_DURATION_SECONDS: Histogram =
-        Histogram::with_opts(prometheus::HistogramOpts::new(
-            "request_duration_seconds",
-            "HTTP request latencies in seconds."
-        )).unwrap();
+        Histogram::with_opts(
+            prometheus::HistogramOpts::new(
+                "request_duration_seconds",
+                "HTTP request latencies in seconds."
+            ).namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
 }
 
 // --- NEW: Enum for different load models with their data ---
@@ -76,6 +90,8 @@ impl LoadModel {
                     if elapsed_total_secs <= one_third_duration {
                         // Ramp-up phase (first 1/3)
                         current_target_rps = min_rps + (max_rps - min_rps) * (elapsed_total_secs / one_third_duration);
+
+                        // current_target_rps = 1000 + (400000 - 1000) * (300 / 300);
                     } else if elapsed_total_secs <= 2.0 * one_third_duration {
                         // Max load phase (middle 1/3)
                         current_target_rps = *max_rps;
@@ -594,6 +610,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     println!("\n--- FINAL METRICS ---\n{}", final_metrics_output);
     println!("--- END OF FINAL METRICS ---\n");
+
+    println!("Pausing for 2 minutes to allow final Prometheus scrape...");
+    tokio::time::sleep(Duration::from_secs(120)).await;
+    println!("2-minute pause complete. Exiting.");
 
     // The program will exit here, and all spawned tasks will be dropped.
     Ok(())
