@@ -33,21 +33,24 @@ Before you begin, ensure you have the following installed:
 
 
 ## Running the Load Test
+
 The load testing tool is configured primarily through environment variables passed to the Docker container. You can select different load models by setting the LOAD_MODEL_TYPE environment variable.
 
-Common Environment Variables
-TARGET_URL (Required): The full URL of the endpoint you want to load test (e.g., http://example.com/api/data or https://secure-api.com/status).
-NUM_CONCURRENT_TASKS (Optional, default: 10): The maximum number of concurrent HTTP requests (worker tasks) that the load generator will attempt to maintain. This acts as a concurrency limit.
-TEST_DURATION (Optional, default: 2h): The total duration for which the load test will run. Accepts values like 10m (10 minutes), 1h (1 hour), 3d (3 days).
-SKIP_TLS_VERIFY (Optional, default: false): Set to "true" to skip TLS/SSL certificate verification for HTTPS endpoints. Use with caution, primarily for testing environments with self-signed certificates.
-CLIENT_CERT_PATH (Optional): Path to the client's PEM-encoded public certificate file for mTLS.
-CLIENT_KEY_PATH (Optional): Path to the client's PEM-encoded PKCS#8 private key file for mTLS. Both `CLIENT_CERT_PATH` and `CLIENT_KEY_PATH` must be provided to enable mTLS.
-RESOLVE_TARGET_ADDR (Optional): Allows overriding DNS resolution for the `TARGET_URL`. The format is `"hostname:ip_address:port"`. For example, if `TARGET_URL` is `http://example.com/api` and `RESOLVE_TARGET_ADDR` is set to `"example.com:192.168.1.50:8080"`, all requests to `example.com` will be directed to `192.168.1.50` on port `8080`. This is useful for targeting services not in DNS or for specific routing during tests.
+### Common Environment Variables
+
+* TARGET_URL (Required): The full URL of the endpoint you want to load test (e.g., http://example.com/api/data or https://secure-api.com/status).
+* NUM_CONCURRENT_TASKS (Optional, default: 10): The maximum number of concurrent HTTP requests (worker tasks) that the load generator will attempt to maintain. This acts as a concurrency limit.
+* TEST_DURATION (Optional, default: 2h): The total duration for which the load test will run. Accepts values like 10m (10 minutes), 1h (1 hour), 3d (3 days).
+* SKIP_TLS_VERIFY (Optional, default: false): Set to "true" to skip TLS/SSL certificate verification for HTTPS endpoints. Use with caution, primarily for testing environments with self-signed certificates.
+* CLIENT_CERT_PATH (Optional): Path to the client's PEM-encoded public certificate file for mTLS.
+* CLIENT_KEY_PATH (Optional): Path to the client's PEM-encoded PKCS#8 private key file for mTLS. Both `CLIENT_CERT_PATH` and `CLIENT_KEY_PATH` must be provided to enable mTLS.
+* RESOLVE_TARGET_ADDR (Optional): Allows overriding DNS resolution for the `TARGET_URL`. The format is `"hostname:ip_address:port"`. For example, if `TARGET_URL` is `http://example.com/api` and `RESOLVE_TARGET_ADDR` is set to `"example.com:192.168.1.50:8080"`, all requests to `example.com` will be directed to `192.168.1.50` on port `8080`. This is useful for targeting services not in DNS or for specific routing during tests.
 
 Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:
 
 ### 1. Concurrent Model
+
 LOAD_MODEL_TYPE="Concurrent"
 
 This model simply maintains NUM_CONCURRENT_TASKS sending requests as fast as the target service can respond, for the TEST_DURATION.
@@ -64,13 +67,14 @@ docker run --rm \
 ```
 
 ### 2. RPS (Requests Per Second) Model
+
 LOAD_MODEL_TYPE="Rps"
 
 This model aims to achieve a constant overall requests per second across all tasks.
 
 Additional Environment Variable:
 
-TARGET_RPS (Required for Rps model): The desired total requests per second (e.g., 200).
+* TARGET_RPS (Required for Rps model): The desired total requests per second (e.g., 200).
 Example docker run command:
 
 ```bash
@@ -84,15 +88,16 @@ docker run --rm \
 ```
 
 ### 3. RampRps (Ramping Requests Per Second) Model
+
 LOAD_MODEL_TYPE="RampRps"
 
 This model ramps the RPS up to a peak, sustains it, and then ramps down. The TEST_DURATION is divided into three equal phases: ramp-up, peak sustain, and ramp-down.
 
 Additional Environment Variables:
 
-MIN_RPS (Required for RampRps model): The starting and ending RPS for the ramp (e.g., 50).
-MAX_RPS (Required for RampRps model): The peak RPS during the test (e.g., 500).
-RAMP_DURATION (Optional, default: TEST_DURATION): The total duration over which the ramp-up/sustain/ramp-down profile should occur. If this is shorter than TEST_DURATION, the load will remain at MIN_RPS after the ramp profile completes until TEST_DURATION is met.
+* MIN_RPS (Required for RampRps model): The starting and ending RPS for the ramp (e.g., 50).
+* MAX_RPS (Required for RampRps model): The peak RPS during the test (e.g., 500).
+* RAMP_DURATION (Optional, default: TEST_DURATION): The total duration over which the ramp-up/sustain/ramp-down profile should occur. If this is shorter than TEST_DURATION, the load will remain at MIN_RPS after the ramp profile completes until TEST_DURATION is met.
 Example docker run command:
 
 ```bash
@@ -105,6 +110,7 @@ docker run --rm \
   -e MAX_RPS="500" \
   cbaugus/rust-loadtester:latest
 ```
+
 This will run for 15 minutes, with:
 
 Minutes 0-5: RPS ramps from 50 to 500.
@@ -112,21 +118,22 @@ Minutes 5-10: RPS holds at 500.
 Minutes 10-15: RPS ramps from 500 down to 50.
 
 ### 4. DailyTraffic Model
+
 LOAD_MODEL_TYPE="DailyTraffic"
 
 This model allows for complex daily traffic patterns with multiple ramp and sustain phases (e.g., night, morning ramp, peak, mid-day decline, mid-day sustain, evening decline).
 
 Additional Environment Variables:
 
-DAILY_MIN_RPS: Base load (e.g., night-time traffic).
-DAILY_MID_RPS: Mid-level load (e.g., afternoon traffic).
-DAILY_MAX_RPS: Peak load (e.g., morning rush).
-DAILY_CYCLE_DURATION: Duration of one full daily cycle (e.g., 24h).
-MORNING_RAMP_RATIO (Optional, default: 0.125): Ratio of DAILY_CYCLE_DURATION for ramp from MIN_RPS to MAX_RPS.
-PEAK_SUSTAIN_RATIO (Optional, default: 0.167): Ratio for holding MAX_RPS.
-MID_DECLINE_RATIO (Optional, default: 0.125): Ratio for ramp from MAX_RPS to MID_RPS.
-MID_SUSTAIN_RATIO (Optional, default: 0.167): Ratio for holding MID_RPS.
-EVENING_DECLINE_RATIO (Optional, default: 0.167): Ratio for ramp from MID_RPS to MIN_RPS.
+* DAILY_MIN_RPS: Base load (e.g., night-time traffic).
+* DAILY_MID_RPS: Mid-level load (e.g., afternoon traffic).
+* DAILY_MAX_RPS: Peak load (e.g., morning rush).
+* DAILY_CYCLE_DURATION: Duration of one full daily cycle (e.g., 24h).
+* MORNING_RAMP_RATIO (Optional, default: 0.125): Ratio of DAILY_CYCLE_DURATION for ramp from MIN_RPS to MAX_RPS.
+* PEAK_SUSTAIN_RATIO (Optional, default: 0.167): Ratio for holding MAX_RPS.
+* MID_DECLINE_RATIO (Optional, default: 0.125): Ratio for ramp from MAX_RPS to MID_RPS.
+* MID_SUSTAIN_RATIO (Optional, default: 0.167): Ratio for holding MID_RPS.
+* EVENING_DECLINE_RATIO (Optional, default: 0.167): Ratio for ramp from MID_RPS to MIN_RPS.
 Note: The sum of *_RATIO variables should ideally be 1.0 or less. Any remaining ratio will be MIN_RPS sustain.
 Example docker run command:
 
@@ -172,7 +179,6 @@ docker run --rm \
   cbaugus/rust-loadtester:latest
 ```
 
-
 ### Using custom headers
 
 To use custom headers: Set the CUSTOM_HEADERS environment variable when running your application (e.g., in your docker run command):
@@ -184,7 +190,7 @@ docker run --rm \\
 # ... other environment variables ...
 cbaugus/rust-loadtester:latest
 ```
-`
+
 This will send the specified Authorization and X-Api-Key headers with every request made by the load tester.
 
 
@@ -195,11 +201,13 @@ openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in your_original_private
 ```
 
 ## Monitoring Metrics
+
 The tool exposes Prometheus metrics on port 9090.
 
 To access these metrics:
 
 Ensure port 9090 is accessible: If running locally, it's usually fine. If running in a cloud VM or Kubernetes, ensure the port is opened in the firewall/security groups.
+
 Access the metrics endpoint: Open your browser or use curl to access http://<CONTAINER_IP_OR_HOST_IP>:9090/metrics.
 Example curl command (from the host machine running Docker):
 
