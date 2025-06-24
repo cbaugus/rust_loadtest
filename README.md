@@ -33,9 +33,11 @@ Before you begin, ensure you have the following installed:
 
 
 ## Running the Load Test
+
 The load testing tool is configured primarily through environment variables passed to the Docker container. You can select different load models by setting the LOAD_MODEL_TYPE environment variable.
 
 ### Common Environment Variables
+
 * TARGET_URL (Required): The full URL of the endpoint you want to load test (e.g., http://example.com/api/data or https://secure-api.com/status).
 * NUM_CONCURRENT_TASKS (Optional, default: 10): The maximum number of concurrent HTTP requests (worker tasks) that the load generator will attempt to maintain. This acts as a concurrency limit.
 * TEST_DURATION (Optional, default: 2h): The total duration for which the load test will run. Accepts values like 10m (10 minutes), 1h (1 hour), 3d (3 days).
@@ -48,6 +50,7 @@ Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:
 
 ### 1. Concurrent Model
+
 LOAD_MODEL_TYPE="Concurrent"
 
 This model simply maintains NUM_CONCURRENT_TASKS sending requests as fast as the target service can respond, for the TEST_DURATION.
@@ -64,6 +67,7 @@ docker run --rm \
 ```
 
 ### 2. RPS (Requests Per Second) Model
+
 LOAD_MODEL_TYPE="Rps"
 
 This model aims to achieve a constant overall requests per second across all tasks.
@@ -84,6 +88,7 @@ docker run --rm \
 ```
 
 ### 3. RampRps (Ramping Requests Per Second) Model
+
 LOAD_MODEL_TYPE="RampRps"
 
 This model ramps the RPS up to a peak, sustains it, and then ramps down. The TEST_DURATION is divided into three equal phases: ramp-up, peak sustain, and ramp-down.
@@ -113,6 +118,7 @@ Minutes 5-10: RPS holds at 500.
 Minutes 10-15: RPS ramps from 500 down to 50.
 
 ### 4. DailyTraffic Model
+
 LOAD_MODEL_TYPE="DailyTraffic"
 
 This model allows for complex daily traffic patterns with multiple ramp and sustain phases (e.g., night, morning ramp, peak, mid-day decline, mid-day sustain, evening decline).
@@ -195,6 +201,7 @@ openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in your_original_private
 ```
 
 ## Monitoring Metrics
+
 The tool exposes Prometheus metrics on port 9090.
 
 To access these metrics:
