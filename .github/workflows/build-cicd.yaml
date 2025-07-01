@@ -40,12 +40,14 @@ jobs:
           provenance: true
           push: false
 
+      - name: Install Syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
       - name: Generate SBOM with Syft
-        uses: anchore/sbom-action@v0.15.10
-        with:
-          image: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}
-          format: cyclonedx-json
-          output-file: sbom.cyclonedx.json
+        run: |
+          syft --version
+          syft "cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}" -o cyclonedx-json > sbom.cyclonedx.json
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
