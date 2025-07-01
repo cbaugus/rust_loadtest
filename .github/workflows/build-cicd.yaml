@@ -30,16 +30,15 @@ jobs:
             echo "TAG=${BRANCH_NAME}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build and push Docker image
+      - name: Build Docker image (no push)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          #platforms: linux/amd64,linux/arm64 # Add linux/arm64 for M3/ARM CPUs
-          push: true
           tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}
           provenance: true
+          push: false
 
       - name: Generate SBOM with Syft
         uses: anchore/sbom-action@v0.15.10
@@ -53,6 +52,16 @@ jobs:
         with:
           name: sbom
           path: sbom.cyclonedx.json
+
+      - name: Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}
+          provenance: true
+          push: true
 
 
 #  #Deploy
