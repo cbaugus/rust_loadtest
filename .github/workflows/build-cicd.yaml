@@ -39,6 +39,7 @@ jobs:
           #platforms: linux/amd64,linux/arm64 # Add linux/arm64 for M3/ARM CPUs
           push: true
           tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}
+          provenance: true
 
 
 #  #Deploy
@@ -59,4 +60,3 @@ jobs:
 #          NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
 #        run: |
 #          nomad job run -address=${NOMAD_ADDR} -token=${NOMAD_TOKEN} ./api.nomad.hcl
-#
