@@ -5,10 +5,10 @@ RUN cargo install --path .
 
 # --- Stage 2: Create the final, smaller runtime image ---
 # Use a minimal base image for the final runtime
-FROM debian:bullseye-slim
+FROM ubuntu:latest
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       libssl1.1 \
+       libssl3 \
        ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
