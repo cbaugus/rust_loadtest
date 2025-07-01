@@ -65,22 +65,3 @@ jobs:
           provenance: true
           push: true
 
-
-#  #Deploy
-#  deploy:
-#    needs: build
-#    runs-on: ubuntu-latest
-#    steps:
-#      - name: Checkout code
-#        uses: actions/checkout@v2
-#
-#      - name: Install nomad (cross-platform)
-#        uses: gacts/install-nomad@v1.2.0
-#
-#
-#      - name: Deploy Nomad Job
-#        env:
-#          NOMAD_ADDR: ${{ secrets.NOMAD_ADDR }}
-#          NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
-#        run: |
-#          nomad job run -address=${NOMAD_ADDR} -token=${NOMAD_TOKEN} ./api.nomad.hcl
