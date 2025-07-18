@@ -545,6 +545,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let num_concurrent_tasks_clone = num_concurrent_tasks.clone();
         let send_json_clone = send_json;
         let json_payload_clone = json_payload.clone();
+        let request_type_clone = request_type.clone();
 
         let handle = tokio::spawn(async move {
             loop {
@@ -574,9 +575,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let request_start_time = time::Instant::now(); // Start timer
 
                 // --- CHANGED: Support GET request type ---
-                let req = if request_type == "GET" {
+                let req = if request_type_clone == "GET" {
                     client_clone.get(&url_clone)
-                } else if request_type == "POST" {
+                } else if request_type_clone == "POST" {
                     // --- CHANGED: Conditionally send POST with or without JSON ---
                     let req = client_clone.post(&url_clone);
                     if send_json_clone {
@@ -586,7 +587,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         req
                     }
                 } else {
-                    eprintln!("Request type {} not currently supported", request_type);
+                    eprintln!("Request type {} not currently supported", request_type_clone);
                     client_clone.get(&url_clone) // fallback to GET
                 };
 
