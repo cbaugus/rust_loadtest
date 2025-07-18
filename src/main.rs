@@ -471,9 +471,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
     // --- END NEW: Load Model Configuration ---
 
+    // --- NEW: Optionally change request type ---
+    let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "POST".to_string());
 
     println!("Starting load test:");
     println!("  Target URL: {}", url);
+    println!("  Request type: {}", request_type);
     println!("  Concurrent Tasks: {}", num_concurrent_tasks);
     println!("  Overall Test Duration: {:?}", overall_test_duration);
     println!("  Load Model: {:?}", load_model);
@@ -570,14 +573,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
                 let request_start_time = time::Instant::now(); // Start timer
 
-                // --- CHANGED: Conditionally send POST with or without JSON ---
-                let req = client_clone.post(&url_clone);
-                let req = if send_json_clone {
-                    req.header("Content-Type", "application/json")
-                        .body(json_payload_clone.clone().unwrap())
+                // --- CHANGED: Support GET request type ---
+                if request_type == "GET" {
+                    let req = client_client.get(&url_clone)
+                else if request_type == "POST" {
+                    // --- CHANGED: Conditionally send POST with or without JSON ---
+                    let req = client_clone.post(&url_clone);
+                    let req = if send_json_clone {
+                        req.header("Content-Type", "application/json")
+                            .body(json_payload_clone.clone().unwrap())
+                    } else {
+                        req
+                    };
                 } else {
-                    req
-                };
+                    eprintln!("Request type {} not currently supported", request_type);
+                }
 
                 match req.send().await {
                     Ok(response) => {
