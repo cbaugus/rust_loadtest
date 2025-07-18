@@ -39,6 +39,7 @@ jobs:
           tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}
           provenance: true
           push: false
+          load: true
 
       - name: Install Syft
         run: |
