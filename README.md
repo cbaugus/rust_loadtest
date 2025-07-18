@@ -39,6 +39,7 @@ The load testing tool is configured primarily through environment variables pass
 ### Common Environment Variables
 
 * TARGET_URL (Required): The full URL of the endpoint you want to load test (e.g., http://example.com/api/data or https://secure-api.com/status).
+* REQUEST_TYPE (Optional, default: POST): The HTTP method to use for requests. Supported values are "GET" and "POST".
 * NUM_CONCURRENT_TASKS (Optional, default: 10): The maximum number of concurrent HTTP requests (worker tasks) that the load generator will attempt to maintain. This acts as a concurrency limit.
 * TEST_DURATION (Optional, default: 2h): The total duration for which the load test will run. Accepts values like 10m (10 minutes), 1h (1 hour), 3d (3 days).
 * SKIP_TLS_VERIFY (Optional, default: false): Set to "true" to skip TLS/SSL certificate verification for HTTPS endpoints. Use with caution, primarily for testing environments with self-signed certificates.
@@ -155,20 +156,51 @@ docker run --rm \
   cbaugus/rust-loadtester:latest
 ```
 
-### Sending a JSON Payload (e.g., for Login Endpoints)
+### Choosing Request Type (GET vs POST)
+
+You can configure the tool to send either GET or POST requests using the `REQUEST_TYPE` environment variable:
+
+* `REQUEST_TYPE` (Optional, default: POST): Set to `"GET"` for GET requests or `"POST"` for POST requests.
+
+**Example with GET requests:**
+
+```bash
+docker run --rm \
+  -e TARGET_URL="https://jsonplaceholder.typicode.com/posts/1" \
+  -e REQUEST_TYPE="GET" \
+  -e NUM_CONCURRENT_TASKS="50" \
+  -e TEST_DURATION="5m" \
+  -e LOAD_MODEL_TYPE="Concurrent" \
+  cbaugus/rust-loadtester:latest
+```
+
+**Example with POST requests (default):**
+
+```bash
+docker run --rm \
+  -e TARGET_URL="https://your-service.com/api/data" \
+  -e REQUEST_TYPE="POST" \
+  -e NUM_CONCURRENT_TASKS="50" \
+  -e TEST_DURATION="5m" \
+  -e LOAD_MODEL_TYPE="Concurrent" \
+  cbaugus/rust-loadtester:latest
+```
+
+### Sending a JSON Payload (for POST requests)
 
 You can configure the tool to send a JSON body with each POST request (for example, to test login endpoints that expect a JSON payload). This is controlled by two environment variables:
 
 * `SEND_JSON` (Optional, default: false): Set to `"true"` to enable sending a JSON payload in the body of each POST request.
 * `JSON_PAYLOAD` (Required if `SEND_JSON=true`): The JSON string to send as the request body.
 
-If `SEND_JSON` is not set or is not `"true"`, requests will be sent without a body.
+If `SEND_JSON` is not set or is not `"true"`, POST requests will be sent without a body. Note that JSON payloads are only sent with POST requests, not GET requests.
 
 **Example:**
 
 ```bash
 docker run --rm \
   -e TARGET_URL="https://your-service.com/login" \
+  -e REQUEST_TYPE="POST" \
   -e SEND_JSON="true" \
   -e JSON_PAYLOAD='{"username":"testuser","password":"testpass"}' \
   -e NUM_CONCURRENT_TASKS="20" \
