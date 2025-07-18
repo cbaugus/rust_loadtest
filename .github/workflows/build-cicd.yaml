@@ -30,33 +30,38 @@ jobs:
             echo "TAG=${BRANCH_NAME}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build and push Docker image
+      - name: Build Docker image (no push)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          #platforms: linux/amd64,linux/arm64 # Add linux/arm64 for M3/ARM CPUs
-          push: true
           tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}
+          provenance: true
+          push: false
 
+      - name: Install Syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 
-#  #Deploy
-#  deploy:
-#    needs: build
-#    runs-on: ubuntu-latest
-#    steps:
-#      - name: Checkout code
-#        uses: actions/checkout@v2
-#
-#      - name: Install nomad (cross-platform)
-#        uses: gacts/install-nomad@v1.2.0
-#
-#
-#      - name: Deploy Nomad Job
-#        env:
-#          NOMAD_ADDR: ${{ secrets.NOMAD_ADDR }}
-#          NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
-#        run: |
-#          nomad job run -address=${NOMAD_ADDR} -token=${NOMAD_TOKEN} ./api.nomad.hcl
-#
+      - name: Generate SBOM with Syft
+        run: |
+          syft --version
+          syft "cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}" -o cyclonedx-json > sbom.cyclonedx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cyclonedx.json
+
+      - name: Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}
+          provenance: true
+          push: true
+

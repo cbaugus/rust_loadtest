@@ -394,6 +394,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let url = env::var("TARGET_URL")
         .expect("TARGET_URL environment variable must be set");
 
+    // --- NEW: Optionally send JSON payload ---
+    let send_json = env::var("SEND_JSON").unwrap_or_else(|_| "false".to_string()).to_lowercase() == "true";
+    let json_payload = if send_json {
+        Some(env::var("JSON_PAYLOAD")
+            .expect("JSON_PAYLOAD environment variable must be set when SEND_JSON=true"))
+    } else {
+        None
+    };
+
     let num_concurrent_tasks_str = env::var("NUM_CONCURRENT_TASKS")
         .unwrap_or_else(|_| "10".to_string());
     let num_concurrent_tasks: usize = num_concurrent_tasks_str.parse()
@@ -462,9 +471,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
     // --- END NEW: Load Model Configuration ---
 
+    // --- NEW: Optionally change request type ---
+    let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "POST".to_string());
 
     println!("Starting load test:");
     println!("  Target URL: {}", url);
+    println!("  Request type: {}", request_type);
     println!("  Concurrent Tasks: {}", num_concurrent_tasks);
     println!("  Overall Test Duration: {:?}", overall_test_duration);
     println!("  Load Model: {:?}", load_model);
@@ -529,8 +541,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let url_clone = url.to_string();
         let overall_test_duration_clone = overall_test_duration.clone();
         let start_time_clone = start_time.clone();
-        let load_model_clone = load_model.clone(); // Clone load model for each task
-        let num_concurrent_tasks_clone = num_concurrent_tasks.clone(); // Clone for use in worker task
+        let load_model_clone = load_model.clone();
+        let num_concurrent_tasks_clone = num_concurrent_tasks.clone();
+        let send_json_clone = send_json;
+        let json_payload_clone = json_payload.clone();
 
         let handle = tokio::spawn(async move {
             loop {
@@ -559,13 +573,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
                 let request_start_time = time::Instant::now(); // Start timer
 
-                match client_clone.get(&url_clone).send().await {
+                // --- CHANGED: Support GET request type ---
+                if request_type == "GET" {
+                    let req = client_client.get(&url_clone)
+                else if request_type == "POST" {
+                    // --- CHANGED: Conditionally send POST with or without JSON ---
+                    let req = client_clone.post(&url_clone);
+                    let req = if send_json_clone {
+                        req.header("Content-Type", "application/json")
+                            .body(json_payload_clone.clone().unwrap())
+                    } else {
+                        req
+                    };
+                } else {
+                    eprintln!("Request type {} not currently supported", request_type);
+                }
+
+                match req.send().await {
                     Ok(response) => {
                         let status = response.status().as_u16().to_string();
                         REQUEST_STATUS_CODES.with_label_values(&[&status]).inc();
+                        // Do not save the JWT token, just drop the response
                     },
                     Err(e) => {
-                        // For network errors, we might want a specific label
                         REQUEST_STATUS_CODES.with_label_values(&["error"]).inc();
                         eprintln!("Task {}: Request to {} failed: {}", i, url_clone, e);
                     }

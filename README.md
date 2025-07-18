@@ -155,6 +155,28 @@ docker run --rm \
   cbaugus/rust-loadtester:latest
 ```
 
+### Sending a JSON Payload (e.g., for Login Endpoints)
+
+You can configure the tool to send a JSON body with each POST request (for example, to test login endpoints that expect a JSON payload). This is controlled by two environment variables:
+
+* `SEND_JSON` (Optional, default: false): Set to `"true"` to enable sending a JSON payload in the body of each POST request.
+* `JSON_PAYLOAD` (Required if `SEND_JSON=true`): The JSON string to send as the request body.
+
+If `SEND_JSON` is not set or is not `"true"`, requests will be sent without a body.
+
+**Example:**
+
+```bash
+docker run --rm \
+  -e TARGET_URL="https://your-service.com/login" \
+  -e SEND_JSON="true" \
+  -e JSON_PAYLOAD='{"username":"testuser","password":"testpass"}' \
+  -e NUM_CONCURRENT_TASKS="20" \
+  -e TEST_DURATION="10m" \
+  -e LOAD_MODEL_TYPE="Concurrent" \
+  cbaugus/rust-loadtester:latest
+```
+
 ### Using mTLS (Mutual TLS)
 
 To enable mTLS, you need to provide both a client certificate and a client private key. The private key **must be in PKCS#8 format**.
