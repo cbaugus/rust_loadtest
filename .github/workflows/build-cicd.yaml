@@ -37,8 +37,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}
-          provenance: true
           push: false
+          load: true
 
       - name: Install Syft
         run: |
@@ -47,7 +47,7 @@ jobs:
       - name: Generate SBOM with Syft
         run: |
           syft --version
-          syft "cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}" -o cyclonedx-json > sbom.cyclonedx.json
+          syft "docker:cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}" -o cyclonedx-json > sbom.cyclonedx.json
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
