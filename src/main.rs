@@ -204,6 +204,47 @@ fn parse_duration_string(s: &str) -> Result<Duration, String> {
 }
 // --- END Function to parse the duration string ---
 
+// --- Function to parse headers with escape support ---
+fn parse_headers_with_escapes(headers_str: &str) -> Vec<String> {
+    let mut headers = Vec::new();
+    let mut current_header = String::new();
+    let mut chars = headers_str.chars().peekable();
+    
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\\' => {
+                // Check if the next character is a comma
+                if chars.peek() == Some(&',') {
+                    // This is an escaped comma, add it to the current header
+                    current_header.push(',');
+                    chars.next(); // Consume the comma
+                } else {
+                    // Not escaping a comma, keep the backslash
+                    current_header.push('\\');
+                }
+            }
+            ',' => {
+                // This is a header separator
+                if !current_header.trim().is_empty() {
+                    headers.push(current_header.clone());
+                }
+                current_header.clear();
+            }
+            _ => {
+                current_header.push(ch);
+            }
+        }
+    }
+    
+    // Don't forget the last header
+    if !current_header.trim().is_empty() {
+        headers.push(current_header);
+    }
+    
+    headers
+}
+// --- END Function to parse headers with escape support ---
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -347,10 +388,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     if !custom_headers_str.is_empty() {
         println!("Attempting to parse CUSTOM_HEADERS: {}", custom_headers_str);
-        for header_pair_str in custom_headers_str.split(',') {
+        
+        // Parse headers with support for escaped commas
+        let header_pairs = parse_headers_with_escapes(&custom_headers_str);
+        
+        for header_pair_str in header_pairs {
             let header_pair_str_trimmed = header_pair_str.trim();
             if header_pair_str_trimmed.is_empty() {
-                continue; // Skip empty parts (e.g., due to trailing comma or multiple commas)
+                continue; // Skip empty parts
             }
             let parts: Vec<&str> = header_pair_str_trimmed.splitn(2, ':').collect();
             if parts.len() == 2 {
@@ -361,10 +406,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     return Err(format!("Invalid header format: Header name cannot be empty in '{}'.", header_pair_str_trimmed).into());
                 }
 
+                // Unescape the header value (replace \, with ,)
+                let unescaped_value = value_str.replace("\\,", ",");
+
                 let header_name = HeaderName::from_str(name_str)
                     .map_err(|e| format!("Invalid header name: {}. Name: '{}'", e, name_str))?;
-                let header_value = HeaderValue::from_str(value_str)
-                    .map_err(|e| format!("Invalid header value for '{}': {}. Value: '{}'", name_str, e, value_str))?;
+                let header_value = HeaderValue::from_str(&unescaped_value)
+                    .map_err(|e| format!("Invalid header value for '{}': {}. Value: '{}'", name_str, e, unescaped_value))?;
                 parsed_headers.insert(header_name, header_value);
             } else {
                 return Err(format!("Invalid header format in CUSTOM_HEADERS: '{}'. Expected 'Name:Value'.", header_pair_str_trimmed).into());
@@ -668,4 +716,79 @@ async fn metrics_handler(
         .unwrap();
 
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_headers_simple() {
+        let headers_str = "Content-Type:application/json,Authorization:Bearer token";
+        let result = parse_headers_with_escapes(headers_str);
+        
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "Content-Type:application/json");
+        assert_eq!(result[1], "Authorization:Bearer token");
+    }
+
+    #[test]
+    fn test_parse_headers_with_escaped_comma() {
+        let headers_str = "Connection:keep-alive,Keep-Alive:timeout=5\\,max=200";
+        let result = parse_headers_with_escapes(headers_str);
+        
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "Connection:keep-alive");
+        assert_eq!(result[1], "Keep-Alive:timeout=5,max=200");
+    }
+
+    #[test]
+    fn test_parse_headers_multiple_escaped_commas() {
+        let headers_str = "Accept:text/html\\,application/xml\\,application/json,User-Agent:Mozilla/5.0";
+        let result = parse_headers_with_escapes(headers_str);
+        
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "Accept:text/html,application/xml,application/json");
+        assert_eq!(result[1], "User-Agent:Mozilla/5.0");
+    }
+
+    #[test]
+    fn test_parse_headers_backslash_not_before_comma() {
+        let headers_str = "Path:C:\\Users\\test,Host:example.com";
+        let result = parse_headers_with_escapes(headers_str);
+        
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "Path:C:\\Users\\test");
+        assert_eq!(result[1], "Host:example.com");
+    }
+
+    #[test]
+    fn test_parse_headers_empty_and_whitespace() {
+        let headers_str = "  Header1:value1  ,  ,  Header2:value2  ";
+        let result = parse_headers_with_escapes(headers_str);
+        
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "  Header1:value1  ");
+        assert_eq!(result[1], "  Header2:value2  ");
+    }
+
+    #[test]
+    fn test_parse_headers_trailing_comma() {
+        let headers_str = "Header1:value1,Header2:value2,";
+        let result = parse_headers_with_escapes(headers_str);
+        
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "Header1:value1");
+        assert_eq!(result[1], "Header2:value2");
+    }
+
+    #[test]
+    fn test_parse_headers_complex_keep_alive() {
+        let headers_str = "Connection:keep-alive\\,close,Keep-Alive:timeout=5\\,max=1000\\,custom=value";
+        let result = parse_headers_with_escapes(headers_str);
+        
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "Connection:keep-alive,close");
+        assert_eq!(result[1], "Keep-Alive:timeout=5,max=1000,custom=value");
+    }
 }
