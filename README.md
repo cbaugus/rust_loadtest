@@ -247,6 +247,39 @@ cbaugus/rust-loadtester:latest
 
 This will send the specified Authorization and X-Api-Key headers with every request made by the load tester.
 
+#### Escaping commas in header values
+
+If your header values contain commas (e.g., Keep-Alive headers), you need to escape them with a backslash (`\,`). The escaped comma will be included in the header value as a literal comma.
+
+**Example with Keep-Alive headers:**
+
+```bash
+docker run --rm \\
+-e TARGET_URL="http://your-target.com/api" \\
+-e CUSTOM_HEADERS="Connection:keep-alive,Keep-Alive:timeout=5\\,max=200" \\
+# ... other environment variables ...
+cbaugus/rust-loadtester:latest
+```
+
+This will send:
+- `Connection: keep-alive`
+- `Keep-Alive: timeout=5,max=200`
+
+**Other examples of escaped commas:**
+
+```bash
+# Multiple comma-separated values in Accept header
+-e CUSTOM_HEADERS="Accept:text/html\\,application/xml\\,application/json"
+
+# Complex Keep-Alive with multiple parameters
+-e CUSTOM_HEADERS="Keep-Alive:timeout=5\\,max=1000\\,custom=value"
+
+# Multiple headers with some containing commas
+-e CUSTOM_HEADERS="Accept:text/html\\,application/json,User-Agent:MyApp/1.0,Cache-Control:no-cache\\,no-store"
+```
+
+**Note:** Only commas that are part of header values need to be escaped. Commas that separate different headers should not be escaped.
+
 
 **Important Note on Private Key Format:**
 If your private key is not in PKCS#8 format (e.g., it's a traditional PKCS#1 RSA key), you'll need to convert it. You can do this using OpenSSL:
