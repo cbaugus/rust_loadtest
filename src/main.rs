@@ -260,6 +260,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let mut client_builder = reqwest::Client::builder();
 
+    // --- DNS Caching Configuration ---
+    let dns_cache_enabled_str = env::var("DNS_CACHE_ENABLED").unwrap_or_else(|_| "false".to_string());
+    let dns_cache_enabled = dns_cache_enabled_str.to_lowercase() == "true";
+
+    if !dns_cache_enabled {
+        // Disable connection pooling to force DNS resolution on each request
+        client_builder = client_builder
+            .pool_max_idle_per_host(0)
+            .pool_idle_timeout(Duration::from_secs(0));
+        println!("DNS caching DISABLED: Fresh DNS lookups will occur on each request (higher DNS load, detects DNS changes immediately)");
+    } else {
+        println!("DNS caching ENABLED: Connection pooling active (better performance, DNS changes may not be detected immediately)");
+    }
+    // --- END DNS Caching Configuration ---
+
     // --- NEW: DNS Override Configuration ---
     // Reads RESOLVE_TARGET_ADDR="hostname:ip_address:port"
     // Example: "example.com:192.168.1.10:8080"
@@ -529,6 +544,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("  Overall Test Duration: {:?}", overall_test_duration);
     println!("  Load Model: {:?}", load_model);
     println!("  Skip TLS Verify: {}", skip_tls_verify);
+    println!("  DNS Cache Enabled: {}", dns_cache_enabled);
+    if !dns_cache_enabled {
+        println!("    Note: Connection pooling disabled - each request will trigger DNS resolution");
+    }
     if env::var("CLIENT_CERT_PATH").is_ok() && env::var("CLIENT_KEY_PATH").is_ok() {
         println!("  mTLS Enabled: Yes (using CLIENT_CERT_PATH and CLIENT_KEY_PATH)");
     } else {
