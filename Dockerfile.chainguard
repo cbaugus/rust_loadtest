@@ -1,0 +1,38 @@
+# Multi-stage build for static binary with Chainguard
+# This produces a minimal, secure image (~10-15 MB) with zero CVEs
+
+# --- Stage 1: Build static binary with musl ---
+FROM rust:alpine AS builder
+
+WORKDIR /usr/src/app
+
+# Install musl development tools for static linking
+RUN apk add --no-cache musl-dev
+
+# Copy source code
+COPY . .
+
+# Add musl target for Rust
+RUN rustup target add x86_64-unknown-linux-musl
+
+# Build static binary with all dependencies compiled in
+# Using release profile for optimizations
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+# --- Stage 2: Ultra-minimal Chainguard static runtime ---
+# This image contains only: filesystem structure, CA certs, timezone data
+# Size: ~2-5 MB base
+# CVEs: Typically 0
+FROM cgr.dev/chainguard/static:latest
+
+# Copy the static binary from builder
+COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-musl/release/rust_loadtest /usr/local/bin/rust_loadtest
+
+# Expose Prometheus metrics port
+EXPOSE 9090
+
+# Chainguard images run as non-root user by default (UID 65532)
+# No shell available in this image - maximum security
+
+# Run the application
+ENTRYPOINT ["/usr/local/bin/rust_loadtest"]

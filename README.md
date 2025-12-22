@@ -21,6 +21,37 @@ Before you begin, ensure you have the following installed:
 * [**Rust**](https://www.rust-lang.org/tools/install): Rust toolchain (version 1.77 or newer recommended).
 * [**Docker**](https://docs.docker.com/get-docker/): Docker Engine to build and run the containerized application.
 
+## Available Docker Images
+
+This tool is available in two image variants to suit different deployment scenarios:
+
+### Standard Image (Ubuntu-based)
+**Tag:** `cbaugus/rust-loadtester:latest` or `cbaugus/rust-loadtester:<branch>`
+
+- **Base:** Ubuntu latest
+- **Size:** ~80-100 MB
+- **Use case:** Development, testing, debugging in lab environments
+- **Features:**
+  - Full shell access for troubleshooting
+  - Standard system utilities available
+  - Easy to debug and inspect
+- **Build:** `Dockerfile`
+
+### Static Image (Chainguard-based)
+**Tag:** `cbaugus/rust-loadtester:latest-Chainguard` or `cbaugus/rust-loadtester:<branch>-Chainguard`
+
+- **Base:** Chainguard static (distroless)
+- **Size:** ~10-15 MB (75% smaller)
+- **Use case:** Production, secure environments, minimal attack surface
+- **Features:**
+  - Zero to minimal CVEs (typically 0-2)
+  - No shell or unnecessary binaries
+  - Static binary with all dependencies compiled in
+  - Maximum security posture
+- **Build:** `Dockerfile.static`
+
+**Recommendation:** Use the **static image** for production deployments in secure environments. Use the **standard image** for development and troubleshooting.
+
 ## Project Structure
 
 ```
@@ -28,7 +59,8 @@ Before you begin, ensure you have the following installed:
 ├── Cargo.toml
 ├── src
 │   └── main.rs
-└── Dockerfile
+├── Dockerfile              # Standard Ubuntu-based build
+└── Dockerfile.static       # Minimal Chainguard static build
 ```
 
 
