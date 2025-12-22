@@ -42,11 +42,11 @@ jobs:
           load: true
 
       # Build minimal Chainguard static image
-      - name: Build Docker image (static)
+      - name: Build Docker image (Chainguard)
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.static
+          file: ./Dockerfile.chainguard
           platforms: linux/amd64
           tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}-Chainguard
           push: false
@@ -62,10 +62,10 @@ jobs:
           syft --version
           syft "docker:cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}" -o cyclonedx-json > sbom-standard.cyclonedx.json
 
-      # Generate SBOM for static image
-      - name: Generate SBOM with Syft (static)
+      # Generate SBOM for Chainguard image
+      - name: Generate SBOM with Syft (Chainguard)
         run: |
-          syft "docker:cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}-static" -o cyclonedx-json > sbom-static.cyclonedx.json
+          syft "docker:cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}-Chainguard" -o cyclonedx-json > sbom-chainguard.cyclonedx.json
 
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v4
@@ -73,7 +73,7 @@ jobs:
           name: sbom
           path: |
             sbom-standard.cyclonedx.json
-            sbom-static.cyclonedx.json
+            sbom-chainguard.cyclonedx.json
 
       # Push standard Ubuntu image
       - name: Push Docker image (standard)
@@ -86,14 +86,14 @@ jobs:
           provenance: true
           push: true
 
-      # Push minimal static image
-      - name: Push Docker image (static)
+      # Push minimal Chainguard image
+      - name: Push Docker image (chainguard)
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.static
+          file: ./Dockerfile.chainguard
           platforms: linux/amd64
-          tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}-static
+          tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}-Chainguard
           provenance: true
           push: true
 
