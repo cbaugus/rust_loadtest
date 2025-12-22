@@ -38,7 +38,7 @@ This tool is available in two image variants to suit different deployment scenar
 - **Build:** `Dockerfile`
 
 ### Static Image (Chainguard-based)
-**Tag:** `cbaugus/rust-loadtester:latest-static` or `cbaugus/rust-loadtester:<branch>-static`
+**Tag:** `cbaugus/rust-loadtester:latest-Chainguard` or `cbaugus/rust-loadtester:<branch>-Chainguard`
 
 - **Base:** Chainguard static (distroless)
 - **Size:** ~10-15 MB (75% smaller)

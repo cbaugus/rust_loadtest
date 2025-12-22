@@ -48,7 +48,7 @@ jobs:
           context: .
           file: ./Dockerfile.static
           platforms: linux/amd64
-          tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}-static
+          tags: cbaugus/rust_loadtest:${{ steps.docker_meta.outputs.TAG }}-Chainguard
           push: false
           load: true
 
