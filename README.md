@@ -77,7 +77,42 @@ The load testing tool is configured primarily through environment variables pass
 * SKIP_TLS_VERIFY (Optional, default: false): Set to "true" to skip TLS/SSL certificate verification for HTTPS endpoints. Use with caution, primarily for testing environments with self-signed certificates.
 * CLIENT_CERT_PATH (Optional): Path to the client's PEM-encoded public certificate file for mTLS.
 * CLIENT_KEY_PATH (Optional): Path to the client's PEM-encoded PKCS#8 private key file for mTLS. Both `CLIENT_CERT_PATH` and `CLIENT_KEY_PATH` must be provided to enable mTLS.
+* DNS_CACHE_ENABLED (Optional, default: false): Controls DNS caching behavior during load tests.
+  - "false" (default): Disables connection pooling, forcing fresh DNS lookups on each request. Use this when testing DNS failover scenarios or when backend IPs may change during the test. Note: This increases load on DNS servers and adds TCP handshake overhead.
+  - "true": Enables normal connection pooling and DNS caching. Better performance but DNS changes during the test may not be detected immediately.
 * RESOLVE_TARGET_ADDR (Optional): Allows overriding DNS resolution for the `TARGET_URL`. The format is `"hostname:ip_address:port"`. For example, if `TARGET_URL` is `http://example.com/api` and `RESOLVE_TARGET_ADDR` is set to `"example.com:192.168.1.50:8080"`, all requests to `example.com` will be directed to `192.168.1.50` on port `8080`. This is useful for targeting services not in DNS or for specific routing during tests.
+
+### DNS Caching Behavior
+
+By default (`DNS_CACHE_ENABLED=false`), this load tester disables DNS caching to ensure that DNS changes are detected immediately during tests. This is important for testing:
+- Blue/green deployments where DNS switches to new infrastructure
+- Failover scenarios where DNS redirects to backup systems
+- Any situation where backend IPs change during a load test
+
+**How it works:**
+- When `DNS_CACHE_ENABLED=false`: Connection pooling is disabled, forcing each HTTP request to establish a new TCP connection, which triggers a fresh DNS lookup
+- When `DNS_CACHE_ENABLED=true`: Normal connection pooling applies, connections are reused, and DNS may be cached
+
+**Trade-offs:**
+- Disabling DNS caching (default) increases load on DNS servers and adds TCP handshake latency, but ensures immediate detection of DNS changes
+- Enabling DNS caching improves performance but may cause the load tester to continue hitting old IPs even after DNS records are updated
+
+**Example - Testing DNS Failover:**
+```bash
+docker run --rm \
+  -e TARGET_URL="https://api.example.com/endpoint" \
+  -e DNS_CACHE_ENABLED="false" \
+  -e NUM_CONCURRENT_TASKS="100" \
+  -e TEST_DURATION="30m" \
+  -e LOAD_MODEL_TYPE="RampRps" \
+  -e MIN_RPS="50" \
+  -e MAX_RPS="500" \
+  cbaugus/rust-loadtester:latest
+```
+
+During this test, if you change the DNS record for `api.example.com`, the load tester will immediately start sending requests to the new IP address.
+
+**Note:** This setting works independently from `RESOLVE_TARGET_ADDR`. If you manually override DNS with `RESOLVE_TARGET_ADDR`, that takes precedence and DNS lookups are bypassed entirely.
 
 Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:

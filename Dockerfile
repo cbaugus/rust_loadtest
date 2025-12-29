@@ -7,6 +7,7 @@ RUN cargo install --path .
 # Use a minimal base image for the final runtime
 FROM ubuntu:latest
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
        libssl3 \
        ca-certificates \
