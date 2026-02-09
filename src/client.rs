@@ -139,16 +139,25 @@ fn configure_mtls(
             println!("Attempting to load mTLS certificate from: {}", cert_path);
             println!("Attempting to load mTLS private key from: {}", key_path);
 
-            let mut cert_file = File::open(cert_path)
-                .map_err(|e| format!("Failed to open client certificate file '{}': {}", cert_path, e))?;
+            let mut cert_file = File::open(cert_path).map_err(|e| {
+                format!(
+                    "Failed to open client certificate file '{}': {}",
+                    cert_path, e
+                )
+            })?;
             let mut cert_pem_buf = Vec::new();
-            cert_file.read_to_end(&mut cert_pem_buf)
-                .map_err(|e| format!("Failed to read client certificate file '{}': {}", cert_path, e))?;
+            cert_file.read_to_end(&mut cert_pem_buf).map_err(|e| {
+                format!(
+                    "Failed to read client certificate file '{}': {}",
+                    cert_path, e
+                )
+            })?;
 
             let mut key_file = File::open(key_path)
                 .map_err(|e| format!("Failed to open client key file '{}': {}", key_path, e))?;
             let mut key_pem_buf = Vec::new();
-            key_file.read_to_end(&mut key_pem_buf)
+            key_file
+                .read_to_end(&mut key_pem_buf)
                 .map_err(|e| format!("Failed to read client key file '{}': {}", key_path, e))?;
 
             // Validate certificate PEM
@@ -162,13 +171,15 @@ fn configure_mtls(
                     return Err(format!(
                         "Failed to parse PEM certificates from '{}': {}",
                         cert_path, e
-                    ).into());
+                    )
+                    .into());
                 }
             }
 
             // Validate private key PEM (must be PKCS#8)
             let mut key_pem_cursor = std::io::Cursor::new(key_pem_buf.as_slice());
-            let keys_result: Vec<_> = rustls_pemfile::pkcs8_private_keys(&mut key_pem_cursor).collect();
+            let keys_result: Vec<_> =
+                rustls_pemfile::pkcs8_private_keys(&mut key_pem_cursor).collect();
             if keys_result.is_empty() {
                 return Err(format!(
                     "No PKCS#8 private keys found in '{}'. Ensure the file contains a valid PEM-encoded PKCS#8 private key.",
@@ -240,7 +251,8 @@ fn configure_custom_headers(
             return Err(format!(
                 "Invalid header format in CUSTOM_HEADERS: '{}'. Expected 'Name:Value'.",
                 header_pair_str_trimmed
-            ).into());
+            )
+            .into());
         }
 
         let name_str = parts[0].trim();
@@ -250,15 +262,20 @@ fn configure_custom_headers(
             return Err(format!(
                 "Invalid header format: Header name cannot be empty in '{}'.",
                 header_pair_str_trimmed
-            ).into());
+            )
+            .into());
         }
 
         let unescaped_value = value_str.replace("\\,", ",");
 
         let header_name = HeaderName::from_str(name_str)
             .map_err(|e| format!("Invalid header name: {}. Name: '{}'", e, name_str))?;
-        let header_value = HeaderValue::from_str(&unescaped_value)
-            .map_err(|e| format!("Invalid header value for '{}': {}. Value: '{}'", name_str, e, unescaped_value))?;
+        let header_value = HeaderValue::from_str(&unescaped_value).map_err(|e| {
+            format!(
+                "Invalid header value for '{}': {}. Value: '{}'",
+                name_str, e, unescaped_value
+            )
+        })?;
 
         parsed_headers.insert(header_name, header_value);
     }

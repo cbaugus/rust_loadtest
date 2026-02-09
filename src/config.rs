@@ -105,8 +105,8 @@ impl Config {
                 let max_rps: f64 = env::var("MAX_RPS")
                     .expect("MAX_RPS must be set for RampRps")
                     .parse()?;
-                let ramp_duration_str = env::var("RAMP_DURATION")
-                    .unwrap_or_else(|_| test_duration_str.to_string());
+                let ramp_duration_str =
+                    env::var("RAMP_DURATION").unwrap_or_else(|_| test_duration_str.to_string());
                 let ramp_duration = parse_duration_string(&ramp_duration_str)?;
                 Ok(LoadModel::RampRps {
                     min_rps,

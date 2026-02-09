@@ -1,7 +1,9 @@
 use tokio::time::{self, Duration, Instant};
 
 use crate::load_models::LoadModel;
-use crate::metrics::{CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_STATUS_CODES, REQUEST_TOTAL};
+use crate::metrics::{
+    CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_STATUS_CODES, REQUEST_TOTAL,
+};
 
 /// Configuration for a worker task.
 pub struct WorkerConfig {

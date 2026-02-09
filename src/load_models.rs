@@ -9,9 +9,7 @@ pub enum LoadModel {
 
     /// Fixed RPS target.
     /// Maintains a constant request rate throughout the test.
-    Rps {
-        target_rps: f64,
-    },
+    Rps { target_rps: f64 },
 
     /// Linear ramp up/down pattern.
     /// Divides the ramp_duration into thirds:

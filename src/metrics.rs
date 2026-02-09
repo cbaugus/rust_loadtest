@@ -1,6 +1,8 @@
-use hyper::{Body, Request, Response, Server};
 use hyper::service::{make_service_fn, service_fn};
-use prometheus::{Encoder, Gauge, Histogram, IntCounter, IntCounterVec, Opts, Registry, TextEncoder};
+use hyper::{Body, Request, Response, Server};
+use prometheus::{
+    Encoder, Gauge, Histogram, IntCounter, IntCounterVec, Opts, Registry, TextEncoder,
+};
 use std::env;
 use std::sync::{Arc, Mutex};
 

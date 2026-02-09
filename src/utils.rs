@@ -19,7 +19,12 @@ pub fn parse_duration_string(s: &str) -> Result<Duration, String> {
 
     let value = match u64::from_str(value_str) {
         Ok(v) => v,
-        Err(_) => return Err(format!("Invalid numeric value in duration: '{}'", value_str)),
+        Err(_) => {
+            return Err(format!(
+                "Invalid numeric value in duration: '{}'",
+                value_str
+            ))
+        }
     };
 
     match unit_char {
@@ -119,10 +124,7 @@ mod tests {
 
         #[test]
         fn parse_zero_minutes() {
-            assert_eq!(
-                parse_duration_string("0m").unwrap(),
-                Duration::from_secs(0)
-            );
+            assert_eq!(parse_duration_string("0m").unwrap(), Duration::from_secs(0));
         }
 
         #[test]
