@@ -1,9 +1,35 @@
 use std::env;
+use thiserror::Error;
 use tokio::time::Duration;
 
 use crate::client::ClientConfig;
 use crate::load_models::LoadModel;
 use crate::utils::parse_duration_string;
+
+/// Configuration errors with descriptive messages.
+#[derive(Error, Debug)]
+pub enum ConfigError {
+    #[error("Missing required environment variable: {0}")]
+    MissingEnvVar(String),
+
+    #[error("Invalid value for {var}: {message}")]
+    InvalidValue { var: String, message: String },
+
+    #[error("mTLS configuration incomplete: both CLIENT_CERT_PATH and CLIENT_KEY_PATH must be set together, or neither")]
+    IncompleteMtls,
+
+    #[error("Load model '{model}' requires: {required}")]
+    MissingLoadModelParams { model: String, required: String },
+
+    #[error("Invalid duration format for {var}: {message}")]
+    InvalidDuration { var: String, message: String },
+
+    #[error("URL validation failed: {0}")]
+    InvalidUrl(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
+}
 
 /// Main configuration for the load test.
 #[derive(Debug, Clone)]
@@ -22,54 +48,73 @@ pub struct Config {
     pub custom_headers: Option<String>,
 }
 
+/// Helper to get a required environment variable.
+fn env_required(name: &str) -> Result<String, ConfigError> {
+    env::var(name).map_err(|_| ConfigError::MissingEnvVar(name.into()))
+}
+
+/// Helper to parse an environment variable with a default value.
+fn env_parse_or<T: std::str::FromStr>(name: &str, default: T) -> Result<T, ConfigError>
+where
+    T::Err: std::fmt::Display,
+{
+    match env::var(name) {
+        Ok(val) => val.parse().map_err(|e: T::Err| ConfigError::InvalidValue {
+            var: name.into(),
+            message: e.to_string(),
+        }),
+        Err(_) => Ok(default),
+    }
+}
+
+/// Helper to parse a boolean environment variable.
+fn env_bool(name: &str, default: bool) -> bool {
+    env::var(name)
+        .unwrap_or_else(|_| default.to_string())
+        .to_lowercase()
+        == "true"
+}
+
 impl Config {
     /// Loads configuration from environment variables.
-    pub fn from_env() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let target_url =
-            env::var("TARGET_URL").expect("TARGET_URL environment variable must be set");
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let target_url = env_required("TARGET_URL")?;
 
         let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "POST".to_string());
 
-        let send_json = env::var("SEND_JSON")
-            .unwrap_or_else(|_| "false".to_string())
-            .to_lowercase()
-            == "true";
+        let send_json = env_bool("SEND_JSON", false);
 
         let json_payload = if send_json {
             Some(
-                env::var("JSON_PAYLOAD")
-                    .expect("JSON_PAYLOAD environment variable must be set when SEND_JSON=true"),
+                env_required("JSON_PAYLOAD").map_err(|_| ConfigError::MissingLoadModelParams {
+                    model: "SEND_JSON=true".into(),
+                    required: "JSON_PAYLOAD".into(),
+                })?,
             )
         } else {
             None
         };
 
-        let num_concurrent_tasks: usize = env::var("NUM_CONCURRENT_TASKS")
-            .unwrap_or_else(|_| "10".to_string())
-            .parse()
-            .expect("NUM_CONCURRENT_TASKS must be a valid number");
+        let num_concurrent_tasks: usize = env_parse_or("NUM_CONCURRENT_TASKS", 10)?;
 
         let test_duration_str = env::var("TEST_DURATION").unwrap_or_else(|_| "2h".to_string());
         let test_duration = parse_duration_string(&test_duration_str).map_err(|e| {
-            format!(
-                "Invalid TEST_DURATION format: '{}'. {}",
-                test_duration_str, e
-            )
+            ConfigError::InvalidDuration {
+                var: "TEST_DURATION".into(),
+                message: e,
+            }
         })?;
 
         let load_model = Self::parse_load_model(&test_duration_str)?;
 
-        let skip_tls_verify = env::var("SKIP_TLS_VERIFY")
-            .unwrap_or_else(|_| "false".to_string())
-            .to_lowercase()
-            == "true";
+        let skip_tls_verify = env_bool("SKIP_TLS_VERIFY", false);
 
         let resolve_target_addr = env::var("RESOLVE_TARGET_ADDR").ok();
         let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
         let custom_headers = env::var("CUSTOM_HEADERS").ok();
 
-        Ok(Config {
+        let config = Config {
             target_url,
             request_type,
             send_json,
@@ -82,32 +127,59 @@ impl Config {
             client_cert_path,
             client_key_path,
             custom_headers,
-        })
+        };
+
+        config.validate()?;
+        Ok(config)
     }
 
-    fn parse_load_model(
-        test_duration_str: &str,
-    ) -> Result<LoadModel, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_load_model(test_duration_str: &str) -> Result<LoadModel, ConfigError> {
         let model_type = env::var("LOAD_MODEL_TYPE").unwrap_or_else(|_| "Concurrent".to_string());
 
         match model_type.as_str() {
             "Concurrent" => Ok(LoadModel::Concurrent),
             "Rps" => {
-                let target_rps: f64 = env::var("TARGET_RPS")
-                    .expect("TARGET_RPS must be set for Rps model")
-                    .parse()?;
+                let target_rps: f64 = env_required("TARGET_RPS")
+                    .map_err(|_| ConfigError::MissingLoadModelParams {
+                        model: "Rps".into(),
+                        required: "TARGET_RPS".into(),
+                    })?
+                    .parse()
+                    .map_err(|e: std::num::ParseFloatError| ConfigError::InvalidValue {
+                        var: "TARGET_RPS".into(),
+                        message: e.to_string(),
+                    })?;
                 Ok(LoadModel::Rps { target_rps })
             }
             "RampRps" => {
-                let min_rps: f64 = env::var("MIN_RPS")
-                    .expect("MIN_RPS must be set for RampRps")
-                    .parse()?;
-                let max_rps: f64 = env::var("MAX_RPS")
-                    .expect("MAX_RPS must be set for RampRps")
-                    .parse()?;
+                let min_rps: f64 = env_required("MIN_RPS")
+                    .map_err(|_| ConfigError::MissingLoadModelParams {
+                        model: "RampRps".into(),
+                        required: "MIN_RPS".into(),
+                    })?
+                    .parse()
+                    .map_err(|e: std::num::ParseFloatError| ConfigError::InvalidValue {
+                        var: "MIN_RPS".into(),
+                        message: e.to_string(),
+                    })?;
+                let max_rps: f64 = env_required("MAX_RPS")
+                    .map_err(|_| ConfigError::MissingLoadModelParams {
+                        model: "RampRps".into(),
+                        required: "MAX_RPS".into(),
+                    })?
+                    .parse()
+                    .map_err(|e: std::num::ParseFloatError| ConfigError::InvalidValue {
+                        var: "MAX_RPS".into(),
+                        message: e.to_string(),
+                    })?;
                 let ramp_duration_str =
                     env::var("RAMP_DURATION").unwrap_or_else(|_| test_duration_str.to_string());
-                let ramp_duration = parse_duration_string(&ramp_duration_str)?;
+                let ramp_duration = parse_duration_string(&ramp_duration_str).map_err(|e| {
+                    ConfigError::InvalidDuration {
+                        var: "RAMP_DURATION".into(),
+                        message: e,
+                    }
+                })?;
                 Ok(LoadModel::RampRps {
                     min_rps,
                     max_rps,
@@ -115,34 +187,54 @@ impl Config {
                 })
             }
             "DailyTraffic" => {
-                let min_rps: f64 = env::var("DAILY_MIN_RPS")
-                    .expect("DAILY_MIN_RPS must be set for DailyTraffic model")
-                    .parse()?;
-                let mid_rps: f64 = env::var("DAILY_MID_RPS")
-                    .expect("DAILY_MID_RPS must be set for DailyTraffic model")
-                    .parse()?;
-                let max_rps: f64 = env::var("DAILY_MAX_RPS")
-                    .expect("DAILY_MAX_RPS must be set for DailyTraffic model")
-                    .parse()?;
-                let cycle_duration_str = env::var("DAILY_CYCLE_DURATION")
-                    .expect("DAILY_CYCLE_DURATION must be set for DailyTraffic model");
-                let cycle_duration = parse_duration_string(&cycle_duration_str)?;
+                let min_rps: f64 = env_required("DAILY_MIN_RPS")
+                    .map_err(|_| ConfigError::MissingLoadModelParams {
+                        model: "DailyTraffic".into(),
+                        required: "DAILY_MIN_RPS".into(),
+                    })?
+                    .parse()
+                    .map_err(|e: std::num::ParseFloatError| ConfigError::InvalidValue {
+                        var: "DAILY_MIN_RPS".into(),
+                        message: e.to_string(),
+                    })?;
+                let mid_rps: f64 = env_required("DAILY_MID_RPS")
+                    .map_err(|_| ConfigError::MissingLoadModelParams {
+                        model: "DailyTraffic".into(),
+                        required: "DAILY_MID_RPS".into(),
+                    })?
+                    .parse()
+                    .map_err(|e: std::num::ParseFloatError| ConfigError::InvalidValue {
+                        var: "DAILY_MID_RPS".into(),
+                        message: e.to_string(),
+                    })?;
+                let max_rps: f64 = env_required("DAILY_MAX_RPS")
+                    .map_err(|_| ConfigError::MissingLoadModelParams {
+                        model: "DailyTraffic".into(),
+                        required: "DAILY_MAX_RPS".into(),
+                    })?
+                    .parse()
+                    .map_err(|e: std::num::ParseFloatError| ConfigError::InvalidValue {
+                        var: "DAILY_MAX_RPS".into(),
+                        message: e.to_string(),
+                    })?;
+                let cycle_duration_str = env_required("DAILY_CYCLE_DURATION").map_err(|_| {
+                    ConfigError::MissingLoadModelParams {
+                        model: "DailyTraffic".into(),
+                        required: "DAILY_CYCLE_DURATION".into(),
+                    }
+                })?;
+                let cycle_duration = parse_duration_string(&cycle_duration_str).map_err(|e| {
+                    ConfigError::InvalidDuration {
+                        var: "DAILY_CYCLE_DURATION".into(),
+                        message: e,
+                    }
+                })?;
 
-                let morning_ramp_ratio: f64 = env::var("MORNING_RAMP_RATIO")
-                    .unwrap_or_else(|_| "0.125".to_string())
-                    .parse()?;
-                let peak_sustain_ratio: f64 = env::var("PEAK_SUSTAIN_RATIO")
-                    .unwrap_or_else(|_| "0.167".to_string())
-                    .parse()?;
-                let mid_decline_ratio: f64 = env::var("MID_DECLINE_RATIO")
-                    .unwrap_or_else(|_| "0.125".to_string())
-                    .parse()?;
-                let mid_sustain_ratio: f64 = env::var("MID_SUSTAIN_RATIO")
-                    .unwrap_or_else(|_| "0.167".to_string())
-                    .parse()?;
-                let evening_decline_ratio: f64 = env::var("EVENING_DECLINE_RATIO")
-                    .unwrap_or_else(|_| "0.167".to_string())
-                    .parse()?;
+                let morning_ramp_ratio: f64 = env_parse_or("MORNING_RAMP_RATIO", 0.125)?;
+                let peak_sustain_ratio: f64 = env_parse_or("PEAK_SUSTAIN_RATIO", 0.167)?;
+                let mid_decline_ratio: f64 = env_parse_or("MID_DECLINE_RATIO", 0.125)?;
+                let mid_sustain_ratio: f64 = env_parse_or("MID_SUSTAIN_RATIO", 0.167)?;
+                let evening_decline_ratio: f64 = env_parse_or("EVENING_DECLINE_RATIO", 0.167)?;
 
                 let total_ratios = morning_ramp_ratio
                     + peak_sustain_ratio
@@ -168,7 +260,57 @@ impl Config {
                     evening_decline_ratio,
                 })
             }
-            _ => panic!("Unknown LOAD_MODEL_TYPE: {}", model_type),
+            _ => Err(ConfigError::InvalidValue {
+                var: "LOAD_MODEL_TYPE".into(),
+                message: format!(
+                    "Unknown load model '{}'. Valid options: Concurrent, Rps, RampRps, DailyTraffic",
+                    model_type
+                ),
+            }),
+        }
+    }
+
+    /// Validates the configuration for consistency and correctness.
+    fn validate(&self) -> Result<(), ConfigError> {
+        // Validate URL format
+        if !self.target_url.starts_with("http://") && !self.target_url.starts_with("https://") {
+            return Err(ConfigError::InvalidUrl(
+                "TARGET_URL must start with http:// or https://".into(),
+            ));
+        }
+
+        // Validate num_concurrent_tasks
+        if self.num_concurrent_tasks == 0 {
+            return Err(ConfigError::InvalidValue {
+                var: "NUM_CONCURRENT_TASKS".into(),
+                message: "Must be greater than 0".into(),
+            });
+        }
+
+        // Validate mTLS (both cert and key, or neither)
+        if self.client_cert_path.is_some() != self.client_key_path.is_some() {
+            return Err(ConfigError::IncompleteMtls);
+        }
+
+        Ok(())
+    }
+
+    /// Creates a default Config for testing purposes.
+    #[cfg(test)]
+    pub fn for_testing() -> Self {
+        Config {
+            target_url: "https://example.com".into(),
+            request_type: "GET".into(),
+            send_json: false,
+            json_payload: None,
+            num_concurrent_tasks: 10,
+            test_duration: Duration::from_secs(60),
+            load_model: LoadModel::Concurrent,
+            skip_tls_verify: false,
+            resolve_target_addr: None,
+            client_cert_path: None,
+            client_key_path: None,
+            custom_headers: None,
         }
     }
 
@@ -523,31 +665,42 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "TARGET_URL")]
-    fn missing_target_url_panics() {
+    fn missing_target_url_returns_error() {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env_vars();
         // TARGET_URL not set
-        let _ = Config::from_env();
+        let result = Config::from_env();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, ConfigError::MissingEnvVar(ref var) if var == "TARGET_URL"),
+            "expected MissingEnvVar(TARGET_URL), got {:?}",
+            err
+        );
         clear_env_vars();
     }
 
     #[test]
-    #[should_panic(expected = "Unknown LOAD_MODEL_TYPE")]
-    fn unknown_load_model_panics() {
+    fn unknown_load_model_returns_error() {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env_vars();
 
         env::set_var("TARGET_URL", "https://example.com");
         env::set_var("LOAD_MODEL_TYPE", "InvalidModel");
 
-        let _ = Config::from_env();
+        let result = Config::from_env();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, ConfigError::InvalidValue { ref var, .. } if var == "LOAD_MODEL_TYPE"),
+            "expected InvalidValue for LOAD_MODEL_TYPE, got {:?}",
+            err
+        );
         clear_env_vars();
     }
 
     #[test]
-    #[should_panic(expected = "JSON_PAYLOAD")]
-    fn send_json_without_payload_panics() {
+    fn send_json_without_payload_returns_error() {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env_vars();
 
@@ -555,7 +708,99 @@ mod tests {
         env::set_var("SEND_JSON", "true");
         // JSON_PAYLOAD not set
 
-        let _ = Config::from_env();
+        let result = Config::from_env();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, ConfigError::MissingLoadModelParams { .. }),
+            "expected MissingLoadModelParams, got {:?}",
+            err
+        );
         clear_env_vars();
+    }
+
+    #[test]
+    fn invalid_url_format_returns_error() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "not-a-valid-url");
+
+        let result = Config::from_env();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, ConfigError::InvalidUrl(_)),
+            "expected InvalidUrl, got {:?}",
+            err
+        );
+        clear_env_vars();
+    }
+
+    #[test]
+    fn zero_concurrent_tasks_returns_error() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("NUM_CONCURRENT_TASKS", "0");
+
+        let result = Config::from_env();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, ConfigError::InvalidValue { ref var, .. } if var == "NUM_CONCURRENT_TASKS"),
+            "expected InvalidValue for NUM_CONCURRENT_TASKS, got {:?}",
+            err
+        );
+        clear_env_vars();
+    }
+
+    #[test]
+    fn incomplete_mtls_cert_only_returns_error() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("CLIENT_CERT_PATH", "/path/to/cert.pem");
+        // CLIENT_KEY_PATH not set
+
+        let result = Config::from_env();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, ConfigError::IncompleteMtls),
+            "expected IncompleteMtls, got {:?}",
+            err
+        );
+        clear_env_vars();
+    }
+
+    #[test]
+    fn incomplete_mtls_key_only_returns_error() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("CLIENT_KEY_PATH", "/path/to/key.pem");
+        // CLIENT_CERT_PATH not set
+
+        let result = Config::from_env();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, ConfigError::IncompleteMtls),
+            "expected IncompleteMtls, got {:?}",
+            err
+        );
+        clear_env_vars();
+    }
+
+    #[test]
+    fn for_testing_creates_valid_config() {
+        let config = Config::for_testing();
+        assert_eq!(config.target_url, "https://example.com");
+        assert_eq!(config.num_concurrent_tasks, 10);
+        assert!(matches!(config.load_model, LoadModel::Concurrent));
     }
 }
