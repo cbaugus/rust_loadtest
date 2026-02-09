@@ -80,6 +80,124 @@ pub fn parse_headers_with_escapes(headers_str: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
+    // --- parse_duration_string tests ---
+
+    mod duration {
+        use super::*;
+
+        #[test]
+        fn parse_minutes() {
+            assert_eq!(
+                parse_duration_string("10m").unwrap(),
+                Duration::from_secs(600)
+            );
+        }
+
+        #[test]
+        fn parse_hours() {
+            assert_eq!(
+                parse_duration_string("5h").unwrap(),
+                Duration::from_secs(18000)
+            );
+        }
+
+        #[test]
+        fn parse_days() {
+            assert_eq!(
+                parse_duration_string("3d").unwrap(),
+                Duration::from_secs(259200)
+            );
+        }
+
+        #[test]
+        fn parse_one_minute() {
+            assert_eq!(
+                parse_duration_string("1m").unwrap(),
+                Duration::from_secs(60)
+            );
+        }
+
+        #[test]
+        fn parse_zero_minutes() {
+            assert_eq!(
+                parse_duration_string("0m").unwrap(),
+                Duration::from_secs(0)
+            );
+        }
+
+        #[test]
+        fn parse_large_value() {
+            assert_eq!(
+                parse_duration_string("365d").unwrap(),
+                Duration::from_secs(365 * 86400)
+            );
+        }
+
+        #[test]
+        fn trims_whitespace() {
+            assert_eq!(
+                parse_duration_string("  10m  ").unwrap(),
+                Duration::from_secs(600)
+            );
+        }
+
+        #[test]
+        fn empty_string_errors() {
+            let err = parse_duration_string("").unwrap_err();
+            assert!(err.contains("empty"), "error was: {}", err);
+        }
+
+        #[test]
+        fn whitespace_only_errors() {
+            let err = parse_duration_string("   ").unwrap_err();
+            assert!(err.contains("empty"), "error was: {}", err);
+        }
+
+        #[test]
+        fn unknown_suffix_errors() {
+            let err = parse_duration_string("10x").unwrap_err();
+            assert!(err.contains("Unknown duration unit"), "error was: {}", err);
+        }
+
+        #[test]
+        fn seconds_suffix_not_supported() {
+            let err = parse_duration_string("10s").unwrap_err();
+            assert!(err.contains("Unknown duration unit"), "error was: {}", err);
+        }
+
+        #[test]
+        fn no_suffix_errors() {
+            let err = parse_duration_string("10").unwrap_err();
+            assert!(err.contains("Unknown duration unit"), "error was: {}", err);
+        }
+
+        #[test]
+        fn no_number_errors() {
+            let err = parse_duration_string("m").unwrap_err();
+            assert!(err.contains("Invalid numeric"), "error was: {}", err);
+        }
+
+        #[test]
+        fn fractional_number_errors() {
+            let err = parse_duration_string("5.5h").unwrap_err();
+            assert!(err.contains("Invalid numeric"), "error was: {}", err);
+        }
+
+        #[test]
+        fn negative_number_errors() {
+            let err = parse_duration_string("-5m").unwrap_err();
+            assert!(err.contains("Invalid numeric"), "error was: {}", err);
+        }
+
+        #[test]
+        fn letters_as_number_errors() {
+            let err = parse_duration_string("abcm").unwrap_err();
+            assert!(err.contains("Invalid numeric"), "error was: {}", err);
+        }
+    }
+
+    // --- parse_headers_with_escapes tests ---
+
     #[test]
     fn test_parse_headers_simple() {
         let headers_str = "Content-Type:application/json,Authorization:Bearer token";

@@ -183,7 +183,7 @@ impl Config {
         }
     }
 
-    /// Prints the configuration summary.
+    /// Prints the configuration summary to stdout.
     pub fn print_summary(&self, parsed_headers: &reqwest::header::HeaderMap) {
         println!("Starting load test:");
         println!("  Target URL: {}", self.target_url);
@@ -215,5 +215,347 @@ impl Config {
         } else {
             println!("  Custom Headers Enabled: No (CUSTOM_HEADERS not set)");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // Mutex to serialize tests that modify environment variables,
+    // since Rust runs tests in parallel within the same process.
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    // Helper to clear all load-test-related env vars before each test
+    fn clear_env_vars() {
+        let vars = [
+            "TARGET_URL",
+            "REQUEST_TYPE",
+            "SEND_JSON",
+            "JSON_PAYLOAD",
+            "NUM_CONCURRENT_TASKS",
+            "TEST_DURATION",
+            "LOAD_MODEL_TYPE",
+            "TARGET_RPS",
+            "MIN_RPS",
+            "MAX_RPS",
+            "RAMP_DURATION",
+            "DAILY_MIN_RPS",
+            "DAILY_MID_RPS",
+            "DAILY_MAX_RPS",
+            "DAILY_CYCLE_DURATION",
+            "MORNING_RAMP_RATIO",
+            "PEAK_SUSTAIN_RATIO",
+            "MID_DECLINE_RATIO",
+            "MID_SUSTAIN_RATIO",
+            "EVENING_DECLINE_RATIO",
+            "SKIP_TLS_VERIFY",
+            "RESOLVE_TARGET_ADDR",
+            "CLIENT_CERT_PATH",
+            "CLIENT_KEY_PATH",
+            "CUSTOM_HEADERS",
+        ];
+        for var in vars {
+            env::remove_var(var);
+        }
+    }
+
+    #[test]
+    fn defaults_with_minimal_config() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.target_url, "https://example.com");
+        assert_eq!(config.request_type, "POST");
+        assert!(!config.send_json);
+        assert!(config.json_payload.is_none());
+        assert_eq!(config.num_concurrent_tasks, 10);
+        assert_eq!(config.test_duration, Duration::from_secs(7200)); // 2h default
+        assert!(!config.skip_tls_verify);
+        assert!(config.resolve_target_addr.is_none());
+        assert!(config.client_cert_path.is_none());
+        assert!(config.client_key_path.is_none());
+        assert!(config.custom_headers.is_none());
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn concurrent_model_is_default() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+
+        let config = Config::from_env().unwrap();
+        assert!(
+            matches!(config.load_model, LoadModel::Concurrent),
+            "expected Concurrent, got {:?}",
+            config.load_model
+        );
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn rps_model_parsed() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("LOAD_MODEL_TYPE", "Rps");
+        env::set_var("TARGET_RPS", "500.0");
+
+        let config = Config::from_env().unwrap();
+        match config.load_model {
+            LoadModel::Rps { target_rps } => {
+                assert!((target_rps - 500.0).abs() < 0.001);
+            }
+            other => panic!("expected Rps, got {:?}", other),
+        }
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn ramp_rps_model_parsed() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("LOAD_MODEL_TYPE", "RampRps");
+        env::set_var("MIN_RPS", "10.0");
+        env::set_var("MAX_RPS", "1000.0");
+        env::set_var("RAMP_DURATION", "1h");
+
+        let config = Config::from_env().unwrap();
+        match config.load_model {
+            LoadModel::RampRps {
+                min_rps,
+                max_rps,
+                ramp_duration,
+            } => {
+                assert!((min_rps - 10.0).abs() < 0.001);
+                assert!((max_rps - 1000.0).abs() < 0.001);
+                assert_eq!(ramp_duration, Duration::from_secs(3600));
+            }
+            other => panic!("expected RampRps, got {:?}", other),
+        }
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn ramp_rps_defaults_duration_to_test_duration() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("LOAD_MODEL_TYPE", "RampRps");
+        env::set_var("MIN_RPS", "10.0");
+        env::set_var("MAX_RPS", "100.0");
+        env::set_var("TEST_DURATION", "30m");
+        // RAMP_DURATION not set, should default to TEST_DURATION
+
+        let config = Config::from_env().unwrap();
+        match config.load_model {
+            LoadModel::RampRps { ramp_duration, .. } => {
+                assert_eq!(ramp_duration, Duration::from_secs(1800));
+            }
+            other => panic!("expected RampRps, got {:?}", other),
+        }
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn daily_traffic_model_parsed() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("LOAD_MODEL_TYPE", "DailyTraffic");
+        env::set_var("DAILY_MIN_RPS", "10.0");
+        env::set_var("DAILY_MID_RPS", "50.0");
+        env::set_var("DAILY_MAX_RPS", "100.0");
+        env::set_var("DAILY_CYCLE_DURATION", "1d");
+
+        let config = Config::from_env().unwrap();
+        match config.load_model {
+            LoadModel::DailyTraffic {
+                min_rps,
+                mid_rps,
+                max_rps,
+                cycle_duration,
+                ..
+            } => {
+                assert!((min_rps - 10.0).abs() < 0.001);
+                assert!((mid_rps - 50.0).abs() < 0.001);
+                assert!((max_rps - 100.0).abs() < 0.001);
+                assert_eq!(cycle_duration, Duration::from_secs(86400));
+            }
+            other => panic!("expected DailyTraffic, got {:?}", other),
+        }
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn custom_request_type() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("REQUEST_TYPE", "GET");
+
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.request_type, "GET");
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn send_json_with_payload() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("SEND_JSON", "true");
+        env::set_var("JSON_PAYLOAD", r#"{"key":"value"}"#);
+
+        let config = Config::from_env().unwrap();
+        assert!(config.send_json);
+        assert_eq!(config.json_payload.unwrap(), r#"{"key":"value"}"#);
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn custom_concurrent_tasks() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("NUM_CONCURRENT_TASKS", "50");
+
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.num_concurrent_tasks, 50);
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn custom_test_duration() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("TEST_DURATION", "30m");
+
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.test_duration, Duration::from_secs(1800));
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn skip_tls_verify_true() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("SKIP_TLS_VERIFY", "true");
+
+        let config = Config::from_env().unwrap();
+        assert!(config.skip_tls_verify);
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn optional_fields_populated() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("RESOLVE_TARGET_ADDR", "example.com:1.2.3.4:443");
+        env::set_var("CLIENT_CERT_PATH", "/path/to/cert.pem");
+        env::set_var("CLIENT_KEY_PATH", "/path/to/key.pem");
+        env::set_var("CUSTOM_HEADERS", "Authorization:Bearer token");
+
+        let config = Config::from_env().unwrap();
+        assert_eq!(
+            config.resolve_target_addr.unwrap(),
+            "example.com:1.2.3.4:443"
+        );
+        assert_eq!(config.client_cert_path.unwrap(), "/path/to/cert.pem");
+        assert_eq!(config.client_key_path.unwrap(), "/path/to/key.pem");
+        assert_eq!(config.custom_headers.unwrap(), "Authorization:Bearer token");
+
+        clear_env_vars();
+    }
+
+    #[test]
+    fn to_client_config_maps_fields() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("SKIP_TLS_VERIFY", "true");
+        env::set_var("RESOLVE_TARGET_ADDR", "host:1.2.3.4:443");
+
+        let config = Config::from_env().unwrap();
+        let client_config = config.to_client_config();
+
+        assert!(client_config.skip_tls_verify);
+        assert_eq!(
+            client_config.resolve_target_addr.unwrap(),
+            "host:1.2.3.4:443"
+        );
+        assert!(client_config.client_cert_path.is_none());
+        assert!(client_config.client_key_path.is_none());
+
+        clear_env_vars();
+    }
+
+    #[test]
+    #[should_panic(expected = "TARGET_URL")]
+    fn missing_target_url_panics() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+        // TARGET_URL not set
+        let _ = Config::from_env();
+        clear_env_vars();
+    }
+
+    #[test]
+    #[should_panic(expected = "Unknown LOAD_MODEL_TYPE")]
+    fn unknown_load_model_panics() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("LOAD_MODEL_TYPE", "InvalidModel");
+
+        let _ = Config::from_env();
+        clear_env_vars();
+    }
+
+    #[test]
+    #[should_panic(expected = "JSON_PAYLOAD")]
+    fn send_json_without_payload_panics() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env_vars();
+
+        env::set_var("TARGET_URL", "https://example.com");
+        env::set_var("SEND_JSON", "true");
+        // JSON_PAYLOAD not set
+
+        let _ = Config::from_env();
+        clear_env_vars();
     }
 }
