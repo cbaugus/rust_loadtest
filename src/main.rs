@@ -1,10 +1,35 @@
 use std::sync::{Arc, Mutex};
 use tokio::time::{self, Duration};
+use tracing::{error, info};
+use tracing_subscriber::{fmt, EnvFilter};
 
 use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
 use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
+
+/// Initializes the tracing subscriber for structured logging.
+fn init_tracing() {
+    let log_format = std::env::var("LOG_FORMAT").unwrap_or_default();
+
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("rust_loadtest=info"));
+
+    if log_format == "json" {
+        fmt()
+            .with_env_filter(env_filter)
+            .with_target(true)
+            .with_thread_ids(true)
+            .json()
+            .init();
+    } else {
+        fmt()
+            .with_env_filter(env_filter)
+            .with_target(true)
+            .with_thread_ids(true)
+            .init();
+    }
+}
 
 /// Prints helpful configuration documentation.
 fn print_config_help() {
@@ -48,10 +73,18 @@ fn print_config_help() {
     eprintln!("  RESOLVE_TARGET_ADDR     - DNS override: hostname:ip:port");
     eprintln!("  CUSTOM_HEADERS          - Comma-separated headers (use \\, for literal commas)");
     eprintln!("  METRIC_NAMESPACE        - Prometheus metric namespace (default: rust_loadtest)");
+    eprintln!();
+    eprintln!("Logging configuration:");
+    eprintln!("  RUST_LOG                - Log level: error, warn, info, debug, trace");
+    eprintln!("                            Examples: RUST_LOG=info, RUST_LOG=rust_loadtest=debug");
+    eprintln!("  LOG_FORMAT              - Output format: json or default (human-readable)");
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Initialize tracing subscriber
+    init_tracing();
+
     // Register Prometheus metrics
     register_metrics()?;
 
@@ -59,6 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = match Config::from_env() {
         Ok(c) => c,
         Err(e) => {
+            error!(error = %e, "Configuration error");
             eprintln!("Configuration error: {}\n", e);
             print_config_help();
             std::process::exit(1);
@@ -83,6 +117,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             start_metrics_server(metrics_port, registry).await;
         });
     }
+
+    info!(
+        metrics_port = metrics_port,
+        "Prometheus metrics server started"
+    );
 
     // Main loop to run for a duration
     let start_time = time::Instant::now();
@@ -111,20 +150,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Wait for the total test duration to pass
     tokio::time::sleep(config.test_duration).await;
-    println!("Main test duration completed. Signalling tasks to stop.");
+    info!(
+        duration_secs = config.test_duration.as_secs(),
+        "Test duration completed, signalling workers to stop"
+    );
 
     // Brief pause to allow in-flight metrics to be updated
     tokio::time::sleep(Duration::from_secs(2)).await;
-    println!("Collecting and printing final metrics...");
+    info!("Collecting final metrics");
 
     // Gather and print final metrics
     let final_metrics_output = gather_metrics_string(&registry_arc);
-    println!("\n--- FINAL METRICS ---\n{}", final_metrics_output);
-    println!("--- END OF FINAL METRICS ---\n");
+    info!("\n--- FINAL METRICS ---\n{}", final_metrics_output);
+    info!("--- END OF FINAL METRICS ---");
 
-    println!("Pausing for 2 minutes to allow final Prometheus scrape...");
+    info!("Pausing for 2 minutes to allow final Prometheus scrape");
     tokio::time::sleep(Duration::from_secs(120)).await;
-    println!("2-minute pause complete. Exiting.");
+    info!("Pause complete, exiting");
 
     Ok(())
 }

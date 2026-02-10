@@ -1,4 +1,5 @@
 use tokio::time::{self, Duration, Instant};
+use tracing::{debug, error, info};
 
 use crate::load_models::LoadModel;
 use crate::metrics::{
@@ -19,14 +20,22 @@ pub struct WorkerConfig {
 
 /// Runs a single worker task that sends HTTP requests according to the load model.
 pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_time: Instant) {
+    debug!(
+        task_id = config.task_id,
+        url = %config.url,
+        load_model = ?config.load_model,
+        "Worker starting"
+    );
+
     loop {
         let elapsed_total_secs = Instant::now().duration_since(start_time).as_secs_f64();
 
         // Check if the total test duration has passed
         if elapsed_total_secs >= config.test_duration.as_secs_f64() {
-            println!(
-                "Task {} stopping after overall duration limit.",
-                config.task_id
+            info!(
+                task_id = config.task_id,
+                elapsed_secs = elapsed_total_secs,
+                "Worker stopping after duration limit"
             );
             break;
         }
@@ -54,14 +63,25 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
 
         match req.send().await {
             Ok(response) => {
-                let status = response.status().as_u16().to_string();
-                REQUEST_STATUS_CODES.with_label_values(&[&status]).inc();
+                let status = response.status().as_u16();
+                let status_str = status.to_string();
+                REQUEST_STATUS_CODES.with_label_values(&[&status_str]).inc();
+
+                debug!(
+                    task_id = config.task_id,
+                    url = %config.url,
+                    status_code = status,
+                    latency_ms = request_start_time.elapsed().as_millis() as u64,
+                    "Request completed"
+                );
             }
             Err(e) => {
                 REQUEST_STATUS_CODES.with_label_values(&["error"]).inc();
-                eprintln!(
-                    "Task {}: Request to {} failed: {}",
-                    config.task_id, config.url, e
+                error!(
+                    task_id = config.task_id,
+                    url = %config.url,
+                    error = %e,
+                    "Request failed"
                 );
             }
         }
@@ -93,9 +113,9 @@ fn build_request(client: &reqwest::Client, config: &WorkerConfig) -> reqwest::Re
             }
         }
         _ => {
-            eprintln!(
-                "Request type {} not currently supported, falling back to GET",
-                config.request_type
+            error!(
+                request_type = %config.request_type,
+                "Unsupported request type, falling back to GET"
             );
             client.get(&config.url)
         }

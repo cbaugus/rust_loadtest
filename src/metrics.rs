@@ -5,6 +5,7 @@ use prometheus::{
 };
 use std::env;
 use std::sync::{Arc, Mutex};
+use tracing::{error, info};
 
 lazy_static::lazy_static! {
     pub static ref METRIC_NAMESPACE: String =
@@ -81,13 +82,14 @@ pub async fn start_metrics_server(port: u16, registry: Arc<Mutex<Registry>>) {
     });
 
     let server = Server::bind(&addr).serve(make_svc);
-    println!(
-        "Prometheus metrics server listening on http://0.0.0.0:{}",
-        port
+    info!(
+        port = port,
+        addr = %addr,
+        "Metrics server listening"
     );
 
     if let Err(e) = server.await {
-        eprintln!("Metrics server error: {}", e);
+        error!(error = %e, "Metrics server error");
     }
 }
 

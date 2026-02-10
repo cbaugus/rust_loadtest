@@ -1,6 +1,7 @@
 use std::env;
 use thiserror::Error;
 use tokio::time::Duration;
+use tracing::{info, warn};
 
 use crate::client::ClientConfig;
 use crate::load_models::LoadModel;
@@ -242,9 +243,9 @@ impl Config {
                     + mid_sustain_ratio
                     + evening_decline_ratio;
                 if total_ratios > 1.0 {
-                    eprintln!(
-                        "Warning: Sum of DailyTraffic segment ratios exceeds 1.0 (Total: {}). Night sustain phase will be negative or very short.",
-                        total_ratios
+                    warn!(
+                        total_ratios = total_ratios,
+                        "DailyTraffic segment ratios exceed 1.0; night sustain phase will be negative or very short"
                     );
                 }
 
@@ -325,37 +326,31 @@ impl Config {
         }
     }
 
-    /// Prints the configuration summary to stdout.
+    /// Logs the configuration summary with structured fields.
     pub fn print_summary(&self, parsed_headers: &reqwest::header::HeaderMap) {
-        println!("Starting load test:");
-        println!("  Target URL: {}", self.target_url);
-        println!("  Request type: {}", self.request_type);
-        println!("  Concurrent Tasks: {}", self.num_concurrent_tasks);
-        println!("  Overall Test Duration: {:?}", self.test_duration);
-        println!("  Load Model: {:?}", self.load_model);
-        println!("  Skip TLS Verify: {}", self.skip_tls_verify);
+        let mtls_enabled = self.client_cert_path.is_some() && self.client_key_path.is_some();
+        let custom_headers_count = parsed_headers.len();
 
-        if self.client_cert_path.is_some() && self.client_key_path.is_some() {
-            println!("  mTLS Enabled: Yes (using CLIENT_CERT_PATH and CLIENT_KEY_PATH)");
-        } else {
-            println!("  mTLS Enabled: No (CLIENT_CERT_PATH or CLIENT_KEY_PATH not set, or only one was set)");
-        }
+        info!(
+            target_url = %self.target_url,
+            request_type = %self.request_type,
+            concurrent_tasks = self.num_concurrent_tasks,
+            test_duration_secs = self.test_duration.as_secs(),
+            load_model = ?self.load_model,
+            skip_tls_verify = self.skip_tls_verify,
+            mtls_enabled = mtls_enabled,
+            custom_headers_count = custom_headers_count,
+            "Starting load test"
+        );
 
-        if let Some(ref headers_str) = self.custom_headers {
-            if !headers_str.is_empty() && !parsed_headers.is_empty() {
-                println!("  Custom Headers Enabled: Yes");
-                for (name, value) in parsed_headers.iter() {
-                    println!(
-                        "    {}: {}",
-                        name,
-                        value.to_str().unwrap_or("<non-ASCII or sensitive value>")
-                    );
-                }
-            } else {
-                println!("  Custom Headers Enabled: No (CUSTOM_HEADERS was set but resulted in no valid headers or was empty after parsing)");
+        if !parsed_headers.is_empty() {
+            for (name, value) in parsed_headers.iter() {
+                info!(
+                    header_name = %name,
+                    header_value = %value.to_str().unwrap_or("<non-ASCII or sensitive value>"),
+                    "Custom header configured"
+                );
             }
-        } else {
-            println!("  Custom Headers Enabled: No (CUSTOM_HEADERS not set)");
         }
     }
 }
