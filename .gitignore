@@ -12,3 +12,7 @@ Cargo.lock
 # OS files
 .DS_Store
 Thumbs.db
+
+# Business documents (keep local only)
+PRODUCT_DESIGN.md
+BUSINESS_PLAN.md
