@@ -18,9 +18,8 @@ rustls-pemfile = "2.0.0" # For reading PEM files for rustls
 serde = { version = "1.0", features = ["derive"] } # For deserializing config if needed
 serde_json = "1.0" # For JSON parsing if needed
 thiserror = "1.0" # For error handling
+tracing = "0.1" # Structured logging
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] } # Logging subscriber with JSON support
 
-#rand = "0.8.4"
-#base64 = "0.13.0"
-#log = "0.4.14"
-#env_logger = "0.9.0"
-#trust-dns-resolver = "0.20.1"
+[dev-dependencies]
+wiremock = "0.5"
