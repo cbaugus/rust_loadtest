@@ -4,6 +4,7 @@
 //! It handles sequential step execution, context management, variable substitution,
 //! and metrics tracking.
 
+use crate::extractor;
 use crate::metrics::{
     CONCURRENT_SCENARIOS, SCENARIO_ASSERTIONS_TOTAL, SCENARIO_DURATION_SECONDS,
     SCENARIO_EXECUTIONS_TOTAL, SCENARIO_STEPS_TOTAL, SCENARIO_STEP_DURATION_SECONDS,
@@ -193,7 +194,7 @@ impl ScenarioExecutor {
     }
 
     /// Execute a single step.
-    async fn execute_step(&self, step: &Step, context: &ScenarioContext) -> StepResult {
+    async fn execute_step(&self, step: &Step, context: &mut ScenarioContext) -> StepResult {
         let step_start = Instant::now();
 
         // Build the full URL with variable substitution
@@ -249,6 +250,8 @@ impl ScenarioExecutor {
         match response_result {
             Ok(response) => {
                 let status = response.status();
+                let headers = response.headers().clone();
+
                 debug!(
                     step = %step.name,
                     status = status.as_u16(),
@@ -256,10 +259,57 @@ impl ScenarioExecutor {
                     "Received response"
                 );
 
-                // TODO: Extract variables from response (#27)
-                // TODO: Run assertions on response (#30)
-                // For now, just consider 2xx/3xx as success
-                let success = status.is_success() || status.is_redirection();
+                // Get response body for extraction and assertions
+                let body_result = response.text().await;
+
+                let (success, extracted_count, error_msg) = match body_result {
+                    Ok(body) => {
+                        // Extract variables from response (#27 - IMPLEMENTED)
+                        let extracted_count = if !step.extractions.is_empty() {
+                            debug!(
+                                step = %step.name,
+                                extractions = step.extractions.len(),
+                                "Extracting variables from response"
+                            );
+
+                            let extracted = extractor::extract_variables(
+                                &step.extractions,
+                                &body,
+                                &headers,
+                            );
+
+                            let count = extracted.len();
+
+                            // Store extracted variables in context
+                            for (name, value) in extracted {
+                                debug!(
+                                    step = %step.name,
+                                    variable = %name,
+                                    value = %value,
+                                    "Stored extracted variable"
+                                );
+                                context.set_variable(name, value);
+                            }
+
+                            count
+                        } else {
+                            0
+                        };
+
+                        // TODO: Run assertions on response (#30)
+
+                        let success = status.is_success() || status.is_redirection();
+                        (success, extracted_count, None)
+                    }
+                    Err(e) => {
+                        warn!(
+                            step = %step.name,
+                            error = %e,
+                            "Failed to read response body"
+                        );
+                        (false, 0, Some(format!("Failed to read response body: {}", e)))
+                    }
+                };
 
                 // Record step metrics
                 let response_time_secs = response_time_ms as f64 / 1000.0;
@@ -272,17 +322,27 @@ impl ScenarioExecutor {
                     .with_label_values(&["scenario", &step.name, step_status])
                     .inc();
 
+                debug!(
+                    step = %step.name,
+                    status_code = status.as_u16(),
+                    success = success,
+                    extracted_variables = extracted_count,
+                    "Step execution complete"
+                );
+
                 StepResult {
                     step_name: step.name.clone(),
                     success,
                     status_code: Some(status.as_u16()),
                     response_time_ms,
-                    error: if success {
-                        None
-                    } else {
-                        Some(format!("HTTP {}", status.as_u16()))
-                    },
-                    assertions_passed: 0, // TODO: Implement assertions
+                    error: error_msg.or_else(|| {
+                        if success {
+                            None
+                        } else {
+                            Some(format!("HTTP {}", status.as_u16()))
+                        }
+                    }),
+                    assertions_passed: 0, // TODO: Implement assertions (#30)
                     assertions_failed: 0,
                 }
             }
