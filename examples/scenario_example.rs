@@ -59,6 +59,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Print extracted variables
+    println!("\n=== Extracted Variables ===");
+    if let Some(product_id) = context.get_variable("product_id") {
+        println!("product_id: {}", product_id);
+    }
+    if let Some(auth_token) = context.get_variable("auth_token") {
+        println!("auth_token: {}...", &auth_token[..auth_token.len().min(20)]);
+    }
+    if let Some(cart_id) = context.get_variable("cart_id") {
+        println!("cart_id: {}", cart_id);
+    }
+
     Ok(())
 }
 
@@ -82,7 +94,7 @@ fn create_shopping_scenario() -> Scenario {
                 think_time: Some(Duration::from_millis(500)),
             },
 
-            // Step 2: Browse products
+            // Step 2: Browse products and extract first product ID
             Step {
                 name: "Browse Products".to_string(),
                 request: RequestConfig {
@@ -92,7 +104,8 @@ fn create_shopping_scenario() -> Scenario {
                     headers: HashMap::new(),
                 },
                 extractions: vec![
-                    // Extract first product ID from response
+                    // ⭐ Extract first product ID from JSON response
+                    // This demonstrates JSONPath extraction: $.products[0].id
                     VariableExtraction {
                         name: "product_id".to_string(),
                         extractor: Extractor::JsonPath("$.products[0].id".to_string()),
@@ -105,12 +118,13 @@ fn create_shopping_scenario() -> Scenario {
                 think_time: Some(Duration::from_secs(2)),
             },
 
-            // Step 3: View product details (using extracted product_id)
+            // Step 3: View product details using extracted product_id
             Step {
                 name: "View Product Details".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products/${product_id}".to_string(), // Variable substitution
+                    // ⭐ Variable substitution: ${product_id} is replaced with extracted value
+                    path: "/products/${product_id}".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
