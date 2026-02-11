@@ -41,14 +41,30 @@ Additional features for comprehensive testing.
 
 ### ✅ Completed
 - [x] **Issue #26**: Multi-step scenario execution engine (P0, XL) - **COMPLETE** ✅
-  - Branch: `feature/issue-26-multi-step-scenarios` (ready to merge)
+  - Branch: `feature/issue-26-multi-step-scenarios` (merged to develop)
   - 3 commits, ~1700 lines added
   - All acceptance criteria met
+- [x] **Issue #27**: Variable extraction from responses (P0, L) - **COMPLETE** ✅
+  - Branch: `feature/issue-27-variable-extraction` (merged to develop)
+  - JSONPath, Regex, Header, Cookie extractors implemented
+  - 15 unit tests + 7 integration tests
+- [x] **Issue #28**: Cookie and session management (P0, M) - **COMPLETE** ✅
+  - Branch: `feature/issue-28-cookie-session` (merged to develop)
+  - Cookie-enabled clients per virtual user
+  - 6 integration tests
+- [x] **Issue #29**: Think times and delays (P1, S) - **COMPLETE** ✅
+  - Branch: `feature/issue-29-think-times` (merged to develop)
+  - Fixed and Random think time variants
+  - 4 unit tests + 6 integration tests
+- [x] **Issue #30**: Response assertions framework (P0, L) - **COMPLETE** ✅
+  - Branch: `feature/issue-30-assertions` (ready to merge)
+  - 6 assertion types implemented
+  - 14 unit tests + 18 integration tests
 
 ### 🚧 In Progress
-_None - Issue #26 complete, ready for next issue_
+_None - Wave 1 & Wave 2 complete! Ready for Wave 3_
 
-### 📋 Todo - Wave 1 (Weeks 1-3)
+### 📋 Todo - Wave 1 (Weeks 1-3) - ✅ COMPLETE
 - [x] **Issue #26**: Multi-step scenario execution engine (P0, XL) ✅
   - [x] Design: Scenario and Step data structures (src/scenario.rs)
   - [x] Design: Variable context per virtual user (ScenarioContext)
@@ -65,38 +81,48 @@ _None - Issue #26 complete, ready for next issue_
   - [x] Example: Create example scenario (examples/scenario_example.rs)
   - [x] Documentation: Code documentation and test examples
 
-- [ ] **Issue #27**: Variable extraction from responses (P0, L)
-  - [ ] Implement: JSONPath extractor (serde_json)
-  - [ ] Implement: Regex extractor (regex crate)
-  - [ ] Implement: Header extractor
-  - [ ] Implement: Variable storage in user context
-  - [ ] Implement: Variable substitution in requests
-  - [ ] Tests: Extract product_id from JSON
-  - [ ] Tests: Extract auth token from response
+- [x] **Issue #27**: Variable extraction from responses (P0, L) ✅
+  - [x] Implement: JSONPath extractor (serde_json)
+  - [x] Implement: Regex extractor (regex crate)
+  - [x] Implement: Header extractor
+  - [x] Implement: Cookie extractor
+  - [x] Implement: Variable storage in user context
+  - [x] Implement: Variable substitution in requests
+  - [x] Tests: Extract product_id from JSON
+  - [x] Tests: Extract auth token from response
+  - [x] Tests: 15 unit tests + 7 integration tests
 
-- [ ] **Issue #28**: Cookie and session management (P0, M)
-  - [ ] Implement: Cookie jar per virtual user
-  - [ ] Implement: Automatic cookie handling
-  - [ ] Implement: Authorization header management
-  - [ ] Implement: Session persistence across steps
-  - [ ] Tests: Login flow with token persistence
-  - [ ] Tests: Cart operations with session
+- [x] **Issue #28**: Cookie and session management (P0, M) ✅
+  - [x] Implement: Cookie jar per virtual user
+  - [x] Implement: Automatic cookie handling (reqwest cookies feature)
+  - [x] Implement: Cookie-enabled clients per execution
+  - [x] Implement: Session persistence across steps
+  - [x] Tests: Login flow with session cookies
+  - [x] Tests: Cart operations with session
+  - [x] Tests: 6 integration tests
 
-### 📋 Todo - Wave 2 (Weeks 4-5)
-- [ ] **Issue #29**: Think times and delays (P1, S)
-  - [ ] Implement: Fixed delay configuration
-  - [ ] Implement: Random delay (min-max range)
-  - [ ] Implement: Per-step think time
-  - [ ] Tests: Verify timing accuracy
+### 📋 Todo - Wave 2 (Weeks 4-5) - ✅ COMPLETE
+- [x] **Issue #29**: Think times and delays (P1, S) ✅
+  - [x] Design: ThinkTime enum (Fixed, Random)
+  - [x] Implement: Fixed delay configuration
+  - [x] Implement: Random delay (min-max range)
+  - [x] Implement: Per-step think time
+  - [x] Implement: Think time applied after metrics
+  - [x] Tests: Verify timing accuracy
+  - [x] Tests: 4 unit tests + 6 integration tests
 
-- [ ] **Issue #30**: Response assertions framework (P0, L)
-  - [ ] Design: Assertion types enum
-  - [ ] Implement: Status code assertions
-  - [ ] Implement: JSONPath assertions
-  - [ ] Implement: Response time assertions
-  - [ ] Implement: Content matching (regex, contains)
-  - [ ] Implement: Assertion result tracking
-  - [ ] Tests: Failed assertion handling
+- [x] **Issue #30**: Response assertions framework (P0, L) ✅
+  - [x] Design: Assertion types enum
+  - [x] Implement: Status code assertions
+  - [x] Implement: JSONPath assertions (existence and value match)
+  - [x] Implement: Response time assertions
+  - [x] Implement: Content matching (regex, contains)
+  - [x] Implement: Header existence assertions
+  - [x] Implement: Assertion result tracking
+  - [x] Implement: Step failure on assertion failure
+  - [x] Implement: Assertion metrics (SCENARIO_ASSERTIONS_TOTAL)
+  - [x] Tests: Failed assertion handling
+  - [x] Tests: 14 unit tests + 18 integration tests
 
 - [ ] **Issue #33**: Percentile latency metrics (P1, M)
   - [ ] Research: HDR Histogram vs alternatives
@@ -140,17 +166,17 @@ _None - Issue #26 complete, ready for next issue_
 | Scenario | Status | Required Features | Blocked By |
 |----------|--------|------------------|------------|
 | **1. Health & Status** | ✅ Works now | None | - |
-| **2. Product Browsing** | 🔴 Blocked | #27 (extract product_id), #30 (assertions) | #26, #27, #30 |
-| **3. Auth Flow** | 🔴 Blocked | #28 (tokens), #27 (extract), #30 (assert) | #26, #27, #28, #30 |
-| **4. Shopping Flow** | 🔴 Blocked | All Wave 1+2 features | #26-30 |
-| **5. Cart Operations** | 🔴 Blocked | #28, #27, #32 (PUT/DELETE), #30 | #26-28, #30, #32 |
-| **6. Order Management** | 🔴 Blocked | #26, #27, #28, #30 | #26-28, #30 |
-| **7. Search & Filter** | 🔴 Blocked | #27, #30 | #26, #27, #30 |
+| **2. Product Browsing** | ✅ Works now | #27 (extract product_id), #30 (assertions) | - |
+| **3. Auth Flow** | ✅ Works now | #28 (tokens), #27 (extract), #30 (assert) | - |
+| **4. Shopping Flow** | ✅ Works now | All Wave 1+2 features | - |
+| **5. Cart Operations** | 🟡 Partial | #28, #27, #32 (PUT/DELETE), #30 | #32 |
+| **6. Order Management** | ✅ Works now | #26, #27, #28, #30 | - |
+| **7. Search & Filter** | ✅ Works now | #27, #30 | - |
 | **8. Streaming/WebSocket** | ⏸️ Future | Phase 5 work | TBD |
 | **9. Response Variations** | ✅ Works now | None | - |
-| **10. Error Handling** | 🟡 Partial | #34 (categorization), #30 (assert) | #34, #30 |
-| **11. Mixed Traffic** | 🔴 Blocked | All Phase 1 features | All |
-| **12. Stress Testing** | 🟡 Partial | #33 (percentiles critical) | #33 + all |
+| **10. Error Handling** | 🟡 Partial | #34 (categorization), #30 (assert) | #34 |
+| **11. Mixed Traffic** | ✅ Works now | All Phase 1 features | - |
+| **12. Stress Testing** | 🟡 Partial | #33 (percentiles critical) | #33 |
 
 **Legend:**
 - ✅ Works now - Can test today
@@ -326,7 +352,113 @@ rust-loadtest from a simple RPS generator into a full-featured scenario testing 
 
 ---
 
-**Last Updated**: 2026-02-11 16:30 PST
-**Status**: ✅ Issue #26 Complete - Ready for #27 or #28
-**Next Milestone**: Start Wave 1 remaining work (#27 Variable Extraction or #28 Session Management)
-**Branch Status**: feature/issue-26-multi-step-scenarios ready to merge to develop
+### Issue #27: Variable Extraction - 100% Complete ✅
+
+**Summary:**
+Implemented comprehensive variable extraction from HTTP responses using JSONPath, Regex,
+Headers, and Cookies. Enables chaining steps together by extracting values from one step
+and using them in subsequent requests.
+
+**What Was Built:**
+- src/extractor.rs (438 lines)
+- 4 extractor types: JSONPath, Regex, Header, Cookie
+- Integration with executor.rs
+- 15 unit tests + 7 integration tests
+
+**Merged to**: develop/phase1-scenario-engine
+
+---
+
+### Issue #28: Cookie & Session Management - 100% Complete ✅
+
+**Summary:**
+Enabled automatic cookie handling for session management. Each virtual user gets their
+own cookie-enabled HTTP client, ensuring session isolation.
+
+**What Was Built:**
+- Enabled "cookies" feature in reqwest
+- Updated worker.rs to create cookie-enabled clients
+- 6 integration tests validating session persistence
+
+**Merged to**: develop/phase1-scenario-engine
+
+---
+
+### Issue #29: Think Times - 100% Complete ✅
+
+**Summary:**
+Implemented realistic user behavior simulation with configurable delays between steps.
+Supports both fixed and random think times that don't count towards latency metrics.
+
+**What Was Built:**
+- ThinkTime enum (Fixed, Random variants)
+- calculate_delay() method with rand support
+- Integration in executor.rs (applied after metrics)
+- 4 unit tests + 6 integration tests
+
+**Merged to**: develop/phase1-scenario-engine
+
+---
+
+### Issue #30: Response Assertions - 100% Complete ✅
+
+**Summary:**
+Built a comprehensive assertion framework that validates HTTP responses against
+expected criteria. Steps fail if any assertion fails, providing detailed error
+messages and metrics tracking.
+
+**What Was Built:**
+
+1. **Core Framework** (src/assertions.rs - 418 lines)
+   - AssertionResult and AssertionError types
+   - run_assertions() and run_single_assertion() functions
+   - format_actual_value() and format_expected_value() helpers
+   - 14 unit tests covering all assertion types
+
+2. **Assertion Types** (6 types)
+   - StatusCode(u16) - Assert exact status code
+   - ResponseTime(Duration) - Assert response time below threshold
+   - JsonPath { path, expected } - Assert JSONPath exists/matches value
+   - BodyContains(String) - Assert body contains substring
+   - BodyMatches(String) - Assert body matches regex
+   - HeaderExists(String) - Assert response header exists
+
+3. **Integration** (src/executor.rs updates)
+   - Runs assertions after variable extraction
+   - Tracks pass/fail counts in StepResult
+   - Records SCENARIO_ASSERTIONS_TOTAL metrics
+   - Step fails if ANY assertion fails
+   - Detailed error messages on failure
+
+4. **Integration Tests** (tests/assertion_integration_tests.rs - 590 lines)
+   - 18 integration tests against live mock API
+   - Tests all assertion types (pass and fail cases)
+   - Tests multiple assertions per step
+   - Tests multi-step scenarios with assertion failures
+   - Tests realistic e-commerce flow with 10 assertions
+
+**Metrics:**
+- Files created: 2 files (assertions.rs, assertion_integration_tests.rs)
+- Lines added: ~1000 lines (code + tests)
+- Tests: 32 tests total (14 unit + 18 integration)
+- Commits: 2 commits on feature branch
+
+**What Works:**
+- ✅ All 6 assertion types validated
+- ✅ Step failure on assertion failure
+- ✅ Detailed assertion result tracking
+- ✅ Prometheus metrics for assertions
+- ✅ Multi-assertion scenarios
+- ✅ Early termination on assertion failures
+
+**Ready For:**
+- Merge to develop/phase1-scenario-engine
+- Production use for validated scenarios
+- Wave 3 work (#33, #32, #31, etc.)
+
+---
+
+**Last Updated**: 2026-02-11 19:45 PST
+**Status**: ✅ Wave 1 & Wave 2 Complete! Issues #26-#30 all done
+**Next Milestone**: Wave 3 - Start with #33 (Percentile Latencies)
+**Branch Status**: feature/issue-30-assertions ready to merge to develop
