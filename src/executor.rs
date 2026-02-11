@@ -4,6 +4,10 @@
 //! It handles sequential step execution, context management, variable substitution,
 //! and metrics tracking.
 
+use crate::metrics::{
+    CONCURRENT_SCENARIOS, SCENARIO_ASSERTIONS_TOTAL, SCENARIO_DURATION_SECONDS,
+    SCENARIO_EXECUTIONS_TOTAL, SCENARIO_STEPS_TOTAL, SCENARIO_STEP_DURATION_SECONDS,
+};
 use crate::scenario::{Scenario, ScenarioContext, Step};
 use std::sync::Arc;
 use std::time::Instant;
@@ -97,6 +101,9 @@ impl ScenarioExecutor {
         let mut all_success = true;
         let mut failed_at_step = None;
 
+        // Track concurrent scenario execution
+        CONCURRENT_SCENARIOS.inc();
+
         info!(
             scenario = %scenario.name,
             steps = scenario.steps.len(),
@@ -143,6 +150,7 @@ impl ScenarioExecutor {
         }
 
         let total_time_ms = scenario_start.elapsed().as_millis() as u64;
+        let total_time_secs = total_time_ms as f64 / 1000.0;
 
         let result = ScenarioResult {
             scenario_name: scenario.name.clone(),
@@ -152,6 +160,17 @@ impl ScenarioExecutor {
             steps_completed: context.current_step(),
             failed_at_step,
         };
+
+        // Record scenario metrics
+        CONCURRENT_SCENARIOS.dec();
+        SCENARIO_DURATION_SECONDS
+            .with_label_values(&[&scenario.name])
+            .observe(total_time_secs);
+
+        let status = if all_success { "success" } else { "failed" };
+        SCENARIO_EXECUTIONS_TOTAL
+            .with_label_values(&[&scenario.name, status])
+            .inc();
 
         if all_success {
             info!(
@@ -242,6 +261,17 @@ impl ScenarioExecutor {
                 // For now, just consider 2xx/3xx as success
                 let success = status.is_success() || status.is_redirection();
 
+                // Record step metrics
+                let response_time_secs = response_time_ms as f64 / 1000.0;
+                SCENARIO_STEP_DURATION_SECONDS
+                    .with_label_values(&["scenario", &step.name])
+                    .observe(response_time_secs);
+
+                let step_status = if success { "success" } else { "failed" };
+                SCENARIO_STEPS_TOTAL
+                    .with_label_values(&["scenario", &step.name, step_status])
+                    .inc();
+
                 StepResult {
                     step_name: step.name.clone(),
                     success,
@@ -263,6 +293,11 @@ impl ScenarioExecutor {
                     response_time_ms,
                     "Request failed"
                 );
+
+                // Record failed step metrics
+                SCENARIO_STEPS_TOTAL
+                    .with_label_values(&["scenario", &step.name, "failed"])
+                    .inc();
 
                 StepResult {
                     step_name: step.name.clone(),

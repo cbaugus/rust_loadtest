@@ -1,10 +1,12 @@
 use tokio::time::{self, Duration, Instant};
 use tracing::{debug, error, info};
 
+use crate::executor::ScenarioExecutor;
 use crate::load_models::LoadModel;
 use crate::metrics::{
     CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_STATUS_CODES, REQUEST_TOTAL,
 };
+use crate::scenario::{Scenario, ScenarioContext};
 
 /// Configuration for a worker task.
 pub struct WorkerConfig {
@@ -119,5 +121,87 @@ fn build_request(client: &reqwest::Client, config: &WorkerConfig) -> reqwest::Re
             );
             client.get(&config.url)
         }
+    }
+}
+
+/// Configuration for a scenario-based worker task.
+pub struct ScenarioWorkerConfig {
+    pub task_id: usize,
+    pub base_url: String,
+    pub scenario: Scenario,
+    pub test_duration: Duration,
+    pub load_model: LoadModel,
+    pub num_concurrent_tasks: usize,
+}
+
+/// Runs a scenario-based worker task that executes multi-step scenarios according to the load model.
+///
+/// This worker executes complete scenarios (multiple steps) instead of individual requests.
+/// Each scenario execution counts as one "virtual user" completing their journey.
+pub async fn run_scenario_worker(
+    client: reqwest::Client,
+    config: ScenarioWorkerConfig,
+    start_time: Instant,
+) {
+    debug!(
+        task_id = config.task_id,
+        scenario = %config.scenario.name,
+        steps = config.scenario.steps.len(),
+        load_model = ?config.load_model,
+        "Scenario worker starting"
+    );
+
+    // Create executor for this worker
+    let executor = ScenarioExecutor::new(config.base_url.clone(), client);
+
+    loop {
+        let elapsed_total_secs = Instant::now().duration_since(start_time).as_secs_f64();
+
+        // Check if the total test duration has passed
+        if elapsed_total_secs >= config.test_duration.as_secs_f64() {
+            info!(
+                task_id = config.task_id,
+                scenario = %config.scenario.name,
+                elapsed_secs = elapsed_total_secs,
+                "Scenario worker stopping after duration limit"
+            );
+            break;
+        }
+
+        // Calculate current target RPS (scenarios per second in this case)
+        let current_target_sps = config
+            .load_model
+            .calculate_current_rps(elapsed_total_secs, config.test_duration.as_secs_f64());
+
+        // Calculate delay per task to achieve the current_target_sps
+        let delay_ms = if current_target_sps > 0.0 {
+            (config.num_concurrent_tasks as f64 * 1000.0 / current_target_sps).round() as u64
+        } else {
+            u64::MAX
+        };
+
+        // Create new context for this scenario execution
+        let mut context = ScenarioContext::new();
+
+        // Execute the scenario
+        let result = executor.execute(&config.scenario, &mut context).await;
+
+        debug!(
+            task_id = config.task_id,
+            scenario = %config.scenario.name,
+            success = result.success,
+            duration_ms = result.total_time_ms,
+            steps_completed = result.steps_completed,
+            "Scenario execution completed"
+        );
+
+        // Apply the calculated delay between scenario executions
+        if delay_ms > 0 && delay_ms != u64::MAX {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        } else if delay_ms == u64::MAX {
+            // Sleep for a very long time if SPS is 0
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+        }
+        // If delay_ms is 0, no sleep, execute scenarios as fast as possible
     }
 }
