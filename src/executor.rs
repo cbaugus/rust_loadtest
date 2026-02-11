@@ -4,6 +4,7 @@
 //! It handles sequential step execution, context management, variable substitution,
 //! and metrics tracking.
 
+use crate::assertions;
 use crate::extractor;
 use crate::metrics::{
     CONCURRENT_SCENARIOS, SCENARIO_ASSERTIONS_TOTAL, SCENARIO_DURATION_SECONDS,
@@ -299,7 +300,7 @@ impl ScenarioExecutor {
                 // Get response body for extraction and assertions
                 let body_result = response.text().await;
 
-                let (success, extracted_count, error_msg) = match body_result {
+                let body_result_data = match body_result {
                     Ok(body) => {
                         // Extract variables from response (#27 - IMPLEMENTED)
                         let extracted_count = if !step.extractions.is_empty() {
@@ -333,10 +334,72 @@ impl ScenarioExecutor {
                             0
                         };
 
-                        // TODO: Run assertions on response (#30)
+                        // Run assertions on response (#30 - IMPLEMENTED)
+                        let (assertions_passed, assertions_failed) = if !step.assertions.is_empty() {
+                            debug!(
+                                step = %step.name,
+                                assertions = step.assertions.len(),
+                                "Running assertions on response"
+                            );
 
-                        let success = status.is_success() || status.is_redirection();
-                        (success, extracted_count, None)
+                            let assertion_results = assertions::run_assertions(
+                                &step.assertions,
+                                status.as_u16(),
+                                response_time_ms,
+                                &body,
+                                &headers,
+                            );
+
+                            let passed = assertion_results.iter().filter(|r| r.passed).count();
+                            let failed = assertion_results.iter().filter(|r| !r.passed).count();
+
+                            // Log assertion results
+                            for result in &assertion_results {
+                                if result.passed {
+                                    debug!(
+                                        step = %step.name,
+                                        assertion = ?result.assertion,
+                                        "Assertion passed"
+                                    );
+                                } else {
+                                    warn!(
+                                        step = %step.name,
+                                        assertion = ?result.assertion,
+                                        error = ?result.error_message,
+                                        "Assertion failed"
+                                    );
+                                }
+
+                                // Record assertion metrics
+                                let result_label = if result.passed { "passed" } else { "failed" };
+                                SCENARIO_ASSERTIONS_TOTAL
+                                    .with_label_values(&["scenario", &step.name, result_label])
+                                    .inc();
+                            }
+
+                            (passed, failed)
+                        } else {
+                            (0, 0)
+                        };
+
+                        // Step succeeds if HTTP status is success/redirect AND all assertions pass
+                        let http_success = status.is_success() || status.is_redirection();
+                        let all_assertions_pass = assertions_failed == 0;
+                        let success = http_success && all_assertions_pass;
+
+                        let error_msg = if !success {
+                            if !http_success {
+                                Some(format!("HTTP {}", status.as_u16()))
+                            } else if !all_assertions_pass {
+                                Some(format!("{} assertion(s) failed", assertions_failed))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+
+                        (success, extracted_count, assertions_passed, assertions_failed, error_msg)
                     }
                     Err(e) => {
                         warn!(
@@ -344,9 +407,11 @@ impl ScenarioExecutor {
                             error = %e,
                             "Failed to read response body"
                         );
-                        (false, 0, Some(format!("Failed to read response body: {}", e)))
+                        (false, 0, 0, 0, Some(format!("Failed to read response body: {}", e)))
                     }
                 };
+
+                let (success, _extracted_count, assertions_passed, assertions_failed, error_msg) = body_result_data;
 
                 // Record step metrics
                 let response_time_secs = response_time_ms as f64 / 1000.0;
@@ -363,7 +428,8 @@ impl ScenarioExecutor {
                     step = %step.name,
                     status_code = status.as_u16(),
                     success = success,
-                    extracted_variables = extracted_count,
+                    assertions_passed = assertions_passed,
+                    assertions_failed = assertions_failed,
                     "Step execution complete"
                 );
 
@@ -372,15 +438,9 @@ impl ScenarioExecutor {
                     success,
                     status_code: Some(status.as_u16()),
                     response_time_ms,
-                    error: error_msg.or_else(|| {
-                        if success {
-                            None
-                        } else {
-                            Some(format!("HTTP {}", status.as_u16()))
-                        }
-                    }),
-                    assertions_passed: 0, // TODO: Implement assertions (#30)
-                    assertions_failed: 0,
+                    error: error_msg,
+                    assertions_passed,
+                    assertions_failed,
                 }
             }
             Err(e) => {
