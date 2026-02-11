@@ -45,6 +45,61 @@ pub struct Scenario {
     pub steps: Vec<Step>,
 }
 
+/// Think time configuration for realistic user behavior simulation.
+///
+/// Think time represents the delay between steps, simulating the time a real
+/// user would take to read content, make decisions, or perform actions.
+///
+/// # Examples
+/// ```
+/// use rust_loadtest::scenario::ThinkTime;
+/// use std::time::Duration;
+///
+/// // Fixed delay: always 3 seconds
+/// let fixed = ThinkTime::Fixed(Duration::from_secs(3));
+///
+/// // Random delay: between 2 and 5 seconds
+/// let random = ThinkTime::Random {
+///     min: Duration::from_secs(2),
+///     max: Duration::from_secs(5),
+/// };
+/// ```
+#[derive(Debug, Clone)]
+pub enum ThinkTime {
+    /// Fixed delay (always the same duration)
+    Fixed(Duration),
+
+    /// Random delay within a range (min to max, inclusive)
+    Random {
+        min: Duration,
+        max: Duration,
+    },
+}
+
+impl ThinkTime {
+    /// Calculate the actual delay to apply.
+    ///
+    /// For Fixed, returns the fixed duration.
+    /// For Random, returns a random duration between min and max.
+    pub fn calculate_delay(&self) -> Duration {
+        match self {
+            ThinkTime::Fixed(duration) => *duration,
+            ThinkTime::Random { min, max } => {
+                use rand::Rng;
+                let min_ms = min.as_millis() as u64;
+                let max_ms = max.as_millis() as u64;
+
+                if min_ms >= max_ms {
+                    return *min;
+                }
+
+                let random_ms = rand::thread_rng().gen_range(min_ms..=max_ms);
+                Duration::from_millis(random_ms)
+            }
+        }
+    }
+}
+
 /// A single step within a scenario.
 #[derive(Debug, Clone)]
 pub struct Step {
@@ -61,7 +116,31 @@ pub struct Step {
     pub assertions: Vec<Assertion>,
 
     /// Optional delay after this step completes (think time)
-    pub think_time: Option<Duration>,
+    ///
+    /// Think time simulates realistic user behavior by adding delays between
+    /// requests. This does NOT count towards request latency metrics.
+    ///
+    /// # Examples
+    /// ```
+    /// use rust_loadtest::scenario::{Step, ThinkTime};
+    /// use std::time::Duration;
+    ///
+    /// // Fixed 3-second delay
+    /// let step = Step {
+    ///     think_time: Some(ThinkTime::Fixed(Duration::from_secs(3))),
+    ///     // ... other fields
+    /// };
+    ///
+    /// // Random 2-5 second delay
+    /// let step = Step {
+    ///     think_time: Some(ThinkTime::Random {
+    ///         min: Duration::from_secs(2),
+    ///         max: Duration::from_secs(5),
+    ///     }),
+    ///     // ... other fields
+    /// };
+    /// ```
+    pub think_time: Option<ThinkTime>,
 }
 
 /// HTTP request configuration for a step.
@@ -358,5 +437,57 @@ mod tests {
         assert_eq!(scenario.weight, 1.5);
         assert_eq!(scenario.steps.len(), 1);
         assert_eq!(scenario.steps[0].name, "Step 1");
+    }
+
+    #[test]
+    fn test_think_time_fixed() {
+        let think_time = ThinkTime::Fixed(Duration::from_secs(3));
+        let delay = think_time.calculate_delay();
+
+        assert_eq!(delay, Duration::from_secs(3));
+    }
+
+    #[test]
+    fn test_think_time_random() {
+        let think_time = ThinkTime::Random {
+            min: Duration::from_millis(100),
+            max: Duration::from_millis(500),
+        };
+
+        // Test multiple times to ensure randomness
+        for _ in 0..10 {
+            let delay = think_time.calculate_delay();
+            let delay_ms = delay.as_millis() as u64;
+
+            // Should be within range
+            assert!(
+                delay_ms >= 100 && delay_ms <= 500,
+                "Delay {}ms should be between 100-500ms",
+                delay_ms
+            );
+        }
+    }
+
+    #[test]
+    fn test_think_time_random_min_equals_max() {
+        let think_time = ThinkTime::Random {
+            min: Duration::from_secs(2),
+            max: Duration::from_secs(2),
+        };
+
+        let delay = think_time.calculate_delay();
+        assert_eq!(delay, Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_think_time_random_min_greater_than_max() {
+        // If min > max, should return min
+        let think_time = ThinkTime::Random {
+            min: Duration::from_secs(5),
+            max: Duration::from_secs(3),
+        };
+
+        let delay = think_time.calculate_delay();
+        assert_eq!(delay, Duration::from_secs(5));
     }
 }
