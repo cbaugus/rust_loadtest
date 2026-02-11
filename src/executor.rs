@@ -173,15 +173,17 @@ impl ScenarioExecutor {
 
             context.next_step();
 
-            // Apply think time if configured
-            if let Some(think_time) = step.think_time {
+            // Apply think time if configured (simulates user delay between actions)
+            if let Some(ref think_time) = step.think_time {
+                let delay = think_time.calculate_delay();
                 debug!(
                     scenario = %scenario.name,
                     step = %step.name,
-                    think_time_ms = think_time.as_millis(),
+                    think_time_ms = delay.as_millis(),
+                    think_time_type = ?think_time,
                     "Applying think time"
                 );
-                sleep(think_time).await;
+                sleep(delay).await;
             }
         }
 

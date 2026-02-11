@@ -19,6 +19,7 @@ serde = { version = "1.0", features = ["derive"] } # For deserializing config if
 serde_json = "1.0" # For JSON parsing if needed
 serde_json_path = "0.6" # For JSONPath extraction
 regex = "1.10" # For regex-based extraction
+rand = "0.8" # For random think times
 thiserror = "1.0" # For error handling
 tracing = "0.1" # Structured logging
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] } # Logging subscriber with JSON support
