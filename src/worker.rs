@@ -138,8 +138,13 @@ pub struct ScenarioWorkerConfig {
 ///
 /// This worker executes complete scenarios (multiple steps) instead of individual requests.
 /// Each scenario execution counts as one "virtual user" completing their journey.
+///
+/// # Cookie and Session Management
+///
+/// For proper session isolation, each scenario execution gets its own cookie-enabled
+/// HTTP client. This ensures cookies from one virtual user don't leak to another.
 pub async fn run_scenario_worker(
-    client: reqwest::Client,
+    _client: reqwest::Client,  // Ignored - we create per-execution clients
     config: ScenarioWorkerConfig,
     start_time: Instant,
 ) {
@@ -150,9 +155,6 @@ pub async fn run_scenario_worker(
         load_model = ?config.load_model,
         "Scenario worker starting"
     );
-
-    // Create executor for this worker
-    let executor = ScenarioExecutor::new(config.base_url.clone(), client);
 
     loop {
         let elapsed_total_secs = Instant::now().duration_since(start_time).as_secs_f64();
@@ -179,6 +181,17 @@ pub async fn run_scenario_worker(
         } else {
             u64::MAX
         };
+
+        // Create new cookie-enabled client for this virtual user
+        // This ensures cookie isolation between scenario executions
+        let client = reqwest::Client::builder()
+            .cookie_store(true)  // Enable automatic cookie management
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
+        // Create executor with isolated client
+        let executor = ScenarioExecutor::new(config.base_url.clone(), client);
 
         // Create new context for this scenario execution
         let mut context = ScenarioContext::new();

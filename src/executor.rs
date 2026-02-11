@@ -63,11 +63,30 @@ pub struct ScenarioResult {
 }
 
 /// Executor for running scenarios.
+///
+/// # Cookie and Session Management
+///
+/// The executor automatically handles cookies when the provided client has
+/// cookie support enabled. Each client instance maintains its own cookie jar,
+/// providing session isolation per virtual user.
+///
+/// To enable automatic cookie handling:
+/// ```rust
+/// let client = reqwest::Client::builder()
+///     .cookie_store(true)  // Enable automatic cookie management
+///     .build()?;
+/// ```
+///
+/// Cookies are automatically:
+/// - Stored from Set-Cookie response headers
+/// - Sent with subsequent requests to the same domain
+/// - Isolated per client instance (per virtual user)
 pub struct ScenarioExecutor {
     /// Base URL for requests (e.g., "https://api.example.com")
     base_url: String,
 
     /// HTTP client for making requests
+    /// Should have cookie_store(true) enabled for session management
     client: reqwest::Client,
 }
 
@@ -76,7 +95,23 @@ impl ScenarioExecutor {
     ///
     /// # Arguments
     /// * `base_url` - Base URL for all requests in the scenario
-    /// * `client` - HTTP client to use for requests
+    /// * `client` - HTTP client to use for requests. Should have `cookie_store(true)`
+    ///   enabled for automatic cookie and session management.
+    ///
+    /// # Example
+    /// ```rust
+    /// use rust_loadtest::executor::ScenarioExecutor;
+    ///
+    /// let client = reqwest::Client::builder()
+    ///     .cookie_store(true)  // Enable cookies
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let executor = ScenarioExecutor::new(
+    ///     "https://api.example.com".to_string(),
+    ///     client
+    /// );
+    /// ```
     pub fn new(base_url: String, client: reqwest::Client) -> Self {
         Self { base_url, client }
     }
