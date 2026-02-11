@@ -1,6 +1,8 @@
 pub mod client;
 pub mod config;
+pub mod executor;
 pub mod load_models;
 pub mod metrics;
+pub mod scenario;
 pub mod utils;
 pub mod worker;

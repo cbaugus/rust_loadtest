@@ -1,0 +1,346 @@
+//! Scenario execution engine.
+//!
+//! This module provides the execution engine for running multi-step scenarios.
+//! It handles sequential step execution, context management, variable substitution,
+//! and metrics tracking.
+
+use crate::scenario::{Scenario, ScenarioContext, Step};
+use std::sync::Arc;
+use std::time::Instant;
+use tokio::time::{sleep, Duration};
+use tracing::{debug, error, info, warn};
+
+/// Result of executing a single step.
+#[derive(Debug)]
+pub struct StepResult {
+    /// Name of the step that was executed
+    pub step_name: String,
+
+    /// Whether the step succeeded
+    pub success: bool,
+
+    /// HTTP status code received
+    pub status_code: Option<u16>,
+
+    /// Response time in milliseconds
+    pub response_time_ms: u64,
+
+    /// Error message if step failed
+    pub error: Option<String>,
+
+    /// Assertions that passed
+    pub assertions_passed: usize,
+
+    /// Assertions that failed
+    pub assertions_failed: usize,
+}
+
+/// Result of executing an entire scenario.
+#[derive(Debug)]
+pub struct ScenarioResult {
+    /// Name of the scenario
+    pub scenario_name: String,
+
+    /// Whether all steps succeeded
+    pub success: bool,
+
+    /// Results from each step
+    pub steps: Vec<StepResult>,
+
+    /// Total scenario execution time in milliseconds
+    pub total_time_ms: u64,
+
+    /// Number of steps completed
+    pub steps_completed: usize,
+
+    /// Step index where execution stopped (if failed)
+    pub failed_at_step: Option<usize>,
+}
+
+/// Executor for running scenarios.
+pub struct ScenarioExecutor {
+    /// Base URL for requests (e.g., "https://api.example.com")
+    base_url: String,
+
+    /// HTTP client for making requests
+    client: reqwest::Client,
+}
+
+impl ScenarioExecutor {
+    /// Create a new scenario executor.
+    ///
+    /// # Arguments
+    /// * `base_url` - Base URL for all requests in the scenario
+    /// * `client` - HTTP client to use for requests
+    pub fn new(base_url: String, client: reqwest::Client) -> Self {
+        Self { base_url, client }
+    }
+
+    /// Execute a scenario with the given context.
+    ///
+    /// Steps are executed sequentially. If any step fails, execution stops
+    /// and returns the partial results.
+    ///
+    /// # Arguments
+    /// * `scenario` - The scenario to execute
+    /// * `context` - Execution context (will be modified with extracted variables)
+    ///
+    /// # Returns
+    /// Results from scenario execution including per-step metrics
+    pub async fn execute(
+        &self,
+        scenario: &Scenario,
+        context: &mut ScenarioContext,
+    ) -> ScenarioResult {
+        let scenario_start = Instant::now();
+        let mut step_results = Vec::new();
+        let mut all_success = true;
+        let mut failed_at_step = None;
+
+        info!(
+            scenario = %scenario.name,
+            steps = scenario.steps.len(),
+            "Starting scenario execution"
+        );
+
+        for (idx, step) in scenario.steps.iter().enumerate() {
+            debug!(
+                scenario = %scenario.name,
+                step = %step.name,
+                step_idx = idx,
+                "Executing step"
+            );
+
+            let step_result = self.execute_step(step, context).await;
+
+            let success = step_result.success;
+            step_results.push(step_result);
+
+            if !success {
+                all_success = false;
+                failed_at_step = Some(idx);
+                error!(
+                    scenario = %scenario.name,
+                    step = %step.name,
+                    step_idx = idx,
+                    "Step failed, stopping scenario execution"
+                );
+                break;
+            }
+
+            context.next_step();
+
+            // Apply think time if configured
+            if let Some(think_time) = step.think_time {
+                debug!(
+                    scenario = %scenario.name,
+                    step = %step.name,
+                    think_time_ms = think_time.as_millis(),
+                    "Applying think time"
+                );
+                sleep(think_time).await;
+            }
+        }
+
+        let total_time_ms = scenario_start.elapsed().as_millis() as u64;
+
+        let result = ScenarioResult {
+            scenario_name: scenario.name.clone(),
+            success: all_success,
+            steps: step_results,
+            total_time_ms,
+            steps_completed: context.current_step(),
+            failed_at_step,
+        };
+
+        if all_success {
+            info!(
+                scenario = %scenario.name,
+                total_time_ms,
+                steps_completed = result.steps_completed,
+                "Scenario completed successfully"
+            );
+        } else {
+            warn!(
+                scenario = %scenario.name,
+                total_time_ms,
+                steps_completed = result.steps_completed,
+                failed_at_step = ?failed_at_step,
+                "Scenario failed"
+            );
+        }
+
+        result
+    }
+
+    /// Execute a single step.
+    async fn execute_step(&self, step: &Step, context: &ScenarioContext) -> StepResult {
+        let step_start = Instant::now();
+
+        // Build the full URL with variable substitution
+        let path = context.substitute_variables(&step.request.path);
+        let url = format!("{}{}", self.base_url, path);
+
+        debug!(
+            step = %step.name,
+            method = %step.request.method,
+            url = %url,
+            "Making HTTP request"
+        );
+
+        // Build the request
+        let mut request_builder = match step.request.method.to_uppercase().as_str() {
+            "GET" => self.client.get(&url),
+            "POST" => self.client.post(&url),
+            "PUT" => self.client.put(&url),
+            "DELETE" => self.client.delete(&url),
+            "PATCH" => self.client.patch(&url),
+            "HEAD" => self.client.head(&url),
+            method => {
+                error!(step = %step.name, method = %method, "Unsupported HTTP method");
+                return StepResult {
+                    step_name: step.name.clone(),
+                    success: false,
+                    status_code: None,
+                    response_time_ms: 0,
+                    error: Some(format!("Unsupported HTTP method: {}", method)),
+                    assertions_passed: 0,
+                    assertions_failed: 0,
+                };
+            }
+        };
+
+        // Add headers with variable substitution
+        for (key, value) in &step.request.headers {
+            let substituted_value = context.substitute_variables(value);
+            request_builder = request_builder.header(key, substituted_value);
+        }
+
+        // Add body if present with variable substitution
+        if let Some(body) = &step.request.body {
+            let substituted_body = context.substitute_variables(body);
+            request_builder = request_builder.body(substituted_body);
+        }
+
+        // Execute the request
+        let response_result = request_builder.send().await;
+
+        let response_time_ms = step_start.elapsed().as_millis() as u64;
+
+        match response_result {
+            Ok(response) => {
+                let status = response.status();
+                debug!(
+                    step = %step.name,
+                    status = status.as_u16(),
+                    response_time_ms,
+                    "Received response"
+                );
+
+                // TODO: Extract variables from response (#27)
+                // TODO: Run assertions on response (#30)
+                // For now, just consider 2xx/3xx as success
+                let success = status.is_success() || status.is_redirection();
+
+                StepResult {
+                    step_name: step.name.clone(),
+                    success,
+                    status_code: Some(status.as_u16()),
+                    response_time_ms,
+                    error: if success {
+                        None
+                    } else {
+                        Some(format!("HTTP {}", status.as_u16()))
+                    },
+                    assertions_passed: 0, // TODO: Implement assertions
+                    assertions_failed: 0,
+                }
+            }
+            Err(e) => {
+                error!(
+                    step = %step.name,
+                    error = %e,
+                    response_time_ms,
+                    "Request failed"
+                );
+
+                StepResult {
+                    step_name: step.name.clone(),
+                    success: false,
+                    status_code: None,
+                    response_time_ms,
+                    error: Some(e.to_string()),
+                    assertions_passed: 0,
+                    assertions_failed: 0,
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scenario::{RequestConfig, Scenario, Step};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_scenario_result_success() {
+        let result = ScenarioResult {
+            scenario_name: "Test".to_string(),
+            success: true,
+            steps: vec![],
+            total_time_ms: 100,
+            steps_completed: 3,
+            failed_at_step: None,
+        };
+
+        assert!(result.success);
+        assert_eq!(result.steps_completed, 3);
+        assert_eq!(result.failed_at_step, None);
+    }
+
+    #[test]
+    fn test_scenario_result_failure() {
+        let result = ScenarioResult {
+            scenario_name: "Test".to_string(),
+            success: false,
+            steps: vec![],
+            total_time_ms: 50,
+            steps_completed: 1,
+            failed_at_step: Some(1),
+        };
+
+        assert!(!result.success);
+        assert_eq!(result.steps_completed, 1);
+        assert_eq!(result.failed_at_step, Some(1));
+    }
+
+    #[test]
+    fn test_step_result_success() {
+        let result = StepResult {
+            step_name: "Login".to_string(),
+            success: true,
+            status_code: Some(200),
+            response_time_ms: 150,
+            error: None,
+            assertions_passed: 2,
+            assertions_failed: 0,
+        };
+
+        assert!(result.success);
+        assert_eq!(result.status_code, Some(200));
+        assert_eq!(result.error, None);
+    }
+
+    #[tokio::test]
+    async fn test_executor_creation() {
+        let client = reqwest::Client::new();
+        let executor = ScenarioExecutor::new("https://example.com".to_string(), client);
+
+        assert_eq!(executor.base_url, "https://example.com");
+    }
+
+    // Integration tests with actual HTTP calls would go here
+    // For now, keeping tests simple to avoid external dependencies
+}

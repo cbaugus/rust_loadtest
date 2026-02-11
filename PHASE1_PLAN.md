@@ -43,17 +43,22 @@ Additional features for comprehensive testing.
 _None yet - starting Phase 1_
 
 ### 🚧 In Progress
-- [ ] **Issue #26**: Multi-step scenario execution engine (P0, XL - 2+ weeks)
+- [x] **Issue #26**: Multi-step scenario execution engine (P0, XL - 2+ weeks) - **IN PROGRESS**
+  - Branch: `feature/issue-26-multi-step-scenarios`
 
 ### 📋 Todo - Wave 1 (Weeks 1-3)
-- [ ] **Issue #26**: Multi-step scenario execution engine (P0, XL)
-  - [ ] Design: Scenario and Step data structures
-  - [ ] Design: Variable context per virtual user
-  - [ ] Implement: Sequential step execution
-  - [ ] Implement: Step result propagation
-  - [ ] Implement: Error handling per step
-  - [ ] Tests: Unit tests for scenario execution
-  - [ ] Tests: Integration test with 3-step flow
+- [x] **Issue #26**: Multi-step scenario execution engine (P0, XL)
+  - [x] Design: Scenario and Step data structures (src/scenario.rs)
+  - [x] Design: Variable context per virtual user (ScenarioContext)
+  - [x] Implement: Sequential step execution (src/executor.rs)
+  - [x] Implement: Step result propagation (StepResult, ScenarioResult)
+  - [x] Implement: Error handling per step (error messages, failed_at_step)
+  - [x] Implement: Variable substitution in requests (${var} and $var syntax)
+  - [x] Tests: Unit tests for ScenarioContext (8 tests passing)
+  - [ ] Tests: Integration test with 3-step flow (TODO)
+  - [ ] Integration: Wire into worker.rs (TODO)
+  - [ ] Example: Create example scenario config (TODO)
+  - [ ] Documentation: Usage examples (TODO)
 
 - [ ] **Issue #27**: Variable extraction from responses (P0, L)
   - [ ] Implement: JSONPath extractor (serde_json)
