@@ -208,6 +208,9 @@ pub enum Assertion {
 
     /// Assert response body matches regex
     BodyMatches(String),
+
+    /// Assert response header exists
+    HeaderExists(String),
 }
 
 /// Execution context maintained across steps in a scenario.
