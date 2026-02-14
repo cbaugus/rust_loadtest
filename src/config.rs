@@ -4,8 +4,10 @@ use tokio::time::Duration;
 use tracing::{info, warn};
 
 use crate::client::ClientConfig;
+use crate::config_merge::ConfigMerger;
 use crate::load_models::LoadModel;
 use crate::utils::parse_duration_string;
+use crate::yaml_config::{YamlConfig, YamlConfigError};
 
 /// Configuration errors with descriptive messages.
 #[derive(Error, Debug)]
@@ -30,6 +32,9 @@ pub enum ConfigError {
 
     #[error("Parse error: {0}")]
     ParseError(String),
+
+    #[error("YAML config error: {0}")]
+    YamlConfig(#[from] YamlConfigError),
 }
 
 /// Main configuration for the load test.
@@ -77,6 +82,179 @@ fn env_bool(name: &str, default: bool) -> bool {
 }
 
 impl Config {
+    /// Loads configuration from a YAML file with environment variable overrides.
+    ///
+    /// Environment variables can override YAML values according to precedence:
+    /// env vars > YAML file > defaults
+    ///
+    /// Environment variable mapping:
+    /// - `NUM_CONCURRENT_TASKS` overrides `config.workers`
+    /// - `REQUEST_TIMEOUT` overrides `config.timeout`
+    /// - `SKIP_TLS_VERIFY` overrides `config.skipTlsVerify`
+    /// - `TARGET_URL` overrides `config.baseUrl`
+    /// - `TEST_DURATION` overrides `config.duration`
+    /// - `LOAD_MODEL_TYPE` overrides `load.model`
+    /// - `TARGET_RPS` overrides `load.target` (for RPS model)
+    /// - `MIN_RPS`, `MAX_RPS`, `RAMP_DURATION` override ramp model params
+    /// - `CUSTOM_HEADERS` overrides `config.customHeaders`
+    pub fn from_yaml_with_env_overrides(yaml_config: &YamlConfig) -> Result<Self, ConfigError> {
+        // Apply environment variable overrides to YAML config
+
+        // Base URL: env var TARGET_URL overrides YAML config.baseUrl
+        let target_url = ConfigMerger::merge_string(
+            Some(yaml_config.config.base_url.clone()),
+            "TARGET_URL",
+            yaml_config.config.base_url.clone(),
+        );
+
+        // Workers: env var NUM_CONCURRENT_TASKS overrides YAML config.workers
+        let num_concurrent_tasks = ConfigMerger::merge_workers(
+            Some(yaml_config.config.workers),
+            "NUM_CONCURRENT_TASKS",
+        );
+
+        // Timeout: env var REQUEST_TIMEOUT overrides YAML config.timeout
+        let timeout_duration = ConfigMerger::merge_timeout(
+            Some(yaml_config.config.timeout.to_std_duration()?),
+            "REQUEST_TIMEOUT",
+        );
+
+        // Test duration: env var TEST_DURATION overrides YAML config.duration
+        let test_duration = ConfigMerger::merge_timeout(
+            Some(yaml_config.config.duration.to_std_duration()?),
+            "TEST_DURATION",
+        );
+
+        // Skip TLS verify: env var SKIP_TLS_VERIFY overrides YAML config.skipTlsVerify
+        let skip_tls_verify = ConfigMerger::merge_skip_tls_verify(
+            Some(yaml_config.config.skip_tls_verify),
+            "SKIP_TLS_VERIFY",
+        );
+
+        // Custom headers: env var CUSTOM_HEADERS overrides YAML config.customHeaders
+        let custom_headers = ConfigMerger::merge_optional_string(
+            yaml_config.config.custom_headers.clone(),
+            "CUSTOM_HEADERS",
+        );
+
+        // Load model: env vars can override YAML load model entirely
+        let load_model = Self::parse_load_model_from_yaml_with_env_override(&yaml_config.load)?;
+
+        // Request type: env var REQUEST_TYPE (default POST if not in YAML)
+        let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "POST".to_string());
+
+        // Send JSON: env var SEND_JSON
+        let send_json = env_bool("SEND_JSON", false);
+
+        let json_payload = if send_json {
+            Some(
+                env_required("JSON_PAYLOAD").map_err(|_| ConfigError::MissingLoadModelParams {
+                    model: "SEND_JSON=true".into(),
+                    required: "JSON_PAYLOAD".into(),
+                })?,
+            )
+        } else {
+            None
+        };
+
+        // Optional fields from env vars only (not in YAML yet)
+        let resolve_target_addr = env::var("RESOLVE_TARGET_ADDR").ok();
+        let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
+        let client_key_path = env::var("CLIENT_KEY_PATH").ok();
+
+        let config = Config {
+            target_url,
+            request_type,
+            send_json,
+            json_payload,
+            num_concurrent_tasks,
+            test_duration,
+            load_model,
+            skip_tls_verify,
+            resolve_target_addr,
+            client_cert_path,
+            client_key_path,
+            custom_headers,
+        };
+
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Parse load model from YAML with environment variable overrides.
+    fn parse_load_model_from_yaml_with_env_override(
+        yaml_load: &crate::yaml_config::YamlLoadModel,
+    ) -> Result<LoadModel, ConfigError> {
+        // Check if LOAD_MODEL_TYPE env var is set - if so, use env-based parsing
+        if let Ok(model_type) = env::var("LOAD_MODEL_TYPE") {
+            return Self::parse_load_model(&format!("2h")); // Use env-based parsing
+        }
+
+        // Otherwise, convert YAML load model to LoadModel
+        let base_load_model = yaml_load.to_load_model()?;
+
+        // Apply environment variable overrides to specific load model parameters
+        match base_load_model {
+            LoadModel::Rps { target_rps } => {
+                // TARGET_RPS can override YAML target
+                let final_rps = ConfigMerger::merge_rps(Some(target_rps), "TARGET_RPS")
+                    .unwrap_or(target_rps);
+                Ok(LoadModel::Rps {
+                    target_rps: final_rps,
+                })
+            }
+            LoadModel::RampRps {
+                min_rps,
+                max_rps,
+                ramp_duration,
+            } => {
+                // MIN_RPS, MAX_RPS, RAMP_DURATION can override YAML values
+                let final_min = ConfigMerger::merge_rps(Some(min_rps), "MIN_RPS").unwrap_or(min_rps);
+                let final_max = ConfigMerger::merge_rps(Some(max_rps), "MAX_RPS").unwrap_or(max_rps);
+                let final_duration =
+                    ConfigMerger::merge_timeout(Some(ramp_duration), "RAMP_DURATION");
+                Ok(LoadModel::RampRps {
+                    min_rps: final_min,
+                    max_rps: final_max,
+                    ramp_duration: final_duration,
+                })
+            }
+            LoadModel::DailyTraffic {
+                min_rps,
+                mid_rps,
+                max_rps,
+                cycle_duration,
+                morning_ramp_ratio,
+                peak_sustain_ratio,
+                mid_decline_ratio,
+                mid_sustain_ratio,
+                evening_decline_ratio,
+            } => {
+                // DAILY_MIN_RPS, DAILY_MID_RPS, DAILY_MAX_RPS can override YAML
+                let final_min =
+                    ConfigMerger::merge_rps(Some(min_rps), "DAILY_MIN_RPS").unwrap_or(min_rps);
+                let final_mid =
+                    ConfigMerger::merge_rps(Some(mid_rps), "DAILY_MID_RPS").unwrap_or(mid_rps);
+                let final_max =
+                    ConfigMerger::merge_rps(Some(max_rps), "DAILY_MAX_RPS").unwrap_or(max_rps);
+                let final_cycle =
+                    ConfigMerger::merge_timeout(Some(cycle_duration), "DAILY_CYCLE_DURATION");
+                Ok(LoadModel::DailyTraffic {
+                    min_rps: final_min,
+                    mid_rps: final_mid,
+                    max_rps: final_max,
+                    cycle_duration: final_cycle,
+                    morning_ramp_ratio,
+                    peak_sustain_ratio,
+                    mid_decline_ratio,
+                    mid_sustain_ratio,
+                    evening_decline_ratio,
+                })
+            }
+            LoadModel::Concurrent => Ok(LoadModel::Concurrent),
+        }
+    }
+
     /// Loads configuration from environment variables.
     pub fn from_env() -> Result<Self, ConfigError> {
         let target_url = env_required("TARGET_URL")?;
