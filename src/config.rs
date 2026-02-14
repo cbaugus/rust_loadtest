@@ -323,6 +323,7 @@ impl Config {
             client_cert_path: self.client_cert_path.clone(),
             client_key_path: self.client_key_path.clone(),
             custom_headers: self.custom_headers.clone(),
+            pool_config: None, // Use default pool configuration
         }
     }
 

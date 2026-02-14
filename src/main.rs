@@ -5,7 +5,8 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
-use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server};
+use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
+use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server, CONNECTION_POOL_MAX_IDLE, CONNECTION_POOL_IDLE_TIMEOUT_SECONDS};
 use rust_loadtest::percentiles::{format_percentile_table, GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
@@ -89,6 +90,47 @@ fn print_throughput_report() {
 
     info!("{}", "=".repeat(120));
     info!("END OF THROUGHPUT REPORT");
+    info!("{}\n", "=".repeat(120));
+}
+
+/// Prints connection pool statistics.
+fn print_pool_report() {
+    info!("\n{}", "=".repeat(120));
+    info!("CONNECTION POOL STATISTICS (Issue #36)");
+    info!("{}", "=".repeat(120));
+
+    let stats = GLOBAL_POOL_STATS.stats();
+
+    if stats.total_requests > 0 {
+        info!("\nConnection Reuse Analysis:");
+        info!("  {}", stats.format());
+
+        if let Some(duration) = stats.duration() {
+            info!("  Duration: {:.1}s", duration.as_secs_f64());
+        }
+
+        info!("\nInterpretation:");
+        if stats.reuse_rate() >= 80.0 {
+            info!("  ✅ Excellent connection reuse ({:.1}%)", stats.reuse_rate());
+            info!("     Most requests are reusing pooled connections efficiently.");
+        } else if stats.reuse_rate() >= 50.0 {
+            info!("  ⚠️  Moderate connection reuse ({:.1}%)", stats.reuse_rate());
+            info!("     Consider increasing pool size or idle timeout.");
+        } else {
+            info!("  ❌ Low connection reuse ({:.1}%)", stats.reuse_rate());
+            info!("     Many new connections are being established.");
+            info!("     Check: pool configuration, connection timeouts, load patterns.");
+        }
+
+        info!("\nNote: Connection classification is based on latency patterns:");
+        info!("  - Fast requests (<100ms) likely reused pooled connections");
+        info!("  - Slow requests (≥100ms) likely established new connections (TLS handshake)");
+    } else {
+        info!("\nNo connection pool data collected.\n");
+    }
+
+    info!("\n{}", "=".repeat(120));
+    info!("END OF POOL REPORT");
     info!("{}\n", "=".repeat(120));
 }
 
@@ -184,6 +226,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         "Prometheus metrics server started"
     );
 
+    // Initialize connection pool configuration metrics (Issue #36)
+    let pool_config = PoolConfig::default();
+    CONNECTION_POOL_MAX_IDLE.set(pool_config.max_idle_per_host as f64);
+    CONNECTION_POOL_IDLE_TIMEOUT_SECONDS.set(pool_config.idle_timeout.as_secs() as f64);
+    info!(
+        max_idle_per_host = pool_config.max_idle_per_host,
+        idle_timeout_secs = pool_config.idle_timeout.as_secs(),
+        "Connection pool configuration initialized"
+    );
+
     // Main loop to run for a duration
     let start_time = time::Instant::now();
 
@@ -225,6 +277,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Print per-scenario throughput statistics (Issue #35)
     print_throughput_report();
+
+    // Print connection pool statistics (Issue #36)
+    print_pool_report();
 
     // Gather and print final metrics
     let final_metrics_output = gather_metrics_string(&registry_arc);
