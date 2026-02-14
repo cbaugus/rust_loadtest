@@ -129,9 +129,18 @@ Hot-reload, migration tools, documentation.
   - Enhanced YamlScenario with dataFile and config fields
   - 23 comprehensive integration tests
   - Complete scenario guide with real-world examples
+- [x] **Issue #43**: Multi-scenario execution (P0, L) - **COMPLETE** ✅
+  - Branch: `feature/issue-43-multi-scenario-execution` (merged to phase2)
+  - 512 lines of implementation + 523 lines of tests + 514 lines of docs
+  - ScenarioSelector for weighted random selection
+  - RoundRobinDistributor for even distribution
+  - ScenarioMetrics for per-scenario tracking
+  - Thread-safe atomic counters
+  - 44 comprehensive tests (10 unit + 34 integration)
+  - Complete multi-scenario guide with real-world examples
 
 ### 🚧 In Progress
-_None - Wave 3 in progress (1/2 done)_
+_None - 🎉 ✅ Wave 3 COMPLETE! (2/2 done)_
 
 ### 📋 Todo - Wave 1 (Week 1)
 
@@ -194,13 +203,13 @@ _None - Wave 3 in progress (1/2 done)_
   - [x] Integration with existing executor
   - [x] Comprehensive tests
 
-- [ ] **Issue #43**: Multi-scenario execution (P0, L)
-  - [ ] Load multiple scenarios from config
-  - [ ] Weighted scenario selection
-  - [ ] Round-robin scenario distribution
-  - [ ] Per-scenario worker allocation
-  - [ ] Per-scenario metrics
-  - [ ] Integration tests
+- [x] **Issue #43**: Multi-scenario execution (P0, L) ✅
+  - [x] Load multiple scenarios from config
+  - [x] Weighted scenario selection
+  - [x] Round-robin scenario distribution
+  - [x] Per-scenario worker allocation
+  - [x] Per-scenario metrics
+  - [x] Integration tests
 
 ### 📋 Todo - Wave 4 (Week 4)
 
@@ -440,6 +449,6 @@ scenarios:
 ---
 
 **Last Updated**: 2026-02-11 (continued)
-**Status**: 🚀 Wave 3 in progress (1/2 issues done)
-**Next Milestone**: Wave 3 - Issue #43 (Multi-Scenario Execution)
+**Status**: 🎉 ✅ Wave 3 COMPLETE! (2/2 issues done) - Starting Wave 4
+**Next Milestone**: Wave 4 - Issue #44 (Config File Hot-Reload)
 **Branch Status**: phase2-advanced-features (active development)
