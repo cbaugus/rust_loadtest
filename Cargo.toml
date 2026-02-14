@@ -23,6 +23,7 @@ rand = "0.8" # For random think times
 thiserror = "1.0" # For error handling
 tracing = "0.1" # Structured logging
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] } # Logging subscriber with JSON support
+hdrhistogram = "7.5" # For accurate percentile latency tracking
 
 [dev-dependencies]
 wiremock = "0.5"
