@@ -86,6 +86,15 @@ lazy_static::lazy_static! {
             Opts::new("concurrent_scenarios", "Number of scenario executions currently running")
                 .namespace(METRIC_NAMESPACE.as_str())
         ).unwrap();
+
+    // === Error Categorization Metrics (Issue #34) ===
+
+    pub static ref REQUEST_ERRORS_BY_CATEGORY: IntCounterVec =
+        IntCounterVec::new(
+            Opts::new("request_errors_by_category", "Number of errors by category")
+                .namespace(METRIC_NAMESPACE.as_str()),
+            &["category"]  // category: client_error, server_error, network_error, timeout_error, tls_error, other_error
+        ).unwrap();
 }
 
 /// Registers all metrics with the default Prometheus registry.
@@ -103,6 +112,9 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     prometheus::default_registry().register(Box::new(SCENARIO_STEP_DURATION_SECONDS.clone()))?;
     prometheus::default_registry().register(Box::new(SCENARIO_ASSERTIONS_TOTAL.clone()))?;
     prometheus::default_registry().register(Box::new(CONCURRENT_SCENARIOS.clone()))?;
+
+    // Error categorization metrics
+    prometheus::default_registry().register(Box::new(REQUEST_ERRORS_BY_CATEGORY.clone()))?;
 
     Ok(())
 }
