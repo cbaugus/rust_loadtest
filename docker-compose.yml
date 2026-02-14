@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # Test API endpoint (using httpbin for testing)
+  test-api:
+    image: kennethreitz/httpbin
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/status/200"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # Rust LoadTest tool
+  loadtest:
+    build: .
+    depends_on:
+      test-api:
+        condition: service_healthy
+    volumes:
+      - ./examples/configs:/app/configs
+      - ./examples/data:/app/data
+      - ./results:/app/results
+    environment:
+      - TARGET_URL=http://test-api:80
+    # Override to run a specific test
+    command: ["rust-loadtest", "--config", "/app/configs/basic-api-test.yaml"]
+    # Uncomment to keep container running for manual testing
+    # command: ["tail", "-f", "/dev/null"]
+
+  # Simple web server for testing (alternative to httpbin)
+  simple-api:
+    image: nginx:alpine
+    ports:
+      - "8081:80"
+    volumes:
+      - ./test-api:/usr/share/nginx/html:ro
+
+volumes:
+  results:

@@ -1,35 +1,47 @@
-FROM rust:bullseye AS builder
-WORKDIR /usr/src/app
-COPY . .
-RUN cargo install --path .
+# Multi-stage build for rust-loadtest
+# Stage 1: Build
+FROM rustlang/rust:nightly-slim AS builder
 
-# --- Stage 2: Create the final, smaller runtime image ---
-# Use a minimal base image for the final runtime
-FROM ubuntu:latest
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       libssl3 \
-       ca-certificates \
-    && apt-get clean \
+WORKDIR /app
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
-WORKDIR /usr/local/bin
+# Copy manifests
+COPY Cargo.toml Cargo.lock ./
 
-# Add a non-root user and group
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# Copy source code
+COPY src ./src
+COPY tests ./tests
+COPY examples ./examples
 
-# Copy the compiled binary from the builder stage
-COPY --from=builder /usr/local/cargo/bin/rust_loadtest /usr/local/bin/rust_loadtest
+# Build release binary
+RUN cargo build --release
 
-# Set ownership of the binary to the non-root user
-RUN chown appuser:appuser /usr/local/bin/rust_loadtest
+# Stage 2: Runtime
+FROM debian:bookworm-slim
 
-# Expose the Prometheus metrics port
-EXPOSE 9090
+WORKDIR /app
 
-# Switch to non-root user
-USER appuser
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Command to run the application when the container starts
-CMD ["/usr/local/bin/rust_loadtest"]
+# Copy the binary from builder (Cargo uses underscore)
+COPY --from=builder /app/target/release/rust_loadtest /usr/local/bin/rust-loadtest
+
+# Copy example configs and data
+COPY examples/configs /app/configs
+COPY examples/data /app/data
+COPY docs /app/docs
+
+# Set working directory
+WORKDIR /app
+
+# Default command shows help
+CMD ["rust-loadtest", "--help"]
