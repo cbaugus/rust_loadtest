@@ -111,9 +111,18 @@ Hot-reload, migration tools, documentation.
   - Invalid/empty env value fallback to YAML
   - 20 comprehensive integration tests
   - Full documentation with CI/CD patterns
+- [x] **Issue #41**: Config versioning (P2, M) - **COMPLETE** ✅
+  - Branch: `feature/issue-41-config-versioning` (merged to phase2)
+  - 463 lines of implementation + 542 lines of tests + 461 lines of docs
+  - Version struct with semantic versioning (major.minor)
+  - VersionChecker for compatibility validation
+  - Migration trait and MigrationRegistry framework
+  - Integrated with YamlConfig validation
+  - 55 comprehensive tests (30 unit + 25 integration)
+  - Complete versioning guide with migration examples
 
 ### 🚧 In Progress
-_None - Wave 2 in progress (2/3 done)_
+_None - 🎉 ✅ Wave 2 COMPLETE! (3/3 done)_
 
 ### 📋 Todo - Wave 1 (Week 1)
 
@@ -154,12 +163,12 @@ _None - Wave 2 in progress (2/3 done)_
   - [x] Document override patterns
   - [x] Integration tests
 
-- [ ] **Issue #41**: Config versioning (P2, M)
-  - [ ] Add version field to config
-  - [ ] Version detection
-  - [ ] Migration framework for v1.0 -> v2.0
-  - [ ] Migration tests
-  - [ ] Version validation
+- [x] **Issue #41**: Config versioning (P2, M) ✅
+  - [x] Add version field to config
+  - [x] Version detection
+  - [x] Migration framework for v1.0 -> v2.0
+  - [x] Migration tests
+  - [x] Version validation
 
 ### 📋 Todo - Wave 3 (Week 3)
 
@@ -422,6 +431,6 @@ scenarios:
 ---
 
 **Last Updated**: 2026-02-11 (continued)
-**Status**: 🚀 Wave 2 in progress (2/3 issues done)
-**Next Milestone**: Wave 2 - Issue #41 (Config Versioning)
+**Status**: 🎉 ✅ Wave 2 COMPLETE! (3/3 issues done) - Starting Wave 3
+**Next Milestone**: Wave 3 - Issue #42 (Scenario YAML Definitions)
 **Branch Status**: phase2-advanced-features (active development)
