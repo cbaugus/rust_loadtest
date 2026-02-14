@@ -254,6 +254,7 @@ impl ScenarioExecutor {
             "DELETE" => self.client.delete(&url),
             "PATCH" => self.client.patch(&url),
             "HEAD" => self.client.head(&url),
+            "OPTIONS" => self.client.request(reqwest::Method::OPTIONS, &url),
             method => {
                 error!(step = %step.name, method = %method, "Unsupported HTTP method");
                 return StepResult {
