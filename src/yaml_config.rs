@@ -13,6 +13,7 @@ use thiserror::Error;
 use crate::config_validation::{
     HttpMethodValidator, LoadModelValidator, RangeValidator, UrlValidator, ValidationContext,
 };
+use crate::config_version::VersionChecker;
 use crate::load_models::LoadModel;
 use crate::scenario::{Assertion, Extractor, RequestConfig, Scenario, Step, ThinkTime};
 
@@ -271,13 +272,10 @@ impl YamlConfig {
     fn validate(&self) -> Result<(), YamlConfigError> {
         let mut ctx = ValidationContext::new();
 
-        // Validate version
+        // Validate version using VersionChecker
         ctx.enter("version");
-        if self.version != "1.0" {
-            ctx.field_error(format!(
-                "Unsupported version '{}'. Expected '1.0'",
-                self.version
-            ));
+        if let Err(e) = VersionChecker::parse_and_validate(&self.version) {
+            ctx.field_error(e.to_string());
         }
         ctx.exit();
 

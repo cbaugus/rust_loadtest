@@ -3,6 +3,7 @@ pub mod client;
 pub mod config;
 pub mod config_merge;
 pub mod config_validation;
+pub mod config_version;
 pub mod connection_pool;
 pub mod data_source;
 pub mod errors;
