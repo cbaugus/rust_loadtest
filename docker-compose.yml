@@ -7,7 +7,7 @@ services:
     ports:
       - "8080:80"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/status/200"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:80/status/200')"]
       interval: 5s
       timeout: 3s
       retries: 3

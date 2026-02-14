@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod assertions;
 pub mod client;
 pub mod config;

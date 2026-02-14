@@ -15,7 +15,7 @@ use crate::config_validation::{
 };
 use crate::config_version::VersionChecker;
 use crate::load_models::LoadModel;
-use crate::scenario::{Assertion, Extractor, RequestConfig, Scenario, Step, ThinkTime};
+use crate::scenario::{Assertion, Extractor, RequestConfig, Scenario, Step, VariableExtraction};
 
 /// Errors that can occur when loading or parsing YAML configuration.
 #[derive(Error, Debug)]
@@ -91,6 +91,14 @@ fn default_workers() -> usize {
 }
 
 /// Load model configuration in YAML.
+///
+/// Default ratios for DailyTraffic pattern
+fn default_morning_ramp_ratio() -> f64 { 0.2 }
+fn default_peak_sustain_ratio() -> f64 { 0.1 }
+fn default_mid_decline_ratio() -> f64 { 0.2 }
+fn default_mid_sustain_ratio() -> f64 { 0.1 }
+fn default_evening_decline_ratio() -> f64 { 0.2 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "model", rename_all = "lowercase")]
 pub enum YamlLoadModel {
@@ -111,6 +119,16 @@ pub enum YamlLoadModel {
         max: f64,
         #[serde(rename = "cycleDuration")]
         cycle_duration: YamlDuration,
+        #[serde(rename = "morningRampRatio", default = "default_morning_ramp_ratio")]
+        morning_ramp_ratio: f64,
+        #[serde(rename = "peakSustainRatio", default = "default_peak_sustain_ratio")]
+        peak_sustain_ratio: f64,
+        #[serde(rename = "midDeclineRatio", default = "default_mid_decline_ratio")]
+        mid_decline_ratio: f64,
+        #[serde(rename = "midSustainRatio", default = "default_mid_sustain_ratio")]
+        mid_sustain_ratio: f64,
+        #[serde(rename = "eveningDeclineRatio", default = "default_evening_decline_ratio")]
+        evening_decline_ratio: f64,
     },
 }
 
@@ -126,12 +144,27 @@ impl YamlLoadModel {
                     ramp_duration: ramp_duration.to_std_duration()?,
                 })
             }
-            YamlLoadModel::DailyTraffic { min, mid, max, cycle_duration } => {
+            YamlLoadModel::DailyTraffic {
+                min,
+                mid,
+                max,
+                cycle_duration,
+                morning_ramp_ratio,
+                peak_sustain_ratio,
+                mid_decline_ratio,
+                mid_sustain_ratio,
+                evening_decline_ratio,
+            } => {
                 Ok(LoadModel::DailyTraffic {
                     min_rps: *min,
                     mid_rps: *mid,
                     max_rps: *max,
                     cycle_duration: cycle_duration.to_std_duration()?,
+                    morning_ramp_ratio: *morning_ramp_ratio,
+                    peak_sustain_ratio: *peak_sustain_ratio,
+                    mid_decline_ratio: *mid_decline_ratio,
+                    mid_sustain_ratio: *mid_sustain_ratio,
+                    evening_decline_ratio: *evening_decline_ratio,
                 })
             }
         }
@@ -345,7 +378,7 @@ impl YamlConfig {
     }
 
     /// Validate the configuration using enhanced validation system.
-    fn validate(&self) -> Result<(), YamlConfigError> {
+    pub fn validate(&self) -> Result<(), YamlConfigError> {
         let mut ctx = ValidationContext::new();
 
         // Validate version using VersionChecker
@@ -540,30 +573,36 @@ impl YamlConfig {
         Ok(scenarios)
     }
 
-    fn convert_extractor(&self, extractor: &YamlExtractor) -> Extractor {
+    fn convert_extractor(&self, extractor: &YamlExtractor) -> VariableExtraction {
         match extractor {
             YamlExtractor::JsonPath { name, json_path } => {
-                Extractor::JsonPath {
-                    var_name: name.clone(),
-                    json_path: json_path.clone(),
+                VariableExtraction {
+                    name: name.clone(),
+                    extractor: Extractor::JsonPath(json_path.clone()),
                 }
             }
             YamlExtractor::Regex { name, regex } => {
-                Extractor::Regex {
-                    var_name: name.clone(),
-                    pattern: regex.clone(),
+                // For Regex, we need to parse the regex to extract pattern and group
+                // For now, use the entire regex as pattern and empty group
+                // TODO: Improve regex parsing to separate pattern and group
+                VariableExtraction {
+                    name: name.clone(),
+                    extractor: Extractor::Regex {
+                        pattern: regex.clone(),
+                        group: String::from("0"), // Default to capture group 0 (full match)
+                    },
                 }
             }
             YamlExtractor::Header { name, header } => {
-                Extractor::Header {
-                    var_name: name.clone(),
-                    header_name: header.clone(),
+                VariableExtraction {
+                    name: name.clone(),
+                    extractor: Extractor::Header(header.clone()),
                 }
             }
             YamlExtractor::Cookie { name, cookie } => {
-                Extractor::Cookie {
-                    var_name: name.clone(),
-                    cookie_name: cookie.clone(),
+                VariableExtraction {
+                    name: name.clone(),
+                    extractor: Extractor::Cookie(cookie.clone()),
                 }
             }
         }
