@@ -2,211 +2,125 @@
 
 This guide shows how to build and run rust-loadtest using Docker.
 
+## Important Note
+
+**The CLI currently uses environment variables only.** YAML config file support (`--config` flag) exists in the library but is not yet integrated into the main binary. All examples below use environment variables.
+
+### Current Limitations
+
+- **No CLI argument parsing**: The `--config` flag is not implemented yet
+- **Single endpoint testing**: Can only test one URL at a time (no multi-scenario support yet)
+- **Basic request types**: Supports simple GET/POST requests with optional JSON payload
+- **Environment-based config**: All configuration must be passed via environment variables
+
+### Future Enhancements
+
+- CLI argument parsing with `--config` flag support
+- Multi-scenario testing from YAML configuration files
+- Advanced features: headers, authentication, data-driven tests
+- Interactive CLI mode
+
 ## Quick Start
 
-### Option 1: Using Docker Compose (Recommended)
-
-The easiest way to test the load testing tool with a test API:
-
-```bash
-# Start test API and run load test
-docker-compose up
-
-# Or run in detached mode
-docker-compose up -d
-
-# View logs
-docker-compose logs -f loadtest
-
-# Stop services
-docker-compose down
-```
-
-This will:
-1. Start an httpbin test API on port 8080
-2. Build the rust-loadtest Docker image
-3. Run a test load test against the API
-
-### Option 2: Build and Run Manually
+### Option 1: Test Against Your API
 
 ```bash
 # Build the Docker image
 docker build -t rust-loadtest .
 
-# Run with a config file
+# Run against your API (GET request)
 docker run --rm \
-  -v $(pwd)/examples/configs:/app/configs \
-  rust-loadtest \
-  rust-loadtest --config /app/configs/basic-api-test.yaml
+  -e TARGET_URL=https://api.example.com/endpoint \
+  -e REQUEST_TYPE=GET \
+  -e NUM_CONCURRENT_TASKS=10 \
+  -e TEST_DURATION=5m \
+  rust-loadtest
 
-# Run with environment variable overrides
+# Run against your API (POST with JSON)
 docker run --rm \
-  -e TARGET_URL=https://api.example.com \
-  -e NUM_CONCURRENT_TASKS=50 \
-  -v $(pwd)/examples/configs:/app/configs \
-  rust-loadtest \
-  rust-loadtest --config /app/configs/basic-api-test.yaml
+  -e TARGET_URL=https://api.example.com/endpoint \
+  -e REQUEST_TYPE=POST \
+  -e SEND_JSON=true \
+  -e JSON_PAYLOAD='{"key":"value"}' \
+  -e NUM_CONCURRENT_TASKS=10 \
+  -e TEST_DURATION=5m \
+  rust-loadtest
 ```
 
-## Docker Compose Setup
+### Option 2: Using Docker Compose with Test API
 
-The `docker-compose.yml` includes:
-
-### Services
-
-1. **test-api** - HTTPBin test API
-   - Port: 8080
-   - Health checks enabled
-   - Used for testing load generation
-
-2. **loadtest** - Rust LoadTest tool
-   - Waits for test-api to be healthy
-   - Mounts config and data directories
-   - Configurable via environment variables
-
-3. **simple-api** - Nginx alternative
-   - Port: 8081
-   - Simple static file server
-
-## Testing Against Different APIs
-
-### Test Against Docker Compose API
-
-```yaml
-# In your config file
-config:
-  baseUrl: "http://test-api"
-  # or
-  baseUrl: "http://simple-api"
-```
+Test against the included httpbin test API:
 
 ```bash
-docker-compose up
+# Start test API
+docker-compose up -d test-api
+
+# Run load test against it
+docker run --rm --network rust_loadtest_default \
+  -e TARGET_URL=http://test-api/status/200 \
+  -e REQUEST_TYPE=GET \
+  -e NUM_CONCURRENT_TASKS=5 \
+  -e TEST_DURATION=1m \
+  rust-loadtest
+
+# Stop services
+docker-compose down
 ```
 
-### Test Against External API
+## Configuration via Environment Variables
 
-```bash
-# Override base URL
-docker-compose run \
-  -e TARGET_URL=https://api.example.com \
-  loadtest \
-  rust-loadtest --config /app/configs/basic-api-test.yaml
-```
+The tool is configured entirely through environment variables. Here are the key variables:
 
-### Test Against Host Machine API
+| Variable | Description | Example | Default |
+|----------|-------------|---------|---------|
+| `TARGET_URL` | Base URL to test (required) | `https://api.example.com` | - |
+| `REQUEST_TYPE` | HTTP method | `GET`, `POST`, `PUT`, `DELETE` | `POST` |
+| `NUM_CONCURRENT_TASKS` | Number of workers | `50` | `10` |
+| `TEST_DURATION` | Test duration | `10m`, `1h`, `2h` | `2h` |
+| `SEND_JSON` | Send JSON payload | `true`, `false` | `false` |
+| `JSON_PAYLOAD` | JSON body for POST/PUT | `{"key":"value"}` | - |
+| `TARGET_RPS` | Target requests per second | `100` | - |
+| `LOAD_MODEL_TYPE` | Load model | `Concurrent`, `Rps`, `RampRps` | `Concurrent` |
+| `SKIP_TLS_VERIFY` | Skip TLS verification | `true`, `false` | `false` |
 
-```yaml
-# Use host.docker.internal (Docker Desktop)
-config:
-  baseUrl: "http://host.docker.internal:3000"
-```
-
-```bash
-docker-compose run loadtest \
-  rust-loadtest --config /app/configs/your-config.yaml
-```
-
-## Available Configurations
-
-All example configs are available in the container at `/app/configs/`:
-
-```bash
-# Basic API test
-docker-compose run loadtest rust-loadtest --config /app/configs/basic-api-test.yaml
-
-# E-commerce scenario
-docker-compose run loadtest rust-loadtest --config /app/configs/ecommerce-scenario.yaml
-
-# Stress test
-docker-compose run loadtest rust-loadtest --config /app/configs/stress-test.yaml
-
-# Docker-specific test (uses httpbin)
-docker-compose run loadtest rust-loadtest --config /app/configs/docker-test.yaml
-```
-
-## Custom Configurations
-
-### Mount Your Own Config
-
-```bash
-docker run --rm \
-  -v /path/to/your/config.yaml:/app/my-config.yaml \
-  rust-loadtest \
-  rust-loadtest --config /app/my-config.yaml
-```
-
-### Using Docker Compose Override
-
-Create `docker-compose.override.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  loadtest:
-    volumes:
-      - ./my-configs:/app/my-configs
-    command: ["rust-loadtest", "--config", "/app/my-configs/my-test.yaml"]
-```
-
-## Environment Variables
-
-Override configuration values using environment variables:
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `TARGET_URL` | Base URL to test | `https://api.example.com` |
-| `NUM_CONCURRENT_TASKS` | Number of workers | `50` |
-| `TEST_DURATION` | Test duration | `10m` |
-| `TARGET_RPS` | Target RPS | `100` |
+**Important:** If your endpoint expects GET requests, you must set `REQUEST_TYPE=GET` (the default is POST).
 
 Example:
 
 ```bash
-docker-compose run \
-  -e TARGET_URL=https://staging.api.com \
+docker run --rm \
+  -e TARGET_URL=https://api.example.com/endpoint \
+  -e REQUEST_TYPE=GET \
   -e NUM_CONCURRENT_TASKS=100 \
   -e TEST_DURATION=5m \
-  loadtest \
-  rust-loadtest --config /app/configs/stress-test.yaml
+  rust-loadtest
 ```
 
-## Interactive Mode
+## Accessing Metrics
 
-Keep the container running for manual testing:
+The tool exposes Prometheus metrics on port 9090. Map the port to access them:
 
 ```bash
-# Start container in interactive mode
-docker-compose run --rm loadtest bash
+docker run --rm \
+  -p 9090:9090 \
+  -e TARGET_URL=https://api.example.com \
+  -e REQUEST_TYPE=GET \
+  rust-loadtest
 
-# Inside container, run tests manually
-rust-loadtest --config /app/configs/basic-api-test.yaml
-rust-loadtest --config /app/configs/stress-test.yaml
-
-# Exit when done
-exit
+# In another terminal, access metrics
+curl http://localhost:9090/metrics
 ```
 
 ## Saving Results
 
-Mount a volume to save test results:
+Redirect output to save test results:
 
 ```bash
 docker run --rm \
-  -v $(pwd)/results:/app/results \
-  -v $(pwd)/examples/configs:/app/configs \
-  rust-loadtest \
-  rust-loadtest --config /app/configs/basic-api-test.yaml > /app/results/test-results.log
-```
-
-Or with docker-compose:
-
-```yaml
-services:
-  loadtest:
-    volumes:
-      - ./results:/app/results
+  -e TARGET_URL=https://api.example.com \
+  -e REQUEST_TYPE=GET \
+  -e TEST_DURATION=5m \
+  rust-loadtest > test-results.log 2>&1
 ```
 
 ## Docker Hub
@@ -219,27 +133,6 @@ docker pull cbaugus/rust-loadtest:latest
 
 # Run directly
 docker run --rm cbaugus/rust-loadtest:latest rust-loadtest --help
-```
-
-## Building for Production
-
-### Optimized Build
-
-```bash
-# Build with release optimizations
-docker build -t rust-loadtest:prod \
-  --build-arg RUST_FLAGS="-C target-cpu=native" \
-  .
-```
-
-### Multi-Architecture Build
-
-```bash
-# Build for multiple platforms
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t rust-loadtest:multi-arch \
-  .
 ```
 
 ## CI/CD Integration
@@ -266,8 +159,10 @@ jobs:
         run: |
           docker run --rm \
             -e TARGET_URL=${{ secrets.API_URL }} \
-            rust-loadtest \
-            rust-loadtest --config /app/configs/basic-api-test.yaml
+            -e REQUEST_TYPE=GET \
+            -e NUM_CONCURRENT_TASKS=10 \
+            -e TEST_DURATION=5m \
+            rust-loadtest
 ```
 
 ### GitLab CI
@@ -280,12 +175,58 @@ load-test:
     - docker:dind
   script:
     - docker build -t rust-loadtest .
-    - docker run --rm rust-loadtest rust-loadtest --config /app/configs/basic-api-test.yaml
+    - docker run --rm
+        -e TARGET_URL=${API_URL}
+        -e REQUEST_TYPE=GET
+        -e NUM_CONCURRENT_TASKS=10
+        -e TEST_DURATION=5m
+        rust-loadtest
+```
+
+### Jenkins Pipeline
+
+```groovy
+pipeline {
+    agent any
+    stages {
+        stage('Build') {
+            steps {
+                sh 'docker build -t rust-loadtest .'
+            }
+        }
+        stage('Load Test') {
+            steps {
+                sh '''
+                    docker run --rm \
+                      -e TARGET_URL=${API_URL} \
+                      -e REQUEST_TYPE=GET \
+                      -e NUM_CONCURRENT_TASKS=50 \
+                      -e TEST_DURATION=10m \
+                      rust-loadtest
+                '''
+            }
+        }
+    }
+}
 ```
 
 ## Networking
 
-### Docker Network
+### Testing Against Docker Compose Services
+
+```bash
+# Start your services with docker-compose
+docker-compose up -d
+
+# Run load test on the same network
+docker run --rm --network rust_loadtest_default \
+  -e TARGET_URL=http://your-service:8080/api \
+  -e REQUEST_TYPE=GET \
+  -e NUM_CONCURRENT_TASKS=10 \
+  rust-loadtest
+```
+
+### Custom Docker Network
 
 Create a custom network for testing multiple services:
 
@@ -298,118 +239,191 @@ docker run -d --name test-api --network loadtest-net kennethreitz/httpbin
 
 # Run load test
 docker run --rm --network loadtest-net \
-  -e TARGET_URL=http://test-api \
-  rust-loadtest \
-  rust-loadtest --config /app/configs/docker-test.yaml
+  -e TARGET_URL=http://test-api/status/200 \
+  -e REQUEST_TYPE=GET \
+  -e NUM_CONCURRENT_TASKS=5 \
+  rust-loadtest
 ```
 
 ## Troubleshooting
 
-### Container Won't Start
+### Getting 405 Method Not Allowed Errors
+
+If you see `status_code="405"` in the metrics but can curl your endpoint successfully:
+
+**Problem:** The default REQUEST_TYPE is POST, but your endpoint expects GET.
+
+**Solution:** Add `-e REQUEST_TYPE=GET` to your docker run command:
 
 ```bash
-# Check logs
-docker-compose logs loadtest
-
-# Check if test-api is healthy
-docker-compose ps
+docker run --rm \
+  -e TARGET_URL=http://192.168.2.22:8081/health \
+  -e REQUEST_TYPE=GET \
+  -e NUM_CONCURRENT_TASKS=10 \
+  rust-loadtest
 ```
 
-### Can't Connect to API
+### Missing TARGET_URL Error
+
+If you see "Missing required environment variable: TARGET_URL":
+
+**Solution:** Make sure you're setting the TARGET_URL environment variable:
 
 ```bash
-# Test connectivity from loadtest container
-docker-compose run loadtest curl http://test-api/status/200
-
-# Check network
-docker-compose run loadtest ping test-api
+docker run --rm \
+  -e TARGET_URL=https://your-api.com \
+  -e REQUEST_TYPE=GET \
+  rust-loadtest
 ```
 
-### Permission Issues
+### Can't Connect to API on Host Machine
 
+**For Docker Desktop (Mac/Windows):**
 ```bash
-# Run as current user
-docker-compose run --user $(id -u):$(id -g) loadtest \
-  rust-loadtest --config /app/configs/basic-api-test.yaml
+# Use host.docker.internal to reach host machine
+docker run --rm \
+  -e TARGET_URL=http://host.docker.internal:3000 \
+  -e REQUEST_TYPE=GET \
+  rust-loadtest
+```
+
+**For Linux:**
+```bash
+# Use --network host
+docker run --rm --network host \
+  -e TARGET_URL=http://localhost:3000 \
+  -e REQUEST_TYPE=GET \
+  rust-loadtest
 ```
 
 ### View Container Internals
 
 ```bash
 # Shell into container
-docker-compose run --rm loadtest bash
-
-# Check available configs
-ls -la /app/configs/
+docker run --rm -it rust-loadtest bash
 
 # Check binary
 which rust-loadtest
-rust-loadtest --help
+rust-loadtest # Shows help/error with env var requirements
 ```
 
 ## Examples
 
-### Test Localhost API
+### Basic GET Request Test
 
 ```bash
-# Start your API on localhost:3000
-
-# Run load test (Docker Desktop)
 docker run --rm \
-  -e TARGET_URL=http://host.docker.internal:3000 \
-  rust-loadtest \
-  rust-loadtest --config /app/configs/basic-api-test.yaml
-
-# Or on Linux
-docker run --rm --network host \
-  -e TARGET_URL=http://localhost:3000 \
-  rust-loadtest \
-  rust-loadtest --config /app/configs/basic-api-test.yaml
+  -e TARGET_URL=https://api.example.com/users \
+  -e REQUEST_TYPE=GET \
+  -e NUM_CONCURRENT_TASKS=10 \
+  -e TEST_DURATION=5m \
+  rust-loadtest
 ```
 
-### Stress Test
+### POST Request with JSON
 
 ```bash
-# Run stress test with docker-compose
-docker-compose run \
+docker run --rm \
+  -e TARGET_URL=https://api.example.com/users \
+  -e REQUEST_TYPE=POST \
+  -e SEND_JSON=true \
+  -e JSON_PAYLOAD='{"name":"test","email":"test@example.com"}' \
+  -e NUM_CONCURRENT_TASKS=10 \
+  -e TEST_DURATION=5m \
+  rust-loadtest
+```
+
+### High-Concurrency Stress Test
+
+```bash
+docker run --rm \
   -e TARGET_URL=https://staging.api.com \
-  loadtest \
-  rust-loadtest --config /app/configs/stress-test.yaml
+  -e REQUEST_TYPE=GET \
+  -e NUM_CONCURRENT_TASKS=200 \
+  -e TEST_DURATION=10m \
+  -e LOAD_MODEL_TYPE=Rps \
+  -e TARGET_RPS=1000 \
+  rust-loadtest
 ```
 
-### Data-Driven Test
+### Test Against Local API (Docker Desktop)
 
 ```bash
-# With custom data files
+# Start your API on localhost:3000, then:
 docker run --rm \
-  -v $(pwd)/examples/configs:/app/configs \
-  -v $(pwd)/examples/data:/app/data \
-  -v $(pwd)/my-data:/app/my-data \
-  rust-loadtest \
-  rust-loadtest --config /app/configs/data-driven-test.yaml
+  -e TARGET_URL=http://host.docker.internal:3000/api/health \
+  -e REQUEST_TYPE=GET \
+  -e NUM_CONCURRENT_TASKS=5 \
+  -e TEST_DURATION=2m \
+  rust-loadtest
+```
+
+### Test Against Local API (Linux)
+
+```bash
+docker run --rm --network host \
+  -e TARGET_URL=http://localhost:3000/api/health \
+  -e REQUEST_TYPE=GET \
+  -e NUM_CONCURRENT_TASKS=5 \
+  -e TEST_DURATION=2m \
+  rust-loadtest
+```
+
+### Ramp Load Test
+
+```bash
+docker run --rm \
+  -e TARGET_URL=https://api.example.com \
+  -e REQUEST_TYPE=GET \
+  -e LOAD_MODEL_TYPE=RampRps \
+  -e MIN_RPS=10 \
+  -e MAX_RPS=1000 \
+  -e RAMP_DURATION=10m \
+  -e NUM_CONCURRENT_TASKS=100 \
+  rust-loadtest
 ```
 
 ## Performance Tips
 
 1. **Use host network** (Linux only) for better performance:
    ```bash
-   docker run --rm --network host rust-loadtest ...
+   docker run --rm --network host \
+     -e TARGET_URL=http://localhost:3000 \
+     -e REQUEST_TYPE=GET \
+     rust-loadtest
    ```
 
-2. **Increase resources**:
-   ```yaml
-   services:
-     loadtest:
-       deploy:
-         resources:
-           limits:
-             cpus: '4'
-             memory: 4G
-   ```
-
-3. **Disable logging** for high-load tests:
+2. **Increase resources** with docker run:
    ```bash
-   docker run --rm rust-loadtest ... > /dev/null 2>&1
+   docker run --rm \
+     --cpus="4" \
+     --memory="4g" \
+     -e TARGET_URL=https://api.example.com \
+     -e REQUEST_TYPE=GET \
+     -e NUM_CONCURRENT_TASKS=200 \
+     rust-loadtest
+   ```
+
+3. **Reduce log verbosity** for high-load tests:
+   ```bash
+   docker run --rm \
+     -e RUST_LOG=error \
+     -e TARGET_URL=https://api.example.com \
+     -e REQUEST_TYPE=GET \
+     -e NUM_CONCURRENT_TASKS=500 \
+     rust-loadtest
+   ```
+
+4. **Monitor metrics** during the test:
+   ```bash
+   # Terminal 1: Run test with metrics exposed
+   docker run --rm -p 9090:9090 \
+     -e TARGET_URL=https://api.example.com \
+     -e REQUEST_TYPE=GET \
+     rust-loadtest
+
+   # Terminal 2: Watch metrics
+   watch -n 1 'curl -s http://localhost:9090/metrics | grep rust_loadtest_requests_total'
    ```
 
 ## Security
@@ -458,9 +472,44 @@ docker image prune -a
 docker-compose down -v --remove-orphans
 ```
 
+## Quick Reference
+
+### Common Commands
+
+```bash
+# Basic GET test
+docker run --rm -e TARGET_URL=<url> -e REQUEST_TYPE=GET rust-loadtest
+
+# POST with JSON
+docker run --rm -e TARGET_URL=<url> -e REQUEST_TYPE=POST -e SEND_JSON=true -e JSON_PAYLOAD='<json>' rust-loadtest
+
+# With metrics exposed
+docker run --rm -p 9090:9090 -e TARGET_URL=<url> -e REQUEST_TYPE=GET rust-loadtest
+
+# High concurrency
+docker run --rm -e TARGET_URL=<url> -e REQUEST_TYPE=GET -e NUM_CONCURRENT_TASKS=100 rust-loadtest
+
+# Custom duration
+docker run --rm -e TARGET_URL=<url> -e REQUEST_TYPE=GET -e TEST_DURATION=10m rust-loadtest
+
+# Against localhost (Docker Desktop)
+docker run --rm -e TARGET_URL=http://host.docker.internal:3000 -e REQUEST_TYPE=GET rust-loadtest
+
+# Against localhost (Linux)
+docker run --rm --network host -e TARGET_URL=http://localhost:3000 -e REQUEST_TYPE=GET rust-loadtest
+```
+
+### Available Load Models
+
+- **Concurrent**: Constant concurrent requests (default)
+- **Rps**: Target specific requests per second
+  - Requires: `LOAD_MODEL_TYPE=Rps`, `TARGET_RPS=<number>`
+- **RampRps**: Gradually increase RPS
+  - Requires: `LOAD_MODEL_TYPE=RampRps`, `MIN_RPS=<number>`, `MAX_RPS=<number>`, `RAMP_DURATION=<duration>`
+
 ## Additional Resources
 
 - [Docker Documentation](https://docs.docker.com/)
 - [Docker Compose Reference](https://docs.docker.com/compose/)
 - [HTTPBin API Documentation](https://httpbin.org/)
-- [Configuration Examples](./examples/configs/README.md)
+- [Prometheus Metrics](https://prometheus.io/docs/introduction/overview/)
