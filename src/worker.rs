@@ -120,6 +120,27 @@ fn build_request(client: &reqwest::Client, config: &WorkerConfig) -> reqwest::Re
                 req
             }
         }
+        "PUT" => {
+            let req = client.put(&config.url);
+            if config.send_json {
+                req.header("Content-Type", "application/json")
+                    .body(config.json_payload.clone().unwrap_or_default())
+            } else {
+                req
+            }
+        }
+        "PATCH" => {
+            let req = client.patch(&config.url);
+            if config.send_json {
+                req.header("Content-Type", "application/json")
+                    .body(config.json_payload.clone().unwrap_or_default())
+            } else {
+                req
+            }
+        }
+        "DELETE" => client.delete(&config.url),
+        "HEAD" => client.head(&config.url),
+        "OPTIONS" => client.request(reqwest::Method::OPTIONS, &config.url),
         _ => {
             error!(
                 request_type = %config.request_type,
