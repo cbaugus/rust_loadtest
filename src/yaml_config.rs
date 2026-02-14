@@ -10,6 +10,9 @@ use std::path::Path;
 use std::time::Duration as StdDuration;
 use thiserror::Error;
 
+use crate::config_validation::{
+    HttpMethodValidator, LoadModelValidator, RangeValidator, UrlValidator, ValidationContext,
+};
 use crate::load_models::LoadModel;
 use crate::scenario::{Assertion, Extractor, RequestConfig, Scenario, Step, ThinkTime};
 
@@ -264,52 +267,133 @@ impl YamlConfig {
         Ok(config)
     }
 
-    /// Validate the configuration.
+    /// Validate the configuration using enhanced validation system.
     fn validate(&self) -> Result<(), YamlConfigError> {
-        // Check version
+        let mut ctx = ValidationContext::new();
+
+        // Validate version
+        ctx.enter("version");
         if self.version != "1.0" {
-            return Err(YamlConfigError::Validation(
-                format!("Unsupported config version '{}'. Expected '1.0'", self.version)
+            ctx.field_error(format!(
+                "Unsupported version '{}'. Expected '1.0'",
+                self.version
             ));
         }
+        ctx.exit();
 
-        // Check base URL
-        if !self.config.base_url.starts_with("http://") && !self.config.base_url.starts_with("https://") {
-            return Err(YamlConfigError::Validation(
-                format!("Invalid base URL '{}'. Must start with http:// or https://", self.config.base_url)
+        // Validate config section
+        ctx.enter("config");
+
+        // Validate base URL
+        ctx.enter("baseUrl");
+        if let Err(e) = UrlValidator::validate(&self.config.base_url) {
+            ctx.field_error(e.to_string());
+        }
+        ctx.exit();
+
+        // Validate workers
+        ctx.enter("workers");
+        if let Err(e) = RangeValidator::validate_positive_u64(self.config.workers as u64, "workers")
+        {
+            ctx.field_error(e.to_string());
+        }
+        if let Err(e) = RangeValidator::validate_u64(
+            self.config.workers as u64,
+            1,
+            10000,
+            "workers",
+        ) {
+            ctx.field_error(format!(
+                "Workers should be between 1 and 10000, got: {}",
+                self.config.workers
             ));
         }
+        ctx.exit();
 
-        // Check workers
-        if self.config.workers == 0 {
-            return Err(YamlConfigError::Validation(
-                "Number of workers must be greater than 0".to_string()
-            ));
+        ctx.exit(); // config
+
+        // Validate load model
+        ctx.enter("load");
+        match &self.load {
+            YamlLoadModel::Rps { target } => {
+                if let Err(e) = LoadModelValidator::validate_rps(*target) {
+                    ctx.field_error(e.to_string());
+                }
+            }
+            YamlLoadModel::Ramp { min, max, .. } => {
+                if let Err(e) = LoadModelValidator::validate_ramp(*min, *max) {
+                    ctx.field_error(e.to_string());
+                }
+            }
+            YamlLoadModel::DailyTraffic { min, mid, max, .. } => {
+                if let Err(e) = LoadModelValidator::validate_daily_traffic(*min, *mid, *max) {
+                    ctx.field_error(e.to_string());
+                }
+            }
+            YamlLoadModel::Concurrent => {} // No validation needed
         }
+        ctx.exit(); // load
 
-        // Check scenarios
+        // Validate scenarios
+        ctx.enter("scenarios");
         if self.scenarios.is_empty() {
-            return Err(YamlConfigError::Validation(
-                "At least one scenario must be defined".to_string()
-            ));
+            ctx.field_error("At least one scenario must be defined".to_string());
         }
 
-        // Validate each scenario
-        for scenario in &self.scenarios {
+        for (idx, scenario) in self.scenarios.iter().enumerate() {
+            ctx.enter(&format!("[{}]", idx));
+            ctx.enter("name");
+            if scenario.name.is_empty() {
+                ctx.field_error("Scenario name cannot be empty".to_string());
+            }
+            ctx.exit();
+
+            // Validate weight
+            ctx.enter("weight");
+            if let Err(e) = RangeValidator::validate_positive_f64(scenario.weight, "weight") {
+                ctx.field_error(e.to_string());
+            }
+            ctx.exit();
+
+            // Validate steps
+            ctx.enter("steps");
             if scenario.steps.is_empty() {
-                return Err(YamlConfigError::Validation(
-                    format!("Scenario '{}' must have at least one step", scenario.name)
+                ctx.field_error(format!(
+                    "Scenario '{}' must have at least one step",
+                    scenario.name
                 ));
             }
 
-            if scenario.weight <= 0.0 {
-                return Err(YamlConfigError::Validation(
-                    format!("Scenario '{}' weight must be greater than 0", scenario.name)
-                ));
+            for (step_idx, step) in scenario.steps.iter().enumerate() {
+                ctx.enter(&format!("[{}]", step_idx));
+                ctx.enter("request");
+
+                // Validate HTTP method
+                ctx.enter("method");
+                if let Err(e) = HttpMethodValidator::validate(&step.request.method) {
+                    ctx.field_error(e.to_string());
+                }
+                ctx.exit();
+
+                // Validate path
+                ctx.enter("path");
+                if step.request.path.is_empty() {
+                    ctx.field_error("Request path cannot be empty".to_string());
+                }
+                ctx.exit();
+
+                ctx.exit(); // request
+                ctx.exit(); // step
             }
+
+            ctx.exit(); // steps
+            ctx.exit(); // scenario
         }
+        ctx.exit(); // scenarios
 
-        Ok(())
+        // Convert validation context to result
+        ctx.into_result()
+            .map_err(|e| YamlConfigError::Validation(e.to_string()))
     }
 
     /// Convert YAML scenarios to Scenario structs.
