@@ -7,6 +7,7 @@ use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
 use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server};
 use rust_loadtest::percentiles::{format_percentile_table, GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
+use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
 
 /// Initializes the tracing subscriber for structured logging.
@@ -64,6 +65,30 @@ fn print_percentile_report() {
 
     info!("{}", "=".repeat(120));
     info!("END OF PERCENTILE REPORT");
+    info!("{}\n", "=".repeat(120));
+}
+
+/// Prints per-scenario throughput statistics.
+fn print_throughput_report() {
+    info!("\n{}", "=".repeat(120));
+    info!("PER-SCENARIO THROUGHPUT REPORT (Issue #35)");
+    info!("{}", "=".repeat(120));
+
+    let all_stats = GLOBAL_THROUGHPUT_TRACKER.all_stats();
+
+    if !all_stats.is_empty() {
+        let table = format_throughput_table(&all_stats);
+        info!("{}", table);
+
+        let total_rps = GLOBAL_THROUGHPUT_TRACKER.total_throughput();
+        let elapsed = GLOBAL_THROUGHPUT_TRACKER.elapsed();
+        info!("\nTotal Throughput: {:.2} scenarios/sec over {:.1}s", total_rps, elapsed.as_secs_f64());
+    } else {
+        info!("\nNo scenario throughput data collected.\n");
+    }
+
+    info!("{}", "=".repeat(120));
+    info!("END OF THROUGHPUT REPORT");
     info!("{}\n", "=".repeat(120));
 }
 
@@ -197,6 +222,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Print percentile latency statistics (Issue #33)
     print_percentile_report();
+
+    // Print per-scenario throughput statistics (Issue #35)
+    print_throughput_report();
 
     // Gather and print final metrics
     let final_metrics_output = gather_metrics_string(&registry_arc);

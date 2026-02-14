@@ -9,5 +9,6 @@ pub mod load_models;
 pub mod metrics;
 pub mod percentiles;
 pub mod scenario;
+pub mod throughput;
 pub mod utils;
 pub mod worker;

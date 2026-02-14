@@ -87,6 +87,22 @@ lazy_static::lazy_static! {
                 .namespace(METRIC_NAMESPACE.as_str())
         ).unwrap();
 
+    // === Per-Scenario Throughput Metrics (Issue #35) ===
+
+    pub static ref SCENARIO_REQUESTS_TOTAL: IntCounterVec =
+        IntCounterVec::new(
+            Opts::new("scenario_requests_total", "Total number of requests per scenario")
+                .namespace(METRIC_NAMESPACE.as_str()),
+            &["scenario"]
+        ).unwrap();
+
+    pub static ref SCENARIO_THROUGHPUT_RPS: prometheus::GaugeVec =
+        prometheus::GaugeVec::new(
+            Opts::new("scenario_throughput_rps", "Current throughput (requests per second) per scenario")
+                .namespace(METRIC_NAMESPACE.as_str()),
+            &["scenario"]
+        ).unwrap();
+
     // === Error Categorization Metrics (Issue #34) ===
 
     pub static ref REQUEST_ERRORS_BY_CATEGORY: IntCounterVec =
@@ -112,6 +128,10 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     prometheus::default_registry().register(Box::new(SCENARIO_STEP_DURATION_SECONDS.clone()))?;
     prometheus::default_registry().register(Box::new(SCENARIO_ASSERTIONS_TOTAL.clone()))?;
     prometheus::default_registry().register(Box::new(CONCURRENT_SCENARIOS.clone()))?;
+
+    // Per-scenario throughput metrics
+    prometheus::default_registry().register(Box::new(SCENARIO_REQUESTS_TOTAL.clone()))?;
+    prometheus::default_registry().register(Box::new(SCENARIO_THROUGHPUT_RPS.clone()))?;
 
     // Error categorization metrics
     prometheus::default_registry().register(Box::new(REQUEST_ERRORS_BY_CATEGORY.clone()))?;

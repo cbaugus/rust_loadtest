@@ -6,9 +6,11 @@ use crate::executor::ScenarioExecutor;
 use crate::load_models::LoadModel;
 use crate::metrics::{
     CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_ERRORS_BY_CATEGORY, REQUEST_STATUS_CODES, REQUEST_TOTAL,
+    SCENARIO_REQUESTS_TOTAL, SCENARIO_THROUGHPUT_RPS,
 };
 use crate::percentiles::{GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
 use crate::scenario::{Scenario, ScenarioContext};
+use crate::throughput::GLOBAL_THROUGHPUT_TRACKER;
 
 /// Configuration for a worker task.
 pub struct WorkerConfig {
@@ -259,6 +261,15 @@ pub async fn run_scenario_worker(
             let label = format!("{}:{}", config.scenario.name, step.step_name);
             GLOBAL_STEP_PERCENTILES.record(&label, step.response_time_ms);
         }
+
+        // Record throughput (Issue #35)
+        SCENARIO_REQUESTS_TOTAL
+            .with_label_values(&[&config.scenario.name])
+            .inc();
+        GLOBAL_THROUGHPUT_TRACKER.record(
+            &config.scenario.name,
+            std::time::Duration::from_millis(result.total_time_ms)
+        );
 
         // Apply the calculated delay between scenario executions
         if delay_ms > 0 && delay_ms != u64::MAX {
