@@ -1,6 +1,7 @@
 use tokio::time::{self, Duration, Instant};
 use tracing::{debug, error, info};
 
+use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::errors::{CategorizedError, ErrorCategory};
 use crate::executor::ScenarioExecutor;
 use crate::load_models::LoadModel;
@@ -109,11 +110,15 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             }
         }
 
+        let actual_latency_ms = request_start_time.elapsed().as_millis() as u64;
         REQUEST_DURATION_SECONDS.observe(request_start_time.elapsed().as_secs_f64());
         CONCURRENT_REQUESTS.dec();
 
         // Record latency in percentile tracker (Issue #33)
-        GLOBAL_REQUEST_PERCENTILES.record_ms(latency_ms);
+        GLOBAL_REQUEST_PERCENTILES.record_ms(actual_latency_ms);
+
+        // Record connection pool statistics (Issue #36)
+        GLOBAL_POOL_STATS.record_request(actual_latency_ms);
 
         // Apply the calculated delay
         if delay_ms > 0 && delay_ms != u64::MAX {

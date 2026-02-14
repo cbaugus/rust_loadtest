@@ -111,6 +111,44 @@ lazy_static::lazy_static! {
                 .namespace(METRIC_NAMESPACE.as_str()),
             &["category"]  // category: client_error, server_error, network_error, timeout_error, tls_error, other_error
         ).unwrap();
+
+    // === Connection Pool Metrics (Issue #36) ===
+
+    pub static ref CONNECTION_POOL_MAX_IDLE: Gauge =
+        Gauge::with_opts(
+            Opts::new("connection_pool_max_idle_per_host", "Maximum idle connections per host (configuration)")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
+    pub static ref CONNECTION_POOL_IDLE_TIMEOUT_SECONDS: Gauge =
+        Gauge::with_opts(
+            Opts::new("connection_pool_idle_timeout_seconds", "Idle connection timeout in seconds (configuration)")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
+    pub static ref CONNECTION_POOL_REQUESTS_TOTAL: IntCounter =
+        IntCounter::with_opts(
+            Opts::new("connection_pool_requests_total", "Total requests tracked for pool analysis")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
+    pub static ref CONNECTION_POOL_LIKELY_REUSED: IntCounter =
+        IntCounter::with_opts(
+            Opts::new("connection_pool_likely_reused_total", "Requests that likely reused existing connections")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
+    pub static ref CONNECTION_POOL_LIKELY_NEW: IntCounter =
+        IntCounter::with_opts(
+            Opts::new("connection_pool_likely_new_total", "Requests that likely established new connections")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
+    pub static ref CONNECTION_POOL_REUSE_RATE: Gauge =
+        Gauge::with_opts(
+            Opts::new("connection_pool_reuse_rate_percent", "Percentage of requests reusing connections")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
 }
 
 /// Registers all metrics with the default Prometheus registry.
@@ -135,6 +173,14 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
 
     // Error categorization metrics
     prometheus::default_registry().register(Box::new(REQUEST_ERRORS_BY_CATEGORY.clone()))?;
+
+    // Connection pool metrics
+    prometheus::default_registry().register(Box::new(CONNECTION_POOL_MAX_IDLE.clone()))?;
+    prometheus::default_registry().register(Box::new(CONNECTION_POOL_IDLE_TIMEOUT_SECONDS.clone()))?;
+    prometheus::default_registry().register(Box::new(CONNECTION_POOL_REQUESTS_TOTAL.clone()))?;
+    prometheus::default_registry().register(Box::new(CONNECTION_POOL_LIKELY_REUSED.clone()))?;
+    prometheus::default_registry().register(Box::new(CONNECTION_POOL_LIKELY_NEW.clone()))?;
+    prometheus::default_registry().register(Box::new(CONNECTION_POOL_REUSE_RATE.clone()))?;
 
     Ok(())
 }
