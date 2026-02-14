@@ -138,9 +138,19 @@ Hot-reload, migration tools, documentation.
   - Thread-safe atomic counters
   - 44 comprehensive tests (10 unit + 34 integration)
   - Complete multi-scenario guide with real-world examples
+- [x] **Issue #44**: Config file hot-reload (P2, S) - **COMPLETE** ✅
+  - Branch: `feature/issue-44-config-hot-reload` (merged to phase2)
+  - 571 lines of implementation + 504 lines of tests + 661 lines of docs
+  - ConfigWatcher for file watching with notify crate
+  - HotReloadConfig for hot-reload behavior control
+  - ReloadNotifier for event-based config change handling
+  - Debouncing to prevent multiple reloads for rapid changes
+  - Full validation before applying config changes
+  - 22 comprehensive integration tests
+  - Complete hot-reload guide with examples and best practices
 
 ### 🚧 In Progress
-_None - 🎉 ✅ Wave 3 COMPLETE! (2/2 done)_
+_None - 🎉 ✅ Wave 4 in progress (1/3 done)_
 
 ### 📋 Todo - Wave 1 (Week 1)
 
@@ -213,13 +223,13 @@ _None - 🎉 ✅ Wave 3 COMPLETE! (2/2 done)_
 
 ### 📋 Todo - Wave 4 (Week 4)
 
-- [ ] **Issue #44**: Config file hot-reload (P2, S)
-  - [ ] File watcher for config changes
-  - [ ] Graceful reload without stopping test
-  - [ ] Validation before reload
-  - [ ] Reload notification/logging
-  - [ ] Development mode flag
-  - [ ] Tests
+- [x] **Issue #44**: Config file hot-reload (P2, S) ✅
+  - [x] File watcher for config changes
+  - [x] Graceful reload without stopping test
+  - [x] Validation before reload
+  - [x] Reload notification/logging
+  - [x] Development mode flag
+  - [x] Tests
 
 - [ ] **Issue #45**: Config examples and templates (P1, S)
   - [ ] Create example YAML configs
@@ -449,6 +459,6 @@ scenarios:
 ---
 
 **Last Updated**: 2026-02-11 (continued)
-**Status**: 🎉 ✅ Wave 3 COMPLETE! (2/2 issues done) - Starting Wave 4
-**Next Milestone**: Wave 4 - Issue #44 (Config File Hot-Reload)
+**Status**: 🚀 Wave 4 in progress (1/3 issues done)
+**Next Milestone**: Wave 4 - Issue #45 (Config Examples and Templates)
 **Branch Status**: phase2-advanced-features (active development)
