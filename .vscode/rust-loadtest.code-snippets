@@ -1,0 +1,110 @@
+{
+  "loadtest-basic": {
+    "prefix": "loadtest-basic",
+    "body": [
+      "version: \"1.0\"",
+      "",
+      "config:",
+      "  baseUrl: \"${1:https://api.example.com}\"",
+      "  workers: ${2:10}",
+      "  duration: \"${3:5m}\"",
+      "",
+      "load:",
+      "  model: \"${4|concurrent,rps,ramp|}\"",
+      "  ${5:target: 100}",
+      "",
+      "scenarios:",
+      "  - name: \"${6:My Scenario}\"",
+      "    steps:",
+      "      - request:",
+      "          method: \"${7|GET,POST,PUT,DELETE|}\"",
+      "          path: \"${8:/endpoint}\"",
+      "        assertions:",
+      "          - statusCode: ${9:200}"
+    ],
+    "description": "Basic load test configuration"
+  },
+  "loadtest-rps": {
+    "prefix": "loadtest-rps",
+    "body": [
+      "load:",
+      "  model: \"rps\"",
+      "  target: ${1:100}"
+    ],
+    "description": "RPS load model"
+  },
+  "loadtest-ramp": {
+    "prefix": "loadtest-ramp",
+    "body": [
+      "load:",
+      "  model: \"ramp\"",
+      "  min: ${1:10}",
+      "  max: ${2:500}",
+      "  rampDuration: \"${3:5m}\""
+    ],
+    "description": "Ramp load model"
+  },
+  "loadtest-scenario": {
+    "prefix": "loadtest-scenario",
+    "body": [
+      "- name: \"${1:Scenario Name}\"",
+      "  weight: ${2:100}",
+      "  steps:",
+      "    - name: \"${3:Step Name}\"",
+      "      request:",
+      "        method: \"${4|GET,POST,PUT,DELETE|}\"",
+      "        path: \"${5:/path}\"",
+      "      assertions:",
+      "        - statusCode: ${6:200}"
+    ],
+    "description": "Test scenario"
+  },
+  "loadtest-step": {
+    "prefix": "loadtest-step",
+    "body": [
+      "- name: \"${1:Step Name}\"",
+      "  request:",
+      "    method: \"${2|GET,POST,PUT,DELETE|}\"",
+      "    path: \"${3:/path}\"",
+      "    ${4:body: '${5:{}}'",
+      "  ${6:thinkTime: \"${7:2s}\"}",
+      "  assertions:",
+      "    - statusCode: ${8:200}"
+    ],
+    "description": "Test step"
+  },
+  "loadtest-assertion-status": {
+    "prefix": "loadtest-assertion-status",
+    "body": [
+      "- statusCode: ${1:200}"
+    ],
+    "description": "Status code assertion"
+  },
+  "loadtest-assertion-jsonpath": {
+    "prefix": "loadtest-assertion-jsonpath",
+    "body": [
+      "- jsonPath:",
+      "    path: \"${1:\\$.field}\"",
+      "    expected: \"${2:value}\""
+    ],
+    "description": "JSONPath assertion"
+  },
+  "loadtest-extract-jsonpath": {
+    "prefix": "loadtest-extract-jsonpath",
+    "body": [
+      "- name: \"${1:varName}\"",
+      "  jsonPath: \"${2:\\$.field}\""
+    ],
+    "description": "JSONPath extractor"
+  },
+  "loadtest-datafile": {
+    "prefix": "loadtest-datafile",
+    "body": [
+      "dataFile:",
+      "  path: \"${1:./data.csv}\"",
+      "  format: \"${2|csv,json|}\"",
+      "  strategy: \"${3|sequential,random,cycle|}\""
+    ],
+    "description": "External data file"
+  }
+}

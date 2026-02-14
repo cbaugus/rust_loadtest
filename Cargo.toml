@@ -27,6 +27,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] } # Lo
 hdrhistogram = "7.5" # For accurate percentile latency tracking
 csv = "1.3" # For CSV data file parsing
 notify = "6.0" # For file watching (hot-reload)
+schemars = "0.8" # For JSON Schema generation
 
 [dev-dependencies]
 wiremock = "0.5"
