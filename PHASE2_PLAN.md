@@ -102,9 +102,18 @@ Hot-reload, migration tools, documentation.
   - ConfigMerger implementing precedence (env > yaml > default)
   - ConfigPrecedence with comprehensive documentation
   - 35 comprehensive tests (17 unit + 18 integration)
+- [x] **Issue #40**: Environment variable overrides (P0, M) - **COMPLETE** ✅
+  - Branch: `feature/issue-40-env-var-overrides` (merged to phase2)
+  - 161 lines of implementation + 599 lines of tests + 348 lines of docs
+  - Config::from_yaml_with_env_overrides() method
+  - Complete env var mapping for all config fields
+  - Load model parameter and complete override support
+  - Invalid/empty env value fallback to YAML
+  - 20 comprehensive integration tests
+  - Full documentation with CI/CD patterns
 
 ### 🚧 In Progress
-_None - Wave 2 in progress (1/3 done)_
+_None - Wave 2 in progress (2/3 done)_
 
 ### 📋 Todo - Wave 1 (Week 1)
 
@@ -137,13 +146,13 @@ _None - Wave 2 in progress (1/3 done)_
   - [x] Test precedence order
   - [x] Document precedence rules
 
-- [ ] **Issue #40**: Environment variable overrides (P0, M)
-  - [ ] Map env vars to YAML config paths
-  - [ ] Support dot notation (e.g., CONFIG_LOAD_MODEL)
-  - [ ] Override specific YAML values with env vars
-  - [ ] Maintain backward compatibility
-  - [ ] Document override patterns
-  - [ ] Integration tests
+- [x] **Issue #40**: Environment variable overrides (P0, M) ✅
+  - [x] Map env vars to YAML config paths
+  - [x] Support dot notation (e.g., CONFIG_LOAD_MODEL)
+  - [x] Override specific YAML values with env vars
+  - [x] Maintain backward compatibility
+  - [x] Document override patterns
+  - [x] Integration tests
 
 - [ ] **Issue #41**: Config versioning (P2, M)
   - [ ] Add version field to config
@@ -413,6 +422,6 @@ scenarios:
 ---
 
 **Last Updated**: 2026-02-11 (continued)
-**Status**: 🚀 Wave 2 in progress (1/3 issues done)
-**Next Milestone**: Wave 2 - Issue #40 (Environment Variable Overrides)
+**Status**: 🚀 Wave 2 in progress (2/3 issues done)
+**Next Milestone**: Wave 2 - Issue #41 (Config Versioning)
 **Branch Status**: phase2-advanced-features (active development)
