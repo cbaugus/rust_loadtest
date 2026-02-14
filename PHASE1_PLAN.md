@@ -64,9 +64,25 @@ Additional features for comprehensive testing.
   - Branch: `feature/issue-33-percentile-metrics` (merged to develop)
   - HDR Histogram with P50/P90/P95/P99/P99.9 tracking
   - 11 unit tests + 11 integration tests
+- [x] **Issue #32**: All HTTP methods (P2, S) - **COMPLETE** ✅
+  - Branch: `feature/issue-32-all-http-methods` (merged to develop)
+  - PUT, PATCH, DELETE, HEAD, OPTIONS support
+  - 14 integration tests
+- [x] **Issue #31**: CSV data-driven testing (P1, M) - **COMPLETE** ✅
+  - Branch: `feature/issue-31-csv-data-driven` (merged to develop)
+  - CSV parser with round-robin distribution
+  - 17 unit tests + 7 integration tests
+- [x] **Issue #34**: Error categorization (P2, M) - **COMPLETE** ✅
+  - Branch: `feature/issue-34-error-categorization` (merged to develop)
+  - 6 error categories (ClientError, ServerError, NetworkError, etc.)
+  - 12 unit tests + 8 integration tests
+- [x] **Issue #35**: Per-scenario throughput (P2, S) - **COMPLETE** ✅
+  - Branch: `feature/issue-35-per-scenario-throughput` (merged to develop)
+  - ThroughputTracker with RPS per scenario
+  - 10 unit tests + 14 integration tests
 
 ### 🚧 In Progress
-_None - Wave 1 & Wave 2 complete! Wave 3: 1/6 done_
+_None - Wave 1 & Wave 2 complete! Wave 3: 5/6 done_
 
 ### 📋 Todo - Wave 1 (Weeks 1-3) - ✅ COMPLETE
 - [x] **Issue #26**: Multi-step scenario execution engine (P0, XL) ✅
@@ -139,27 +155,27 @@ _None - Wave 1 & Wave 2 complete! Wave 3: 1/6 done_
   - [x] Integration: Worker auto-records all latencies
 
 ### 📋 Todo - Wave 3 (Weeks 6-7)
-- [ ] **Issue #32**: All HTTP methods (P2, S)
-  - [ ] Implement: PUT, PATCH, DELETE support
-  - [ ] Implement: HEAD, OPTIONS support
-  - [ ] Tests: Cart update (PUT), delete (DELETE)
+- [x] **Issue #32**: All HTTP methods (P2, S) ✅
+  - [x] Implement: PUT, PATCH, DELETE support
+  - [x] Implement: HEAD, OPTIONS support
+  - [x] Tests: Cart update (PUT), delete (DELETE)
 
-- [ ] **Issue #31**: CSV data-driven testing (P1, M)
-  - [ ] Implement: CSV parser
-  - [ ] Implement: Data row iteration per VU
-  - [ ] Implement: Variable substitution from CSV
-  - [ ] Tests: Load user pool from CSV
+- [x] **Issue #31**: CSV data-driven testing (P1, M) ✅
+  - [x] Implement: CSV parser
+  - [x] Implement: Data row iteration per VU
+  - [x] Implement: Variable substitution from CSV
+  - [x] Tests: Load user pool from CSV
 
-- [ ] **Issue #34**: Error categorization (P2, M)
-  - [ ] Implement: Error type enum
-  - [ ] Implement: Error counting by category
-  - [ ] Implement: Error breakdown in metrics
-  - [ ] Tests: Distinguish 4xx vs 5xx vs network
+- [x] **Issue #34**: Error categorization (P2, M) ✅
+  - [x] Implement: Error type enum
+  - [x] Implement: Error counting by category
+  - [x] Implement: Error breakdown in metrics
+  - [x] Tests: Distinguish 4xx vs 5xx vs network
 
-- [ ] **Issue #35**: Per-scenario throughput (P2, S)
-  - [ ] Implement: Separate metrics per scenario
-  - [ ] Implement: RPS tracking per scenario
-  - [ ] Tests: Multi-scenario RPS reporting
+- [x] **Issue #35**: Per-scenario throughput (P2, S) ✅
+  - [x] Implement: Separate metrics per scenario
+  - [x] Implement: RPS tracking per scenario
+  - [x] Tests: Multi-scenario RPS reporting
 
 - [ ] **Issue #36**: Connection pooling stats (P3, S)
   - [ ] Implement: Active connection tracking
@@ -518,7 +534,158 @@ P50, P90, P95, P99, and P99.9 metrics for requests, scenarios, and individual st
 
 ---
 
-**Last Updated**: 2026-02-11 21:15 PST
-**Status**: ✅ Wave 1 & Wave 2 Complete! Wave 3: 1/6 done (Issue #33 complete)
-**Next Milestone**: Wave 3 - Continue with #32 (All HTTP Methods)
-**Branch Status**: feature/issue-33-percentile-metrics merged to develop
+### Issue #32: All HTTP Methods - 100% Complete ✅
+
+**Summary:**
+Extended HTTP method support beyond GET and POST to include PUT, PATCH, DELETE, HEAD,
+and OPTIONS. Enables full REST API testing capabilities.
+
+**What Was Built:**
+- Updated build_request() in worker.rs to support all 7 HTTP methods
+- Updated executor.rs to handle OPTIONS method
+- JSON body support for PUT and PATCH
+- 14 integration tests validating all methods
+
+**Merged to**: develop/phase1-scenario-engine
+
+---
+
+### Issue #31: CSV Data-Driven Testing - 100% Complete ✅
+
+**Summary:**
+Implemented CSV data source loading with round-robin distribution across virtual users.
+Enables parameterized testing with user credentials, product catalogs, or test data pools.
+
+**What Was Built:**
+
+1. **Core Module** (src/data_source.rs - 470 lines)
+   - CsvDataSource with from_file() constructor
+   - Round-robin row distribution with wrap-around
+   - Thread-safe with Arc<Mutex<>> for concurrent access
+   - Integration with ScenarioContext
+   - 17 unit tests
+
+2. **Integration Tests** (tests/csv_data_driven_tests.rs - 480 lines)
+   - 7 integration tests validating:
+     - CSV loading and parsing
+     - Round-robin distribution
+     - Variable substitution from CSV
+     - Concurrent access safety
+     - Multi-scenario CSV usage
+
+**Dependencies:**
+- csv = "1.3"
+
+**Merged to**: develop/phase1-scenario-engine
+
+---
+
+### Issue #34: Error Categorization - 100% Complete ✅
+
+**Summary:**
+Implemented comprehensive error categorization system that classifies errors into
+6 distinct categories: ClientError (4xx), ServerError (5xx), NetworkError, TimeoutError,
+TlsError, and OtherError. Provides detailed error analysis and troubleshooting capabilities.
+
+**What Was Built:**
+
+1. **Core Module** (src/errors.rs - 345 lines)
+   - ErrorCategory enum with 6 variants
+   - from_status_code() for HTTP errors
+   - from_reqwest_error() for client errors
+   - CategorizedError trait for custom errors
+   - 12 unit tests
+
+2. **Metrics Integration** (src/metrics.rs)
+   - REQUEST_ERRORS_BY_CATEGORY counter metric
+   - Error tracking in worker.rs
+
+3. **Integration Tests** (tests/error_categorization_tests.rs - 325 lines)
+   - 8 integration tests validating:
+     - HTTP error categorization (4xx, 5xx)
+     - Network error detection
+     - Timeout error detection
+     - Concurrent error tracking
+
+**Metrics Tracked:**
+- request_errors_by_category{category="client_error"}
+- request_errors_by_category{category="server_error"}
+- request_errors_by_category{category="network_error"}
+- request_errors_by_category{category="timeout_error"}
+- request_errors_by_category{category="tls_error"}
+- request_errors_by_category{category="other_error"}
+
+**Merged to**: develop/phase1-scenario-engine
+
+---
+
+### Issue #35: Per-Scenario Throughput - 100% Complete ✅
+
+**Summary:**
+Implemented per-scenario throughput tracking that calculates requests per second (RPS)
+independently for each scenario type. Enables performance comparison across different
+workload patterns and identification of scenario-specific bottlenecks.
+
+**What Was Built:**
+
+1. **Core Module** (src/throughput.rs - 319 lines)
+   - ThroughputStats struct with RPS, count, duration, avg time
+   - ThroughputTracker with per-scenario tracking
+   - GLOBAL_THROUGHPUT_TRACKER singleton
+   - format_throughput_table() for tabular output
+   - total_throughput() for aggregate RPS
+   - Thread-safe with Arc<Mutex<>>
+   - 10 unit tests
+
+2. **Metrics Integration** (src/metrics.rs)
+   - SCENARIO_REQUESTS_TOTAL: Counter per scenario
+   - SCENARIO_THROUGHPUT_RPS: Gauge per scenario
+
+3. **Worker Integration** (src/worker.rs)
+   - Auto-records scenario throughput after execution
+   - Tracks duration per scenario
+
+4. **Final Report** (src/main.rs)
+   - print_throughput_report() function
+   - Displays per-scenario RPS table
+   - Shows total aggregate throughput
+   - Displayed after percentile report
+
+5. **Integration Tests** (tests/per_scenario_throughput_tests.rs - 333 lines)
+   - 14 comprehensive integration tests validating:
+     - Basic throughput tracking
+     - RPS calculation accuracy
+     - Multiple scenario tracking
+     - Real scenario execution integration
+     - Concurrent access safety
+     - Table formatting
+     - Empty state handling
+
+**Metrics Tracked:**
+- scenario_requests_total{scenario="ScenarioName"}
+- scenario_throughput_rps{scenario="ScenarioName"}
+- Total throughput (sum across all scenarios)
+
+**Features:**
+- Per-scenario RPS calculation
+- Average time per scenario execution
+- Total requests per scenario
+- Elapsed time tracking
+- Reset capability for testing
+- Thread-safe concurrent access
+
+**Benefits:**
+- Compare performance across scenario types
+- Identify slow vs fast scenarios
+- Track throughput trends over time
+- Detailed performance analysis
+- Bottleneck identification
+
+**Merged to**: develop/phase1-scenario-engine
+
+---
+
+**Last Updated**: 2026-02-11 22:30 PST
+**Status**: ✅ Wave 1 & Wave 2 Complete! Wave 3: 5/6 done (Issues #33, #32, #31, #34, #35 complete)
+**Next Milestone**: Wave 3 - Issue #36 (Connection Pooling Stats) - Final Wave 3 issue!
+**Branch Status**: feature/issue-35-per-scenario-throughput merged to develop
