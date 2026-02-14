@@ -1,6 +1,7 @@
 pub mod assertions;
 pub mod client;
 pub mod config;
+pub mod config_validation;
 pub mod connection_pool;
 pub mod data_source;
 pub mod errors;
