@@ -1,6 +1,7 @@
 pub mod assertions;
 pub mod client;
 pub mod config;
+pub mod config_hot_reload;
 pub mod config_merge;
 pub mod config_validation;
 pub mod config_version;

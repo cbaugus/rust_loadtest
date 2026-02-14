@@ -596,6 +596,25 @@ impl YamlConfig {
     }
 }
 
+impl Default for YamlConfig {
+    fn default() -> Self {
+        Self {
+            version: "1.0".to_string(),
+            metadata: YamlMetadata::default(),
+            config: YamlGlobalConfig {
+                base_url: "https://example.com".to_string(),
+                timeout: YamlDuration::Seconds(30),
+                workers: 10,
+                duration: YamlDuration::Seconds(60),
+                skip_tls_verify: false,
+                custom_headers: None,
+            },
+            load: YamlLoadModel::Concurrent,
+            scenarios: vec![],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
