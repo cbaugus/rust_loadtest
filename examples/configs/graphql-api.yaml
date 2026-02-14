@@ -1,0 +1,220 @@
+# GraphQL API Load Test Template
+#
+# Load test for GraphQL APIs with queries, mutations, and subscriptions.
+# Demonstrates common GraphQL patterns and best practices.
+#
+# Features:
+#   - Simple queries
+#   - Complex nested queries
+#   - Mutations (create, update, delete)
+#   - Query variables
+#   - Error handling
+#
+# Usage:
+#   rust-loadtest --config graphql-api.yaml
+#
+# GraphQL Endpoint:
+#   Typically a single endpoint (e.g., /graphql) that handles all operations
+#
+# Customize:
+#   - Update GraphQL schema-specific queries
+#   - Adjust query complexity based on your schema
+#   - Add custom headers (authentication)
+
+version: "1.0"
+
+metadata:
+  name: "GraphQL API Load Test"
+  description: "Load test for GraphQL APIs with queries and mutations"
+  author: "GraphQL Team"
+  tags: ["graphql", "api", "queries", "mutations"]
+
+config:
+  baseUrl: "https://graphql.example.com"
+  timeout: "30s"
+  workers: 30
+  duration: "20m"
+
+load:
+  model: "rps"
+  target: 80
+
+scenarios:
+  # Scenario 1: Simple Queries (40%)
+  - name: "Simple GraphQL Queries"
+    weight: 40
+    steps:
+      - name: "Get User List"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "query { users(limit: 10) { id name email } }"
+            }
+        assertions:
+          - statusCode: 200
+          - jsonPath:
+              path: "$.data.users"
+              expected: "*"
+        extract:
+          - name: "userId"
+            jsonPath: "$.data.users[0].id"
+        thinkTime: "2s"
+
+      - name: "Get User Details"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "query { user(id: \"${userId}\") { id name email posts { id title } } }"
+            }
+        assertions:
+          - statusCode: 200
+          - jsonPath:
+              path: "$.data.user.id"
+              expected: "${userId}"
+        thinkTime: "3s"
+
+  # Scenario 2: Complex Nested Queries (25%)
+  - name: "Complex Nested Queries"
+    weight: 25
+    steps:
+      - name: "Get Posts with Comments"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "query { posts(limit: 5) { id title author { id name } comments { id text author { name } } likes } }"
+            }
+        assertions:
+          - statusCode: 200
+        extract:
+          - name: "postId"
+            jsonPath: "$.data.posts[0].id"
+        thinkTime: "2s"
+
+      - name: "Get Post Details"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "query GetPost($postId: ID!) { post(id: $postId) { id title content author { id name avatar } comments { id text createdAt author { name } } tags } }",
+              "variables": { "postId": "${postId}" }
+            }
+        assertions:
+          - statusCode: 200
+        thinkTime: "3s"
+
+  # Scenario 3: Mutations (25%)
+  - name: "GraphQL Mutations"
+    weight: 25
+    steps:
+      - name: "Create Post"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "mutation CreatePost($input: CreatePostInput!) { createPost(input: $input) { id title content author { id name } } }",
+              "variables": {
+                "input": {
+                  "title": "Load Test Post",
+                  "content": "This post was created during load testing",
+                  "tags": ["test", "loadtest"]
+                }
+              }
+            }
+        assertions:
+          - statusCode: 200
+          - jsonPath:
+              path: "$.data.createPost.id"
+              expected: "*"
+        extract:
+          - name: "newPostId"
+            jsonPath: "$.data.createPost.id"
+        thinkTime: "2s"
+
+      - name: "Update Post"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "mutation UpdatePost($id: ID!, $input: UpdatePostInput!) { updatePost(id: $id, input: $input) { id title content } }",
+              "variables": {
+                "id": "${newPostId}",
+                "input": {
+                  "title": "Updated Load Test Post"
+                }
+              }
+            }
+        assertions:
+          - statusCode: 200
+        thinkTime: "2s"
+
+      - name: "Add Comment"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "mutation AddComment($postId: ID!, $text: String!) { addComment(postId: $postId, text: $text) { id text author { name } } }",
+              "variables": {
+                "postId": "${newPostId}",
+                "text": "Great post!"
+              }
+            }
+        assertions:
+          - statusCode: 200
+        thinkTime: "3s"
+
+      - name: "Delete Post"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "mutation DeletePost($id: ID!) { deletePost(id: $id) { success message } }",
+              "variables": {
+                "id": "${newPostId}"
+              }
+            }
+        assertions:
+          - statusCode: 200
+          - jsonPath:
+              path: "$.data.deletePost.success"
+              expected: "true"
+
+  # Scenario 4: Search and Filter (10%)
+  - name: "GraphQL Search and Filter"
+    weight: 10
+    steps:
+      - name: "Search Posts"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "query SearchPosts($searchTerm: String!) { searchPosts(query: $searchTerm) { id title content author { name } } }",
+              "variables": {
+                "searchTerm": "test"
+              }
+            }
+        assertions:
+          - statusCode: 200
+        thinkTime: "2s"
+
+      - name: "Filter Posts by Tag"
+        request:
+          method: "POST"
+          path: "/graphql"
+          body: >
+            {
+              "query": "query { posts(filter: { tags: [\"technology\"] }) { id title tags } }"
+            }
+        assertions:
+          - statusCode: 200

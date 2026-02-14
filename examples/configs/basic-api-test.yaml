@@ -1,0 +1,55 @@
+# Basic API Load Test Template
+#
+# A simple load test configuration for testing a single API endpoint.
+# Perfect for getting started or testing basic API health and performance.
+#
+# Usage:
+#   rust-loadtest --config basic-api-test.yaml
+#
+# Customize:
+#   - Change baseUrl to your API endpoint
+#   - Adjust workers and duration for your needs
+#   - Modify the target RPS for desired load
+
+version: "1.0"
+
+metadata:
+  name: "Basic API Load Test"
+  description: "Simple load test for a single API endpoint"
+  author: "Load Test Team"
+  tags: ["basic", "api", "health-check"]
+
+config:
+  # Base URL of the API to test
+  baseUrl: "https://api.example.com"
+
+  # Request timeout (30 seconds)
+  timeout: "30s"
+
+  # Number of concurrent workers
+  workers: 10
+
+  # Test duration
+  duration: "5m"
+
+  # Skip TLS certificate verification (for testing only)
+  skipTlsVerify: false
+
+load:
+  # Use RPS (requests per second) model
+  model: "rps"
+
+  # Target 100 requests per second
+  target: 100
+
+scenarios:
+  - name: "API Health Check"
+    weight: 100
+    steps:
+      - name: "Check API Status"
+        request:
+          method: "GET"
+          path: "/health"
+        assertions:
+          - statusCode: 200
+          - responseTime: "1s"

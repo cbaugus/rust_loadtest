@@ -1,0 +1,186 @@
+# Authenticated API Load Test Template
+#
+# Load test for APIs requiring authentication (JWT, API keys, OAuth).
+# Demonstrates authentication flows and authenticated requests.
+#
+# Authentication Methods:
+#   - JWT tokens (login once, use for all requests)
+#   - API keys (static header)
+#   - OAuth 2.0 (token refresh)
+#   - Basic auth
+#
+# Usage:
+#   rust-loadtest --config authenticated-api.yaml
+#
+# Environment Variables:
+#   API_KEY - Set your API key
+#   USERNAME - Test user username
+#   PASSWORD - Test user password
+#
+# Customize:
+#   - Update authentication endpoint
+#   - Modify token extraction logic
+#   - Add custom auth headers
+
+version: "1.0"
+
+metadata:
+  name: "Authenticated API Load Test"
+  description: "Load test for APIs requiring authentication"
+  author: "Security Team"
+  tags: ["authentication", "jwt", "api-key", "oauth"]
+
+config:
+  baseUrl: "https://api.example.com"
+  timeout: "30s"
+  workers: 25
+  duration: "20m"
+
+  # Custom headers for API key authentication
+  customHeaders: "X-API-Key: your-api-key-here"
+
+load:
+  model: "rps"
+  target: 75
+
+scenarios:
+  # Scenario 1: JWT Authentication Flow (60% of traffic)
+  - name: "JWT Authenticated Requests"
+    weight: 60
+    steps:
+      - name: "User Login"
+        request:
+          method: "POST"
+          path: "/auth/login"
+          body: '{"username": "testuser@example.com", "password": "securePassword123"}'
+        assertions:
+          - statusCode: 200
+          - jsonPath:
+              path: "$.token"
+              expected: "*"
+        extract:
+          - name: "jwtToken"
+            jsonPath: "$.token"
+          - name: "userId"
+            jsonPath: "$.user.id"
+        thinkTime: "1s"
+
+      - name: "Get User Data"
+        request:
+          method: "GET"
+          path: "/users/${userId}"
+          headers:
+            Authorization: "Bearer ${jwtToken}"
+        assertions:
+          - statusCode: 200
+          - jsonPath:
+              path: "$.id"
+              expected: "${userId}"
+        thinkTime: "2s"
+
+      - name: "List Resources"
+        request:
+          method: "GET"
+          path: "/api/resources"
+          headers:
+            Authorization: "Bearer ${jwtToken}"
+        assertions:
+          - statusCode: 200
+        thinkTime: "2s"
+
+      - name: "Create Resource"
+        request:
+          method: "POST"
+          path: "/api/resources"
+          headers:
+            Authorization: "Bearer ${jwtToken}"
+          body: '{"name": "test-resource", "description": "Created by load test"}'
+        assertions:
+          - statusCode: 201
+        extract:
+          - name: "resourceId"
+            jsonPath: "$.id"
+        thinkTime: "3s"
+
+      - name: "Update Resource"
+        request:
+          method: "PUT"
+          path: "/api/resources/${resourceId}"
+          headers:
+            Authorization: "Bearer ${jwtToken}"
+          body: '{"name": "updated-resource"}'
+        assertions:
+          - statusCode: 200
+
+  # Scenario 2: API Key Authentication (30% of traffic)
+  - name: "API Key Authenticated Requests"
+    weight: 30
+    steps:
+      - name: "List Public Data"
+        request:
+          method: "GET"
+          path: "/public/data"
+          # API key automatically added from customHeaders in config
+        assertions:
+          - statusCode: 200
+        thinkTime: "2s"
+
+      - name: "Get Specific Item"
+        request:
+          method: "GET"
+          path: "/public/data/123"
+        assertions:
+          - statusCode: 200
+        extract:
+          - name: "itemId"
+            jsonPath: "$.id"
+        thinkTime: "2s"
+
+  # Scenario 3: OAuth 2.0 Token Refresh (10% of traffic)
+  - name: "OAuth Token Refresh Flow"
+    weight: 10
+    steps:
+      - name: "Get Access Token"
+        request:
+          method: "POST"
+          path: "/oauth/token"
+          body: '{"grant_type": "client_credentials", "client_id": "test-client", "client_secret": "test-secret"}'
+        assertions:
+          - statusCode: 200
+        extract:
+          - name: "accessToken"
+            jsonPath: "$.access_token"
+          - name: "refreshToken"
+            jsonPath: "$.refresh_token"
+        thinkTime: "1s"
+
+      - name: "Use Access Token"
+        request:
+          method: "GET"
+          path: "/api/protected-resource"
+          headers:
+            Authorization: "Bearer ${accessToken}"
+        assertions:
+          - statusCode: 200
+        thinkTime: "3s"
+
+      - name: "Refresh Token"
+        request:
+          method: "POST"
+          path: "/oauth/token"
+          body: '{"grant_type": "refresh_token", "refresh_token": "${refreshToken}"}'
+        assertions:
+          - statusCode: 200
+        extract:
+          - name: "newAccessToken"
+            jsonPath: "$.access_token"
+        thinkTime: "2s"
+
+      - name: "Use Refreshed Token"
+        request:
+          method: "GET"
+          path: "/api/protected-resource"
+          headers:
+            Authorization: "Bearer ${newAccessToken}"
+        assertions:
+          - statusCode: 200
