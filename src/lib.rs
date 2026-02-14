@@ -1,6 +1,7 @@
 pub mod assertions;
 pub mod client;
 pub mod config;
+pub mod data_source;
 pub mod executor;
 pub mod extractor;
 pub mod load_models;

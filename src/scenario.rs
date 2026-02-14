@@ -244,6 +244,30 @@ impl ScenarioContext {
         self.variables.insert(name, value);
     }
 
+    /// Load variables from a CSV data row (Issue #31).
+    ///
+    /// This copies all key-value pairs from the data row into the context,
+    /// making them available for variable substitution in scenario steps.
+    ///
+    /// # Example
+    /// ```
+    /// use rust_loadtest::scenario::ScenarioContext;
+    /// use std::collections::HashMap;
+    ///
+    /// let mut ctx = ScenarioContext::new();
+    /// let mut data = HashMap::new();
+    /// data.insert("username".to_string(), "testuser".to_string());
+    /// data.insert("password".to_string(), "testpass".to_string());
+    ///
+    /// ctx.load_data_row(&data);
+    /// assert_eq!(ctx.get_variable("username"), Some(&"testuser".to_string()));
+    /// ```
+    pub fn load_data_row(&mut self, data: &HashMap<String, String>) {
+        for (key, value) in data {
+            self.variables.insert(key.clone(), value.clone());
+        }
+    }
+
     /// Get a previously stored variable.
     pub fn get_variable(&self, name: &str) -> Option<&String> {
         self.variables.get(name)
