@@ -11,6 +11,7 @@ pub mod executor;
 pub mod extractor;
 pub mod load_models;
 pub mod metrics;
+pub mod multi_scenario;
 pub mod percentiles;
 pub mod scenario;
 pub mod throughput;
