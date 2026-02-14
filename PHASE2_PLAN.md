@@ -89,9 +89,15 @@ Hot-reload, migration tools, documentation.
   - 629 lines of implementation + 705 lines of tests
   - Full YAML parsing with validation
   - 22 comprehensive integration tests
+- [x] **Issue #38**: Config schema and validation (P0, L) - **COMPLETE** ✅
+  - Branch: `feature/issue-38-config-schema-validation` (merged to phase2)
+  - 540 lines of validation + 569 lines of tests
+  - Enhanced validation with field-level errors
+  - JSON Schema export for tooling
+  - 24 comprehensive tests
 
 ### 🚧 In Progress
-_None - Wave 1: 1/2 done_
+_None - ✅ Wave 1 Complete! (2/2 done)_
 
 ### 📋 Todo - Wave 1 (Week 1)
 
@@ -105,15 +111,15 @@ _None - Wave 1: 1/2 done_
   - [x] Unit tests for YAML parsing
   - [x] Integration tests
 
-- [ ] **Issue #38**: Config schema and validation (P0, L)
-  - [ ] Define comprehensive ConfigSchema
-  - [ ] Add validation rules (required fields, ranges, formats)
-  - [ ] URL validation
-  - [ ] Duration format validation
-  - [ ] Enum validation (load models, HTTP methods)
-  - [ ] Custom validation errors with helpful messages
-  - [ ] Unit tests for validation
-  - [ ] Integration tests
+- [x] **Issue #38**: Config schema and validation (P0, L) ✅
+  - [x] Define comprehensive ConfigSchema
+  - [x] Add validation rules (required fields, ranges, formats)
+  - [x] URL validation
+  - [x] Duration format validation
+  - [x] Enum validation (load models, HTTP methods)
+  - [x] Custom validation errors with helpful messages
+  - [x] Unit tests for validation
+  - [x] Integration tests
 
 ### 📋 Todo - Wave 2 (Week 2)
 
@@ -399,7 +405,7 @@ scenarios:
 
 ---
 
-**Last Updated**: 2026-02-14 15:45 PST
-**Status**: ✅ Wave 1: 1/2 complete! Issue #37 done
-**Next Milestone**: Issue #38 (Config Schema and Validation)
+**Last Updated**: 2026-02-14 16:30 PST
+**Status**: 🎉 ✅ Wave 1 COMPLETE! (2/2 issues done) - Starting Wave 2
+**Next Milestone**: Wave 2 - Issue #39 (Default Value Merging)
 **Branch Status**: phase2-advanced-features (active development)
