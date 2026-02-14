@@ -84,22 +84,26 @@ Hot-reload, migration tools, documentation.
 ## Issues and Progress Tracker
 
 ### ✅ Completed
-_None yet - Phase 2 just started!_
+- [x] **Issue #37**: YAML config file parser (P0, M) - **COMPLETE** ✅
+  - Branch: `feature/issue-37-yaml-config-parser` (merged to phase2)
+  - 629 lines of implementation + 705 lines of tests
+  - Full YAML parsing with validation
+  - 22 comprehensive integration tests
 
 ### 🚧 In Progress
-_None yet_
+_None - Wave 1: 1/2 done_
 
 ### 📋 Todo - Wave 1 (Week 1)
 
-- [ ] **Issue #37**: YAML config file parser (P0, M)
-  - [ ] Add serde_yaml dependency
-  - [ ] Create Config struct for YAML format
-  - [ ] Implement from_yaml() method
-  - [ ] Support loading from file path
-  - [ ] Support loading from string (testing)
-  - [ ] Backward compatibility with env vars
-  - [ ] Unit tests for YAML parsing
-  - [ ] Integration tests
+- [x] **Issue #37**: YAML config file parser (P0, M) ✅
+  - [x] Add serde_yaml dependency
+  - [x] Create Config struct for YAML format
+  - [x] Implement from_yaml() method
+  - [x] Support loading from file path
+  - [x] Support loading from string (testing)
+  - [x] Backward compatibility with env vars (ready)
+  - [x] Unit tests for YAML parsing
+  - [x] Integration tests
 
 - [ ] **Issue #38**: Config schema and validation (P0, L)
   - [ ] Define comprehensive ConfigSchema
@@ -395,7 +399,7 @@ scenarios:
 
 ---
 
-**Last Updated**: 2026-02-14 14:30 PST
-**Status**: 🚀 Phase 2 Started! Wave 1: 0/2 issues
-**Next Milestone**: Issue #37 (YAML Config Parser)
+**Last Updated**: 2026-02-14 15:45 PST
+**Status**: ✅ Wave 1: 1/2 complete! Issue #37 done
+**Next Milestone**: Issue #38 (Config Schema and Validation)
 **Branch Status**: phase2-advanced-features (active development)
