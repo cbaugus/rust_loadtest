@@ -1,10 +1,11 @@
 use tokio::time::{self, Duration, Instant};
 use tracing::{debug, error, info};
 
+use crate::errors::{CategorizedError, ErrorCategory};
 use crate::executor::ScenarioExecutor;
 use crate::load_models::LoadModel;
 use crate::metrics::{
-    CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_STATUS_CODES, REQUEST_TOTAL,
+    CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_ERRORS_BY_CATEGORY, REQUEST_STATUS_CODES, REQUEST_TOTAL,
 };
 use crate::percentiles::{GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
 use crate::scenario::{Scenario, ScenarioContext};
@@ -72,6 +73,13 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
                 let status_str = status.to_string();
                 REQUEST_STATUS_CODES.with_label_values(&[&status_str]).inc();
 
+                // Categorize HTTP errors (Issue #34)
+                if let Some(category) = ErrorCategory::from_status_code(status) {
+                    REQUEST_ERRORS_BY_CATEGORY
+                        .with_label_values(&[category.label()])
+                        .inc();
+                }
+
                 debug!(
                     task_id = config.task_id,
                     url = %config.url,
@@ -82,10 +90,18 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             }
             Err(e) => {
                 REQUEST_STATUS_CODES.with_label_values(&["error"]).inc();
+
+                // Categorize request error (Issue #34)
+                let error_category = ErrorCategory::from_reqwest_error(&e);
+                REQUEST_ERRORS_BY_CATEGORY
+                    .with_label_values(&[error_category.label()])
+                    .inc();
+
                 error!(
                     task_id = config.task_id,
                     url = %config.url,
                     error = %e,
+                    error_category = %error_category.label(),
                     "Request failed"
                 );
             }
