@@ -13,3 +13,4 @@ pub mod scenario;
 pub mod throughput;
 pub mod utils;
 pub mod worker;
+pub mod yaml_config;
