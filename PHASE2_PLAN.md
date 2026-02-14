@@ -120,9 +120,18 @@ Hot-reload, migration tools, documentation.
   - Integrated with YamlConfig validation
   - 55 comprehensive tests (30 unit + 25 integration)
   - Complete versioning guide with migration examples
+- [x] **Issue #42**: Scenario YAML definitions (P0, XL) - **COMPLETE** ✅
+  - Branch: `feature/issue-42-scenario-yaml-definitions` (merged to phase2)
+  - 78 lines of implementation + 695 lines of tests + 686 lines of docs
+  - Data file support (CSV, JSON) with strategies (sequential, random, cycle)
+  - Random think time (min/max range) for realistic user behavior
+  - Scenario-level config overrides (timeout, retry logic)
+  - Enhanced YamlScenario with dataFile and config fields
+  - 23 comprehensive integration tests
+  - Complete scenario guide with real-world examples
 
 ### 🚧 In Progress
-_None - 🎉 ✅ Wave 2 COMPLETE! (3/3 done)_
+_None - Wave 3 in progress (1/2 done)_
 
 ### 📋 Todo - Wave 1 (Week 1)
 
@@ -172,18 +181,18 @@ _None - 🎉 ✅ Wave 2 COMPLETE! (3/3 done)_
 
 ### 📋 Todo - Wave 3 (Week 3)
 
-- [ ] **Issue #42**: Scenario YAML definitions (P0, XL)
-  - [ ] Scenario block in YAML
-  - [ ] Multiple scenarios per file
-  - [ ] Scenario weighting for mixed traffic
-  - [ ] Step definitions in YAML
-  - [ ] Request config in YAML
-  - [ ] Assertions in YAML
-  - [ ] Extractors in YAML
-  - [ ] Think times in YAML
-  - [ ] Data files in YAML
-  - [ ] Integration with existing executor
-  - [ ] Comprehensive tests
+- [x] **Issue #42**: Scenario YAML definitions (P0, XL) ✅
+  - [x] Scenario block in YAML
+  - [x] Multiple scenarios per file
+  - [x] Scenario weighting for mixed traffic
+  - [x] Step definitions in YAML
+  - [x] Request config in YAML
+  - [x] Assertions in YAML
+  - [x] Extractors in YAML
+  - [x] Think times in YAML (fixed and random)
+  - [x] Data files in YAML (CSV, JSON)
+  - [x] Integration with existing executor
+  - [x] Comprehensive tests
 
 - [ ] **Issue #43**: Multi-scenario execution (P0, L)
   - [ ] Load multiple scenarios from config
@@ -431,6 +440,6 @@ scenarios:
 ---
 
 **Last Updated**: 2026-02-11 (continued)
-**Status**: 🎉 ✅ Wave 2 COMPLETE! (3/3 issues done) - Starting Wave 3
-**Next Milestone**: Wave 3 - Issue #42 (Scenario YAML Definitions)
+**Status**: 🚀 Wave 3 in progress (1/2 issues done)
+**Next Milestone**: Wave 3 - Issue #43 (Multi-Scenario Execution)
 **Branch Status**: phase2-advanced-features (active development)
