@@ -148,9 +148,23 @@ Hot-reload, migration tools, documentation.
   - Full validation before applying config changes
   - 22 comprehensive integration tests
   - Complete hot-reload guide with examples and best practices
+- [x] **Issue #45**: Config examples and templates (P1, S) - **COMPLETE** ✅
+  - Branch: `feature/issue-45-config-examples` (merged to phase2)
+  - 8 production-ready YAML templates + 2 data files + 450 lines of tests + 1276 lines of docs
+  - basic-api-test.yaml (simple endpoint testing)
+  - ecommerce-scenario.yaml (multi-step shopping flow with weighted scenarios)
+  - stress-test.yaml (high-load capacity testing, 10-1000 RPS)
+  - data-driven-test.yaml (CSV/JSON data file usage)
+  - authenticated-api.yaml (JWT, API key, OAuth flows)
+  - microservices-test.yaml (distributed service testing)
+  - graphql-api.yaml (GraphQL queries and mutations)
+  - spike-test.yaml (sudden traffic spike resilience testing)
+  - Example data files (users.csv, products.json)
+  - 19 validation tests
+  - Comprehensive template guide and usage documentation
 
 ### 🚧 In Progress
-_None - 🎉 ✅ Wave 4 in progress (1/3 done)_
+_None - 🎉 ✅ Wave 4 in progress (2/3 done)_
 
 ### 📋 Todo - Wave 1 (Week 1)
 
@@ -231,13 +245,13 @@ _None - 🎉 ✅ Wave 4 in progress (1/3 done)_
   - [x] Development mode flag
   - [x] Tests
 
-- [ ] **Issue #45**: Config examples and templates (P1, S)
-  - [ ] Create example YAML configs
-  - [ ] Basic API test template
-  - [ ] E-commerce scenario template
-  - [ ] Stress test template
-  - [ ] Documentation for each template
-  - [ ] Template validation
+- [x] **Issue #45**: Config examples and templates (P1, S) ✅
+  - [x] Create example YAML configs
+  - [x] Basic API test template
+  - [x] E-commerce scenario template
+  - [x] Stress test template
+  - [x] Documentation for each template
+  - [x] Template validation
 
 - [ ] **Issue #46**: Config documentation generator (P2, M)
   - [ ] Auto-generate schema docs from code
@@ -459,6 +473,6 @@ scenarios:
 ---
 
 **Last Updated**: 2026-02-11 (continued)
-**Status**: 🚀 Wave 4 in progress (1/3 issues done)
-**Next Milestone**: Wave 4 - Issue #45 (Config Examples and Templates)
+**Status**: 🚀 Wave 4 in progress (2/3 issues done)
+**Next Milestone**: Wave 4 - Issue #46 (Config Documentation Generator)
 **Branch Status**: phase2-advanced-features (active development)
