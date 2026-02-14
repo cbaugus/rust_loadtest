@@ -147,10 +147,86 @@ pub struct YamlScenario {
     pub weight: f64,
 
     pub steps: Vec<YamlStep>,
+
+    /// Optional data file for data-driven testing
+    #[serde(rename = "dataFile")]
+    pub data_file: Option<YamlDataFile>,
+
+    /// Optional scenario-level configuration overrides
+    #[serde(default)]
+    pub config: YamlScenarioConfig,
+}
+
+/// Data file configuration for data-driven scenarios.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct YamlDataFile {
+    /// Path to the data file (CSV or JSON)
+    pub path: String,
+
+    /// Data file format (csv, json)
+    #[serde(default = "default_data_format")]
+    pub format: String,
+
+    /// How to iterate through data (sequential, random, cycle)
+    #[serde(default = "default_data_strategy")]
+    pub strategy: String,
+}
+
+fn default_data_format() -> String {
+    "csv".to_string()
+}
+
+fn default_data_strategy() -> String {
+    "sequential".to_string()
+}
+
+/// Scenario-level configuration overrides.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct YamlScenarioConfig {
+    /// Override global timeout for this scenario
+    pub timeout: Option<YamlDuration>,
+
+    /// Number of times to retry failed requests in this scenario
+    #[serde(rename = "retryCount")]
+    pub retry_count: Option<u32>,
+
+    /// Delay between retries
+    #[serde(rename = "retryDelay")]
+    pub retry_delay: Option<YamlDuration>,
 }
 
 fn default_weight() -> f64 {
     1.0
+}
+
+/// Think time configuration in YAML.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum YamlThinkTime {
+    /// Fixed think time (e.g., "3s")
+    Fixed(YamlDuration),
+
+    /// Random think time with min/max range
+    Random {
+        min: YamlDuration,
+        max: YamlDuration,
+    },
+}
+
+impl YamlThinkTime {
+    pub fn to_think_time(&self) -> Result<crate::scenario::ThinkTime, YamlConfigError> {
+        match self {
+            YamlThinkTime::Fixed(duration) => {
+                Ok(crate::scenario::ThinkTime::Fixed(duration.to_std_duration()?))
+            }
+            YamlThinkTime::Random { min, max } => {
+                Ok(crate::scenario::ThinkTime::Random {
+                    min: min.to_std_duration()?,
+                    max: max.to_std_duration()?,
+                })
+            }
+        }
+    }
 }
 
 /// Step definition in YAML.
@@ -167,7 +243,7 @@ pub struct YamlStep {
     pub assertions: Vec<YamlAssertion>,
 
     #[serde(rename = "thinkTime")]
-    pub think_time: Option<YamlDuration>,
+    pub think_time: Option<YamlThinkTime>,
 }
 
 /// Request configuration in YAML.
@@ -440,7 +516,7 @@ impl YamlConfig {
 
                 // Convert think time
                 let think_time = if let Some(think_time_yaml) = &yaml_step.think_time {
-                    Some(ThinkTime::Fixed(think_time_yaml.to_std_duration()?))
+                    Some(think_time_yaml.to_think_time()?)
                 } else {
                     None
                 };
