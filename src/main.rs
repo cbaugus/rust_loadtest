@@ -6,6 +6,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
 use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server};
+use rust_loadtest::percentiles::{format_percentile_table, GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
 
 /// Initializes the tracing subscriber for structured logging.
@@ -29,6 +30,41 @@ fn init_tracing() {
             .with_thread_ids(true)
             .init();
     }
+}
+
+/// Prints percentile latency statistics.
+fn print_percentile_report() {
+    info!("\n{}", "=".repeat(120));
+    info!("PERCENTILE LATENCY REPORT (Issue #33)");
+    info!("{}", "=".repeat(120));
+
+    // Single request percentiles
+    if let Some(request_stats) = GLOBAL_REQUEST_PERCENTILES.stats() {
+        info!("\n## Single Request Latencies\n");
+        info!("{}", request_stats.format());
+        info!("");
+    } else {
+        info!("\n## Single Request Latencies\n");
+        info!("No single request data collected.\n");
+    }
+
+    // Scenario percentiles
+    let scenario_stats = GLOBAL_SCENARIO_PERCENTILES.all_stats();
+    if !scenario_stats.is_empty() {
+        let scenario_table = format_percentile_table("Scenario Latencies", &scenario_stats);
+        info!("{}", scenario_table);
+    }
+
+    // Step percentiles
+    let step_stats = GLOBAL_STEP_PERCENTILES.all_stats();
+    if !step_stats.is_empty() {
+        let step_table = format_percentile_table("Step Latencies", &step_stats);
+        info!("{}", step_table);
+    }
+
+    info!("{}", "=".repeat(120));
+    info!("END OF PERCENTILE REPORT");
+    info!("{}\n", "=".repeat(120));
 }
 
 /// Prints helpful configuration documentation.
@@ -158,6 +194,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Brief pause to allow in-flight metrics to be updated
     tokio::time::sleep(Duration::from_secs(2)).await;
     info!("Collecting final metrics");
+
+    // Print percentile latency statistics (Issue #33)
+    print_percentile_report();
 
     // Gather and print final metrics
     let final_metrics_output = gather_metrics_string(&registry_arc);

@@ -5,6 +5,7 @@ pub mod executor;
 pub mod extractor;
 pub mod load_models;
 pub mod metrics;
+pub mod percentiles;
 pub mod scenario;
 pub mod utils;
 pub mod worker;

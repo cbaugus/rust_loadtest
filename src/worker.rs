@@ -6,6 +6,7 @@ use crate::load_models::LoadModel;
 use crate::metrics::{
     CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_STATUS_CODES, REQUEST_TOTAL,
 };
+use crate::percentiles::{GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
 use crate::scenario::{Scenario, ScenarioContext};
 
 /// Configuration for a worker task.
@@ -63,6 +64,8 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         // Build and send request
         let req = build_request(&client, &config);
 
+        let latency_ms = request_start_time.elapsed().as_millis() as u64;
+
         match req.send().await {
             Ok(response) => {
                 let status = response.status().as_u16();
@@ -73,7 +76,7 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
                     task_id = config.task_id,
                     url = %config.url,
                     status_code = status,
-                    latency_ms = request_start_time.elapsed().as_millis() as u64,
+                    latency_ms = latency_ms,
                     "Request completed"
                 );
             }
@@ -90,6 +93,9 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
 
         REQUEST_DURATION_SECONDS.observe(request_start_time.elapsed().as_secs_f64());
         CONCURRENT_REQUESTS.dec();
+
+        // Record latency in percentile tracker (Issue #33)
+        GLOBAL_REQUEST_PERCENTILES.record_ms(latency_ms);
 
         // Apply the calculated delay
         if delay_ms > 0 && delay_ms != u64::MAX {
@@ -207,6 +213,15 @@ pub async fn run_scenario_worker(
             steps_completed = result.steps_completed,
             "Scenario execution completed"
         );
+
+        // Record scenario latency in percentile tracker (Issue #33)
+        GLOBAL_SCENARIO_PERCENTILES.record(&config.scenario.name, result.total_time_ms);
+
+        // Record individual step latencies (Issue #33)
+        for step in &result.steps {
+            let label = format!("{}:{}", config.scenario.name, step.step_name);
+            GLOBAL_STEP_PERCENTILES.record(&label, step.response_time_ms);
+        }
 
         // Apply the calculated delay between scenario executions
         if delay_ms > 0 && delay_ms != u64::MAX {
