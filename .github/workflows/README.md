@@ -12,7 +12,7 @@ This repository has two CI/CD pipelines:
 
 ### 2. Dev Branch Pipeline (`dev-build-cicd.yaml`)
 - **Triggers on:** Push to `dev` branch, PRs to dev
-- **Builds:** Single Docker image with multi-arch support
+- **Builds:** Single Docker image (amd64 only for speed)
 - **Features:** Fast builds with caching, artifact attestation
 - **Tags:** `dev`, `dev-<sha>`
 
@@ -62,7 +62,7 @@ This repository has two CI/CD pipelines:
 - Manual trigger via GitHub UI
 
 **Process:**
-1. Build multi-arch Docker image
+1. Build Docker image (amd64 only)
 2. Generate artifact attestation
 3. Push to Docker Hub with caching
 
@@ -70,9 +70,8 @@ This repository has two CI/CD pipelines:
 - `cbaugus/rust_loadtest:dev`
 - `cbaugus/rust_loadtest:dev-<git-sha>`
 
-**Multi-Architecture:**
-- `linux/amd64` (x86_64)
-- `linux/arm64` (ARM)
+**Platform:**
+- `linux/amd64` (x86_64 only - optimized for faster dev builds)
 
 ### Usage
 
