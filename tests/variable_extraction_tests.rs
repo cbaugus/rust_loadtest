@@ -5,7 +5,7 @@
 
 use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{
-    Extractor, RequestConfig, Scenario, ScenarioContext, Step, VariableExtraction,
+    Extractor, RequestConfig, Scenario, ScenarioContext, Step, ThinkTime, VariableExtraction,
 };
 use std::collections::HashMap;
 use std::time::Duration;
