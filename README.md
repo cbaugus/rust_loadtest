@@ -65,9 +65,9 @@ Load testing at high concurrency or RPS can consume significant memory. **Read t
 | 4GB           | 500                 | 10,000  | 1 hour       |
 | 8GB+          | 1,000               | 25,000  | 2+ hours     |
 
-### Memory Optimization (Issue #66)
+### Memory Optimization (Issues #66, #68)
 
-For high-load tests that may cause OOM errors, disable percentile tracking:
+For high-load tests that may cause OOM errors, use memory optimization settings:
 
 \`\`\`bash
 docker run --memory=4g \\
@@ -75,14 +75,21 @@ docker run --memory=4g \\
   -e NUM_CONCURRENT_TASKS=500 \\
   -e TARGET_RPS=10000 \\
   -e PERCENTILE_TRACKING_ENABLED=false \\  # <-- Disables histogram tracking
+  -e MAX_HISTOGRAM_LABELS=100 \\           # <-- Limits unique labels (if enabled)
   cbaugus/rust-loadtester:latest
 \`\`\`
 
-**What this does:**
+**PERCENTILE_TRACKING_ENABLED=false:**
 - Saves 2-4MB per unique scenario/step label
 - Disables P50/P90/P95/P99 percentile calculation
 - Allows much higher concurrency and RPS
 - Prometheus metrics still work normally
+
+**MAX_HISTOGRAM_LABELS=100 (default):**
+- Limits memory to 200-400MB for percentile tracking
+- Uses LRU eviction for oldest labels
+- Warns at 80% capacity
+- Increase if you have >100 unique scenario/step combinations
 
 **When to disable percentile tracking:**
 - High concurrency tests (>500 tasks)
@@ -131,6 +138,7 @@ The load testing tool is configured primarily through environment variables pass
 * CLIENT_KEY_PATH (Optional): Path to the client's PEM-encoded PKCS#8 private key file for mTLS. Both `CLIENT_CERT_PATH` and `CLIENT_KEY_PATH` must be provided to enable mTLS.
 * RESOLVE_TARGET_ADDR (Optional): Allows overriding DNS resolution for the `TARGET_URL`. The format is `"hostname:ip_address:port"`. For example, if `TARGET_URL` is `http://example.com/api` and `RESOLVE_TARGET_ADDR` is set to `"example.com:192.168.1.50:8080"`, all requests to `example.com` will be directed to `192.168.1.50` on port `8080`. This is useful for targeting services not in DNS or for specific routing during tests.
 * PERCENTILE_TRACKING_ENABLED (Optional, default: true): Set to "false" to disable HDR histogram tracking for percentile latency calculation. Disabling this can save significant memory (2-4MB per unique scenario/step) in high-load tests. When disabled, P50/P90/P95/P99 percentiles won't be available, but Prometheus metrics continue to work. See [Memory Configuration](#️-memory-configuration) for details.
+* MAX_HISTOGRAM_LABELS (Optional, default: 100): Maximum number of unique scenario/step labels to track for percentile calculation. Uses LRU eviction when limit is reached. Each label consumes 2-4MB. Increase for tests with many unique scenarios, or decrease to save memory. Warning logged at 80% capacity.
 
 Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:
