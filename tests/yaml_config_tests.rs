@@ -243,7 +243,7 @@ scenarios:
 
     // Check extractor types
     match &scenarios[0].steps[0].extractions[0] {
-        rust_loadtest::extractor::Extractor::JsonPath { var_name, json_path } => {
+        rust_loadtest::scenario::Extractor::JsonPath { var_name, json_path } => {
             assert_eq!(var_name, "productId");
             assert_eq!(json_path, "$.products[0].id");
         }

@@ -48,7 +48,7 @@ async fn test_cookies_persist_across_steps() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(100)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
                 name: "Access Protected Resource (uses cookies)".to_string(),
@@ -115,7 +115,7 @@ async fn test_auth_flow_with_token_and_cookies() {
                     },
                 ],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(500)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Access Profile with Token".to_string(),
@@ -228,7 +228,7 @@ async fn test_shopping_flow_with_session() {
                     extractor: Extractor::JsonPath("$.products[0].id".to_string()),
                 }],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(500)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Register and Login".to_string(),
@@ -254,7 +254,7 @@ async fn test_shopping_flow_with_session() {
                     extractor: Extractor::JsonPath("$.token".to_string()),
                 }],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(500)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Add to Cart (with auth)".to_string(),
@@ -277,7 +277,7 @@ async fn test_shopping_flow_with_session() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(500)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "View Cart (session maintained)".to_string(),

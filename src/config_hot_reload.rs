@@ -178,6 +178,15 @@ pub struct ConfigWatcher {
     last_reload: Arc<Mutex<Option<SystemTime>>>,
 }
 
+impl std::fmt::Debug for ConfigWatcher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConfigWatcher")
+            .field("config", &self.config)
+            .field("watcher_active", &self.watcher.is_some())
+            .finish()
+    }
+}
+
 impl ConfigWatcher {
     /// Create a new config watcher.
     pub fn new(

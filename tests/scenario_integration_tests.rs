@@ -68,7 +68,7 @@ async fn test_product_browsing_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
-                think_time: Some(Duration::from_millis(100)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
                 name: "Get Product Details".to_string(),

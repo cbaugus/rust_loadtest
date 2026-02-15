@@ -215,7 +215,7 @@ fn create_shopping_scenario() -> Scenario {
                     Assertion::StatusCode(200),
                     Assertion::BodyContains("items".to_string()),
                 ],
-                think_time: Some(Duration::from_secs(5)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_secs(5))),
             },
         ],
     }

@@ -214,7 +214,7 @@ fn test_all_templates_parse() {
         "spike-test.yaml",
     ];
 
-    for template in templates {
+    for template in &templates {
         validate_example_config(template);
     }
 
