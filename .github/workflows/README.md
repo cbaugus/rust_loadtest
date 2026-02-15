@@ -4,13 +4,13 @@
 
 This repository has two CI/CD pipelines:
 
-### 1. Main Branch Pipeline (`build-cicd.yaml`)
+### 1. Main Branch Pipeline (`main-build-cicd.yaml`)
 - **Triggers on:** Push to `main` branch, PRs to main
 - **Builds:** Two Docker images (standard + Chainguard)
 - **Features:** Lint, test, SBOM generation, multi-platform support
 - **Tags:** `latest` (main branch)
 
-### 2. Dev Branch Pipeline (`docker-publish.yml`)
+### 2. Dev Branch Pipeline (`dev-build-cicd.yaml`)
 - **Triggers on:** Push to `dev` branch, PRs to dev
 - **Builds:** Single Docker image with multi-arch support
 - **Features:** Fast builds with caching, artifact attestation
@@ -37,7 +37,7 @@ This repository has two CI/CD pipelines:
 
 ### Pipeline Details
 
-#### Main Branch (`build-cicd.yaml`)
+#### Main Branch (`main-build-cicd.yaml`)
 **Triggers:**
 - Push to `main` branch
 - Pull requests to `main`
@@ -55,7 +55,7 @@ This repository has two CI/CD pipelines:
 - `cbaugus/rust_loadtest:latest`
 - `cbaugus/rust_loadtest:latest-Chainguard`
 
-#### Dev Branch (`docker-publish.yml`)
+#### Dev Branch (`dev-build-cicd.yaml`)
 **Triggers:**
 - Push to `dev` branch
 - Pull requests to `dev`
