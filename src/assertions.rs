@@ -6,6 +6,7 @@
 use crate::scenario::Assertion;
 use regex::Regex;
 use serde_json::Value;
+#[cfg(test)]
 use std::time::Duration;
 use thiserror::Error;
 use tracing::{debug, warn};
@@ -209,7 +210,7 @@ fn assert_json_path(
     let node_list = json_path.query(&json);
 
     // Check if path exists
-    if let Some(value) = node_list.exactly_one().ok() {
+    if let Ok(value) = node_list.exactly_one() {
         // Path exists, now check expected value if provided
         if let Some(expected_value) = expected {
             let actual_str = match value {

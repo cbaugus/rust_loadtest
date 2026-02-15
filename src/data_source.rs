@@ -16,7 +16,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Errors that can occur when loading or using CSV data.
 #[derive(Error, Debug)]

@@ -12,14 +12,14 @@ fn test_default_values() {
 
     assert_eq!(defaults.workers, 10);
     assert_eq!(defaults.timeout, Duration::from_secs(30));
-    assert_eq!(defaults.skip_tls_verify, false);
+    assert!(!defaults.skip_tls_verify);
     assert_eq!(defaults.scenario_weight, 1.0);
     assert_eq!(defaults.load_model, "concurrent");
 
     // Test static methods too
     assert_eq!(ConfigDefaults::workers(), 10);
     assert_eq!(ConfigDefaults::timeout(), Duration::from_secs(30));
-    assert_eq!(ConfigDefaults::skip_tls_verify(), false);
+    assert!(!ConfigDefaults::skip_tls_verify());
     assert_eq!(ConfigDefaults::scenario_weight(), 1.0);
     assert_eq!(ConfigDefaults::load_model(), "concurrent");
 
@@ -99,22 +99,22 @@ fn test_timeout_precedence() {
 fn test_skip_tls_verify_precedence() {
     // Default
     let result = ConfigMerger::merge_skip_tls_verify(None, "TLS_TEST_1");
-    assert_eq!(result, false);
+    assert!(!result);
 
     // YAML
     let result = ConfigMerger::merge_skip_tls_verify(Some(true), "TLS_TEST_2");
-    assert_eq!(result, true);
+    assert!(result);
 
     // Env override with "true"
     env::set_var("TLS_TEST_3", "true");
     let result = ConfigMerger::merge_skip_tls_verify(Some(false), "TLS_TEST_3");
-    assert_eq!(result, true);
+    assert!(result);
     env::remove_var("TLS_TEST_3");
 
     // Env override with "false"
     env::set_var("TLS_TEST_4", "false");
     let result = ConfigMerger::merge_skip_tls_verify(Some(true), "TLS_TEST_4");
-    assert_eq!(result, false);
+    assert!(!result);
     env::remove_var("TLS_TEST_4");
 
     println!("✅ Skip TLS verify precedence works");
@@ -251,7 +251,7 @@ fn test_multiple_fields_precedence() {
 
     assert_eq!(workers, 100);
     assert_eq!(timeout, Duration::from_secs(90));
-    assert_eq!(tls, true);
+    assert!(tls);
 
     // Clean up
     env::remove_var("MULTI_WORKERS");
@@ -319,30 +319,26 @@ fn test_precedence_isolation() {
 fn test_case_sensitivity_boolean() {
     // Test boolean env var case insensitivity
     env::set_var("BOOL_TEST_1", "TRUE");
-    assert_eq!(
-        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_1"),
-        true
+    assert!(
+        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_1")
     );
     env::remove_var("BOOL_TEST_1");
 
     env::set_var("BOOL_TEST_2", "True");
-    assert_eq!(
-        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_2"),
-        true
+    assert!(
+        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_2")
     );
     env::remove_var("BOOL_TEST_2");
 
     env::set_var("BOOL_TEST_3", "true");
-    assert_eq!(
-        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_3"),
-        true
+    assert!(
+        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_3")
     );
     env::remove_var("BOOL_TEST_3");
 
     env::set_var("BOOL_TEST_4", "false");
-    assert_eq!(
-        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_4"),
-        false
+    assert!(
+        !ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_4")
     );
     env::remove_var("BOOL_TEST_4");
 
@@ -381,7 +377,7 @@ fn test_full_precedence_scenario() {
 
     assert_eq!(final_workers, 100, "Workers from env");
     assert_eq!(final_timeout, Duration::from_secs(60), "Timeout from YAML");
-    assert_eq!(final_tls, false, "TLS from YAML");
+    assert!(!final_tls, "TLS from YAML");
 
     env::remove_var("FULL_WORKERS");
 

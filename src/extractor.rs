@@ -122,7 +122,7 @@ pub fn extract_json_path(json_body: &str, path: &str) -> Result<String, Extracti
     let node_list = json_path.query(&json);
 
     // Get first match
-    if let Some(value) = node_list.exactly_one().ok() {
+    if let Ok(value) = node_list.exactly_one() {
         // Convert value to string
         match value {
             Value::String(s) => Ok(s.clone()),

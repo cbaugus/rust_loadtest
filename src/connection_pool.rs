@@ -210,7 +210,7 @@ impl Default for PoolStatsTracker {
     }
 }
 
-/// Global pool statistics tracker.
+// Global pool statistics tracker.
 lazy_static::lazy_static! {
     pub static ref GLOBAL_POOL_STATS: PoolStatsTracker = PoolStatsTracker::default();
 }

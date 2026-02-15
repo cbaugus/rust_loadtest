@@ -28,12 +28,12 @@
 //! # }
 //! ```
 
-use crate::yaml_config::{YamlConfig, YamlConfigError};
+use crate::yaml_config::YamlConfig;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use tracing::{debug, error, info, warn};
 
 /// Hot-reload configuration.

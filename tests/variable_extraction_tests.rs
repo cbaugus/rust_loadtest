@@ -95,7 +95,7 @@ async fn test_extraction_and_reuse_in_next_step() {
                     extractor: Extractor::JsonPath("$.products[0].id".to_string()),
                 }],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(100)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
                 name: "Get Product Details Using Extracted ID".to_string(),
@@ -259,7 +259,7 @@ async fn test_shopping_flow_with_extraction() {
                     extractor: Extractor::JsonPath("$.products[0].id".to_string()),
                 }],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(500)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "View Product Details".to_string(),
@@ -280,7 +280,7 @@ async fn test_shopping_flow_with_extraction() {
                     },
                 ],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(1000)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(1000))),
             },
             Step {
                 name: "Register User".to_string(),
@@ -306,7 +306,7 @@ async fn test_shopping_flow_with_extraction() {
                     extractor: Extractor::JsonPath("$.token".to_string()),
                 }],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(500)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
         ],
     };

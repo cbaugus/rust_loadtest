@@ -35,7 +35,7 @@ scenarios:
     assert_eq!(config.target_url, "https://yaml.example.com");
     assert_eq!(config.num_concurrent_tasks, 50);
     assert_eq!(config.test_duration, Duration::from_secs(600)); // 10m
-    assert_eq!(config.skip_tls_verify, true);
+    assert!(config.skip_tls_verify);
 
     println!("✅ YAML values used when no env overrides");
 }
@@ -120,7 +120,7 @@ scenarios:
     env::set_var("REQUEST_TIMEOUT", "90s");
 
     let yaml_config = YamlConfig::from_str(yaml).unwrap();
-    let config = Config::from_yaml_with_env_overrides(&yaml_config).unwrap();
+    let _config = Config::from_yaml_with_env_overrides(&yaml_config).unwrap();
 
     // Note: timeout is currently not stored in Config struct, but test validates parsing works
     // The timeout is used in client config creation
@@ -182,7 +182,7 @@ scenarios:
     let yaml_config = YamlConfig::from_str(yaml).unwrap();
     let config = Config::from_yaml_with_env_overrides(&yaml_config).unwrap();
 
-    assert_eq!(config.skip_tls_verify, true);
+    assert!(config.skip_tls_verify);
 
     env::remove_var("SKIP_TLS_VERIFY");
 
@@ -370,7 +370,7 @@ scenarios:
     assert_eq!(config.target_url, "https://env.com");
     assert_eq!(config.num_concurrent_tasks, 100);
     assert_eq!(config.test_duration, Duration::from_secs(1800)); // 30m
-    assert_eq!(config.skip_tls_verify, true);
+    assert!(config.skip_tls_verify);
 
     match config.load_model {
         LoadModel::Rps { target_rps } => {
@@ -429,7 +429,7 @@ scenarios:
     // Not overridden, should use YAML values
     assert_eq!(config.target_url, "https://yaml.com");
     assert_eq!(config.test_duration, Duration::from_secs(600)); // 10m
-    assert_eq!(config.skip_tls_verify, true);
+    assert!(config.skip_tls_verify);
 
     env::remove_var("NUM_CONCURRENT_TASKS");
     env::remove_var("TARGET_RPS");

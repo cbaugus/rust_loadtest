@@ -120,7 +120,7 @@ impl Config {
             ConfigMerger::merge_workers(Some(yaml_config.config.workers), "NUM_CONCURRENT_TASKS");
 
         // Timeout: env var REQUEST_TIMEOUT overrides YAML config.timeout
-        let timeout_duration = ConfigMerger::merge_timeout(
+        let _timeout_duration = ConfigMerger::merge_timeout(
             Some(yaml_config.config.timeout.to_std_duration()?),
             "REQUEST_TIMEOUT",
         );
@@ -221,8 +221,8 @@ impl Config {
         yaml_load: &crate::yaml_config::YamlLoadModel,
     ) -> Result<LoadModel, ConfigError> {
         // Check if LOAD_MODEL_TYPE env var is set - if so, use env-based parsing
-        if let Ok(model_type) = env::var("LOAD_MODEL_TYPE") {
-            return Self::parse_load_model(&format!("2h")); // Use env-based parsing
+        if let Ok(_model_type) = env::var("LOAD_MODEL_TYPE") {
+            return Self::parse_load_model("2h"); // Use env-based parsing
         }
 
         // Otherwise, convert YAML load model to LoadModel

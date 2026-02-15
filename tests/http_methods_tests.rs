@@ -493,7 +493,7 @@ async fn test_rest_crud_flow() {
 
     println!("✅ REST CRUD flow executed");
     println!("   Total steps: {}", result.steps.len());
-    for (i, step) in result.steps.iter().enumerate() {
+    for step in result.steps.iter() {
         println!("   {} - Status: {:?}", step.step_name, step.status_code);
     }
 

@@ -11,9 +11,8 @@ use crate::metrics::{
     SCENARIO_EXECUTIONS_TOTAL, SCENARIO_STEPS_TOTAL, SCENARIO_STEP_DURATION_SECONDS,
 };
 use crate::scenario::{Scenario, ScenarioContext, Step};
-use std::sync::Arc;
 use std::time::Instant;
-use tokio::time::{sleep, Duration};
+use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
 /// Result of executing a single step.
@@ -485,8 +484,8 @@ impl ScenarioExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scenario::{RequestConfig, Scenario, Step};
-    use std::collections::HashMap;
+    
+    
 
     #[test]
     fn test_scenario_result_success() {

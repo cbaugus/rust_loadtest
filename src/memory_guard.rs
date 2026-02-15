@@ -1,5 +1,4 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use tokio::time::{self, Duration};
 use tracing::{error, info, warn};
 

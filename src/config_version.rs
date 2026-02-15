@@ -194,9 +194,11 @@ impl VersionChecker {
 /// Migration trait for config version migrations.
 pub trait Migration {
     /// Source version this migration applies from.
+    #[allow(clippy::wrong_self_convention)]
     fn from_version(&self) -> Version;
 
     /// Target version this migration applies to.
+    #[allow(clippy::wrong_self_convention)]
     fn to_version(&self) -> Version;
 
     /// Description of what this migration does.
@@ -224,7 +226,7 @@ impl MigrationRegistry {
 
     /// Create the default migration registry with all migrations.
     pub fn default_migrations() -> Self {
-        let mut registry = Self::new();
+        let registry = Self::new();
         // Future migrations will be registered here
         // Example: registry.register(Box::new(MigrationV1ToV2));
         registry

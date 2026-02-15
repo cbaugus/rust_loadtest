@@ -3,7 +3,6 @@
 //! This module provides comprehensive validation for YAML configuration files
 //! with detailed error messages and field-level validation rules.
 
-use std::collections::HashMap;
 use thiserror::Error;
 
 /// Validation error with context about which field failed.

@@ -375,6 +375,7 @@ impl YamlConfig {
     }
 
     /// Parse configuration from a YAML string.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(content: &str) -> Result<Self, YamlConfigError> {
         let config: YamlConfig = serde_yaml::from_str(content)?;
         config.validate()?;
@@ -408,7 +409,7 @@ impl YamlConfig {
         {
             ctx.field_error(e.to_string());
         }
-        if let Err(e) =
+        if let Err(_e) =
             RangeValidator::validate_u64(self.config.workers as u64, 1, 10000, "workers")
         {
             ctx.field_error(format!(

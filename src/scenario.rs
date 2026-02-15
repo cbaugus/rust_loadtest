@@ -480,7 +480,7 @@ mod tests {
 
             // Should be within range
             assert!(
-                delay_ms >= 100 && delay_ms <= 500,
+                (100..=500).contains(&delay_ms),
                 "Delay {}ms should be between 100-500ms",
                 delay_ms
             );

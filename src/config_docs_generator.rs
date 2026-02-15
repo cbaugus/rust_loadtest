@@ -30,9 +30,11 @@ use std::collections::HashMap;
 /// Configuration documentation generator.
 pub struct ConfigDocsGenerator {
     /// Application name
+    #[allow(dead_code)]
     app_name: String,
 
     /// Version
+    #[allow(dead_code)]
     version: String,
 }
 

@@ -2,13 +2,13 @@ use tokio::time::{self, Duration, Instant};
 use tracing::{debug, error, info};
 
 use crate::connection_pool::GLOBAL_POOL_STATS;
-use crate::errors::{CategorizedError, ErrorCategory};
+use crate::errors::ErrorCategory;
 use crate::executor::ScenarioExecutor;
 use crate::load_models::LoadModel;
 use crate::memory_guard::is_percentile_tracking_active;
 use crate::metrics::{
     CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_ERRORS_BY_CATEGORY,
-    REQUEST_STATUS_CODES, REQUEST_TOTAL, SCENARIO_REQUESTS_TOTAL, SCENARIO_THROUGHPUT_RPS,
+    REQUEST_STATUS_CODES, REQUEST_TOTAL, SCENARIO_REQUESTS_TOTAL,
 };
 use crate::percentiles::{
     GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES,

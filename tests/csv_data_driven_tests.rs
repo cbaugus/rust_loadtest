@@ -7,7 +7,6 @@ use rust_loadtest::data_source::CsvDataSource;
 use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{Assertion, RequestConfig, Scenario, ScenarioContext, Step};
 use std::collections::HashMap;
-use std::fs;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 

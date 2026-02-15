@@ -3,7 +3,6 @@
 //! This module implements configuration precedence:
 //! Environment Variables > YAML File > Default Values
 
-use std::collections::HashMap;
 use std::env;
 use std::time::Duration;
 
@@ -308,7 +307,7 @@ mod tests {
 
         assert_eq!(defaults.workers, 10);
         assert_eq!(defaults.timeout, Duration::from_secs(30));
-        assert_eq!(defaults.skip_tls_verify, false);
+        assert!(!defaults.skip_tls_verify);
         assert_eq!(defaults.scenario_weight, 1.0);
         assert_eq!(defaults.load_model, "concurrent");
 
@@ -379,22 +378,19 @@ mod tests {
     #[test]
     fn test_merge_skip_tls_verify() {
         // Default
-        assert_eq!(
-            ConfigMerger::merge_skip_tls_verify(None, "TEST_SKIP_TLS_1"),
-            false
+        assert!(
+            !ConfigMerger::merge_skip_tls_verify(None, "TEST_SKIP_TLS_1")
         );
 
         // YAML
-        assert_eq!(
-            ConfigMerger::merge_skip_tls_verify(Some(true), "TEST_SKIP_TLS_2"),
-            true
+        assert!(
+            ConfigMerger::merge_skip_tls_verify(Some(true), "TEST_SKIP_TLS_2")
         );
 
         // Env override
         env::set_var("TEST_SKIP_TLS_3", "true");
-        assert_eq!(
-            ConfigMerger::merge_skip_tls_verify(Some(false), "TEST_SKIP_TLS_3"),
-            true
+        assert!(
+            ConfigMerger::merge_skip_tls_verify(Some(false), "TEST_SKIP_TLS_3")
         );
         env::remove_var("TEST_SKIP_TLS_3");
 

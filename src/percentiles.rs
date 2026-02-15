@@ -141,7 +141,7 @@ impl PercentileTracker {
     pub fn stats(&self) -> Option<PercentileStats> {
         let hist = self.histogram.lock().unwrap();
 
-        if hist.len() == 0 {
+        if hist.is_empty() {
             return None;
         }
 
@@ -256,7 +256,7 @@ impl MultiLabelPercentileTracker {
     ///
     /// Returns None if label doesn't exist or has no samples.
     pub fn stats(&self, label: &str) -> Option<PercentileStats> {
-        let mut trackers = self.trackers.lock().unwrap();
+        let trackers = self.trackers.lock().unwrap();
         // peek() doesn't update LRU order
         trackers.peek(label).and_then(|t| t.stats())
     }
@@ -282,11 +282,16 @@ impl MultiLabelPercentileTracker {
         let trackers = self.trackers.lock().unwrap();
         trackers.iter().map(|(k, _)| k.clone()).collect()
     }
-
     /// Get the current number of tracked labels.
     pub fn len(&self) -> usize {
         let trackers = self.trackers.lock().unwrap();
         trackers.len()
+    }
+
+    /// Check if there are no tracked labels.
+    pub fn is_empty(&self) -> bool {
+        let trackers = self.trackers.lock().unwrap();
+        trackers.is_empty()
     }
 
     /// Get the maximum number of labels that can be tracked.
@@ -308,7 +313,7 @@ impl MultiLabelPercentileTracker {
     /// This resets all histogram data to free memory while keeping
     /// the label structure intact. Called periodically for long-running tests.
     pub fn rotate(&self) {
-        let mut trackers = self.trackers.lock().unwrap();
+        let trackers = self.trackers.lock().unwrap();
 
         // Clear data in each histogram
         for (_label, tracker) in trackers.iter() {
@@ -327,9 +332,9 @@ impl Default for MultiLabelPercentileTracker {
     }
 }
 
-/// Global percentile trackers for the application.
-///
-/// These are lazily initialized and thread-safe.
+// Global percentile trackers for the application.
+//
+// These are lazily initialized and thread-safe.
 lazy_static::lazy_static! {
     /// Global tracker for single request latencies
     pub static ref GLOBAL_REQUEST_PERCENTILES: PercentileTracker = PercentileTracker::new();

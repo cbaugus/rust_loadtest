@@ -517,15 +517,13 @@ fn test_future_version_scenario() {
 
 #[test]
 fn test_version_comparison_comprehensive() {
-    let versions = vec![
-        Version::new(0, 9),
+    let versions = [Version::new(0, 9),
         Version::new(1, 0),
         Version::new(1, 1),
         Version::new(1, 9),
         Version::new(2, 0),
         Version::new(2, 1),
-        Version::new(10, 0),
-    ];
+        Version::new(10, 0)];
 
     for i in 0..versions.len() {
         for j in i + 1..versions.len() {

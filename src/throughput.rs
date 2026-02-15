@@ -199,7 +199,7 @@ pub fn format_throughput_table(stats: &[ThroughputStats]) -> String {
     output
 }
 
-/// Global throughput tracker.
+// Global throughput tracker.
 lazy_static::lazy_static! {
     pub static ref GLOBAL_THROUGHPUT_TRACKER: ThroughputTracker = ThroughputTracker::new();
 }
