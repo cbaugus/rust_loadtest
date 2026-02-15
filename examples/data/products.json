@@ -1,0 +1,62 @@
+[
+  {
+    "product_name": "Laptop Pro 15",
+    "category": "electronics",
+    "sku": "ELEC-LAP-001",
+    "price": 1299.99
+  },
+  {
+    "product_name": "Wireless Mouse",
+    "category": "electronics",
+    "sku": "ELEC-MOU-002",
+    "price": 29.99
+  },
+  {
+    "product_name": "Mechanical Keyboard",
+    "category": "electronics",
+    "sku": "ELEC-KEY-003",
+    "price": 149.99
+  },
+  {
+    "product_name": "4K Monitor",
+    "category": "electronics",
+    "sku": "ELEC-MON-004",
+    "price": 499.99
+  },
+  {
+    "product_name": "USB-C Hub",
+    "category": "electronics",
+    "sku": "ELEC-HUB-005",
+    "price": 79.99
+  },
+  {
+    "product_name": "Ergonomic Chair",
+    "category": "furniture",
+    "sku": "FURN-CHA-001",
+    "price": 399.99
+  },
+  {
+    "product_name": "Standing Desk",
+    "category": "furniture",
+    "sku": "FURN-DSK-002",
+    "price": 599.99
+  },
+  {
+    "product_name": "LED Desk Lamp",
+    "category": "lighting",
+    "sku": "LGHT-LMP-001",
+    "price": 49.99
+  },
+  {
+    "product_name": "Noise Cancelling Headphones",
+    "category": "electronics",
+    "sku": "ELEC-HDP-006",
+    "price": 349.99
+  },
+  {
+    "product_name": "Webcam HD",
+    "category": "electronics",
+    "sku": "ELEC-CAM-007",
+    "price": 89.99
+  }
+]

@@ -1,0 +1,356 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rust LoadTest Configuration",
+  "description": "YAML configuration schema for rust-loadtest load testing tool",
+  "type": "object",
+  "required": [
+    "version",
+    "config",
+    "load",
+    "scenarios"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Configuration version (semantic versioning)",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "examples": [
+        "1.0"
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional metadata about the test configuration",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable test name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Test description"
+        },
+        "author": {
+          "type": "string",
+          "description": "Test author"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Tags for categorization",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "description": "Global test configuration",
+      "required": [
+        "baseUrl",
+        "duration"
+      ],
+      "properties": {
+        "baseUrl": {
+          "type": "string",
+          "description": "Base URL of the API to test",
+          "format": "uri",
+          "examples": [
+            "https://api.example.com"
+          ]
+        },
+        "timeout": {
+          "description": "Request timeout (e.g., '30s', '1m')",
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]+(s|m|h)$"
+            },
+            {
+              "type": "integer",
+              "minimum": 1
+            }
+          ],
+          "default": "30s"
+        },
+        "workers": {
+          "type": "integer",
+          "description": "Number of concurrent workers",
+          "minimum": 1,
+          "default": 10
+        },
+        "duration": {
+          "description": "Test duration (e.g., '5m', '1h')",
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]+(s|m|h)$"
+            },
+            {
+              "type": "integer",
+              "minimum": 1
+            }
+          ]
+        },
+        "skipTlsVerify": {
+          "type": "boolean",
+          "description": "Skip TLS certificate verification (insecure)",
+          "default": false
+        },
+        "customHeaders": {
+          "type": "string",
+          "description": "Custom HTTP headers (e.g., 'Authorization: Bearer token')"
+        }
+      }
+    },
+    "load": {
+      "type": "object",
+      "description": "Load model configuration",
+      "required": [
+        "model"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "model": {
+              "const": "concurrent"
+            }
+          },
+          "required": [
+            "model"
+          ]
+        },
+        {
+          "properties": {
+            "model": {
+              "const": "rps"
+            },
+            "target": {
+              "type": "number",
+              "description": "Target requests per second",
+              "minimum": 0.1
+            }
+          },
+          "required": [
+            "model",
+            "target"
+          ]
+        },
+        {
+          "properties": {
+            "model": {
+              "const": "ramp"
+            },
+            "min": {
+              "type": "number",
+              "description": "Starting RPS",
+              "minimum": 0.1
+            },
+            "max": {
+              "type": "number",
+              "description": "Ending RPS",
+              "minimum": 0.1
+            },
+            "rampDuration": {
+              "description": "Ramp duration (e.g., '5m')",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]+(s|m|h)$"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              ]
+            }
+          },
+          "required": [
+            "model",
+            "min",
+            "max",
+            "rampDuration"
+          ]
+        }
+      ]
+    },
+    "scenarios": {
+      "type": "array",
+      "description": "Test scenarios",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "steps"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Scenario name"
+          },
+          "weight": {
+            "type": "number",
+            "description": "Scenario weight for traffic distribution",
+            "minimum": 0.1,
+            "default": 100.0
+          },
+          "steps": {
+            "type": "array",
+            "description": "Scenario steps",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "request"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Step name"
+                },
+                "request": {
+                  "type": "object",
+                  "required": [
+                    "method",
+                    "path"
+                  ],
+                  "properties": {
+                    "method": {
+                      "type": "string",
+                      "enum": [
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "DELETE",
+                        "PATCH",
+                        "HEAD",
+                        "OPTIONS"
+                      ],
+                      "description": "HTTP method"
+                    },
+                    "path": {
+                      "type": "string",
+                      "description": "Request path (relative to baseUrl)"
+                    },
+                    "body": {
+                      "type": "string",
+                      "description": "Request body"
+                    },
+                    "headers": {
+                      "type": "object",
+                      "description": "Custom request headers",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "thinkTime": {
+                  "description": "Think time after step",
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[0-9]+(s|m|h)$"
+                    },
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "type": "string"
+                        },
+                        "max": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max"
+                      ]
+                    }
+                  ]
+                },
+                "assertions": {
+                  "type": "array",
+                  "description": "Response assertions",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "extract": {
+                  "type": "array",
+                  "description": "Data extractors",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "jsonPath": {
+                        "type": "string"
+                      },
+                      "regex": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "dataFile": {
+            "type": "object",
+            "description": "External data file",
+            "required": [
+              "path",
+              "format",
+              "strategy"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to data file"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "csv",
+                  "json"
+                ],
+                "description": "Data file format"
+              },
+              "strategy": {
+                "type": "string",
+                "enum": [
+                  "sequential",
+                  "random",
+                  "cycle"
+                ],
+                "description": "Data iteration strategy"
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "description": "Scenario-level config overrides",
+            "properties": {
+              "timeout": {
+                "type": "string"
+              },
+              "retryCount": {
+                "type": "integer"
+              },
+              "retryDelay": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

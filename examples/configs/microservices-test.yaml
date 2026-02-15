@@ -1,0 +1,189 @@
+# Microservices Load Test Template
+#
+# Load test for microservices architecture with multiple service endpoints.
+# Tests inter-service communication patterns and distributed system behavior.
+#
+# Architecture:
+#   - API Gateway
+#   - User Service
+#   - Product Service
+#   - Order Service
+#   - Inventory Service
+#
+# Usage:
+#   rust-loadtest --config microservices-test.yaml
+#
+# Note:
+#   This template assumes all services are accessible through a common
+#   API gateway. Adjust paths if services have different base URLs.
+#
+# Customize:
+#   - Update service endpoints
+#   - Adjust scenario weights based on traffic patterns
+#   - Add service-specific assertions
+
+version: "1.0"
+
+metadata:
+  name: "Microservices Load Test"
+  description: "Load test for distributed microservices architecture"
+  author: "Platform Team"
+  tags: ["microservices", "distributed", "api-gateway"]
+
+config:
+  # API Gateway base URL
+  baseUrl: "https://gateway.example.com"
+  timeout: "45s"
+  workers: 40
+  duration: "30m"
+
+load:
+  model: "ramp"
+  min: 20
+  max: 150
+  rampDuration: "5m"
+
+scenarios:
+  # Scenario 1: User Service Operations (25%)
+  - name: "User Service Flow"
+    weight: 25
+    steps:
+      - name: "Register User"
+        request:
+          method: "POST"
+          path: "/users/register"
+          body: '{"email": "user@example.com", "name": "Test User"}'
+        assertions:
+          - statusCode: 201
+        extract:
+          - name: "userId"
+            jsonPath: "$.userId"
+          - name: "token"
+            jsonPath: "$.token"
+        thinkTime: "2s"
+
+      - name: "Get User Profile"
+        request:
+          method: "GET"
+          path: "/users/${userId}"
+          headers:
+            Authorization: "Bearer ${token}"
+        assertions:
+          - statusCode: 200
+        thinkTime: "2s"
+
+      - name: "Update User Profile"
+        request:
+          method: "PUT"
+          path: "/users/${userId}"
+          headers:
+            Authorization: "Bearer ${token}"
+          body: '{"name": "Updated User"}'
+        assertions:
+          - statusCode: 200
+
+  # Scenario 2: Product Service Operations (30%)
+  - name: "Product Service Flow"
+    weight: 30
+    steps:
+      - name: "Browse Products"
+        request:
+          method: "GET"
+          path: "/products?limit=20"
+        assertions:
+          - statusCode: 200
+        extract:
+          - name: "productId"
+            jsonPath: "$.products[0].id"
+        thinkTime: "3s"
+
+      - name: "Get Product Details"
+        request:
+          method: "GET"
+          path: "/products/${productId}"
+        assertions:
+          - statusCode: 200
+          - responseTime: "500ms"
+        extract:
+          - name: "productName"
+            jsonPath: "$.name"
+          - name: "productPrice"
+            jsonPath: "$.price"
+        thinkTime: "4s"
+
+      - name: "Check Product Reviews"
+        request:
+          method: "GET"
+          path: "/products/${productId}/reviews"
+        assertions:
+          - statusCode: 200
+        thinkTime: "2s"
+
+  # Scenario 3: Order Service Flow (30%)
+  - name: "Order Service Flow"
+    weight: 30
+    steps:
+      - name: "Create Order"
+        request:
+          method: "POST"
+          path: "/orders"
+          body: '{"productId": "123", "quantity": 1, "shippingAddress": "123 Main St"}'
+        assertions:
+          - statusCode: 201
+        extract:
+          - name: "orderId"
+            jsonPath: "$.orderId"
+        thinkTime: "3s"
+
+      - name: "Get Order Status"
+        request:
+          method: "GET"
+          path: "/orders/${orderId}"
+        assertions:
+          - statusCode: 200
+          - jsonPath:
+              path: "$.status"
+              expected: "*"
+        thinkTime: "2s"
+
+      - name: "Get Order History"
+        request:
+          method: "GET"
+          path: "/orders/history"
+        assertions:
+          - statusCode: 200
+        thinkTime: "2s"
+
+  # Scenario 4: Inventory Service Operations (15%)
+  - name: "Inventory Service Flow"
+    weight: 15
+    steps:
+      - name: "Check Inventory"
+        request:
+          method: "GET"
+          path: "/inventory/products/123"
+        assertions:
+          - statusCode: 200
+        extract:
+          - name: "stockLevel"
+            jsonPath: "$.quantity"
+        thinkTime: "2s"
+
+      - name: "Reserve Inventory"
+        request:
+          method: "POST"
+          path: "/inventory/reserve"
+          body: '{"productId": "123", "quantity": 1}'
+        assertions:
+          - statusCode: 200
+        extract:
+          - name: "reservationId"
+            jsonPath: "$.reservationId"
+        thinkTime: "1s"
+
+      - name: "Confirm Reservation"
+        request:
+          method: "POST"
+          path: "/inventory/confirm/${reservationId}"
+        assertions:
+          - statusCode: 200

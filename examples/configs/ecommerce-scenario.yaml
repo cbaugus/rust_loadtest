@@ -1,0 +1,184 @@
+# E-Commerce Load Test Template
+#
+# Realistic e-commerce load test with multiple user flows:
+# - Browse products
+# - Add items to cart
+# - Complete checkout
+# - Quick browsing without purchase
+#
+# Simulates realistic shopping patterns with weighted scenarios.
+#
+# Usage:
+#   rust-loadtest --config ecommerce-scenario.yaml
+#
+# Customize:
+#   - Adjust scenario weights to match your traffic patterns
+#   - Modify think times to simulate realistic user behavior
+#   - Add authentication headers if needed
+
+version: "1.0"
+
+metadata:
+  name: "E-Commerce Load Test"
+  description: "Multi-scenario load test simulating realistic shopping behavior"
+  author: "E-Commerce Team"
+  tags: ["ecommerce", "multi-scenario", "realistic"]
+
+config:
+  baseUrl: "https://shop.example.com"
+  timeout: "30s"
+  workers: 50
+  duration: "30m"
+
+load:
+  # Ramp up load gradually
+  model: "ramp"
+  min: 10
+  max: 200
+  rampDuration: "5m"
+
+scenarios:
+  # Scenario 1: Browse products only (60% of users)
+  - name: "Browse Only"
+    weight: 60
+    steps:
+      - name: "Homepage"
+        request:
+          method: "GET"
+          path: "/"
+        assertions:
+          - statusCode: 200
+        thinkTime: "2s"
+
+      - name: "Category Page"
+        request:
+          method: "GET"
+          path: "/products/electronics"
+        assertions:
+          - statusCode: 200
+        thinkTime: "3s"
+
+      - name: "Product Details"
+        request:
+          method: "GET"
+          path: "/products/laptop-123"
+        assertions:
+          - statusCode: 200
+          - bodyContains: "Add to Cart"
+        thinkTime: "5s"
+
+  # Scenario 2: Browse and add to cart (25% of users)
+  - name: "Browse and Add to Cart"
+    weight: 25
+    steps:
+      - name: "Homepage"
+        request:
+          method: "GET"
+          path: "/"
+        thinkTime: "2s"
+
+      - name: "Search Products"
+        request:
+          method: "GET"
+          path: "/search?q=laptop"
+        extract:
+          - name: "productId"
+            jsonPath: "$.products[0].id"
+        thinkTime: "3s"
+
+      - name: "Product Details"
+        request:
+          method: "GET"
+          path: "/products/${productId}"
+        thinkTime: "4s"
+
+      - name: "Add to Cart"
+        request:
+          method: "POST"
+          path: "/cart/add"
+          body: '{"productId": "${productId}", "quantity": 1}'
+        assertions:
+          - statusCode: 201
+          - jsonPath:
+              path: "$.success"
+              expected: "true"
+        thinkTime: "2s"
+
+      - name: "View Cart"
+        request:
+          method: "GET"
+          path: "/cart"
+        assertions:
+          - statusCode: 200
+
+  # Scenario 3: Complete purchase (12% of users)
+  - name: "Complete Purchase"
+    weight: 12
+    steps:
+      - name: "Search Products"
+        request:
+          method: "GET"
+          path: "/search?q=laptop"
+        extract:
+          - name: "productId"
+            jsonPath: "$.products[0].id"
+          - name: "price"
+            jsonPath: "$.products[0].price"
+        thinkTime: "2s"
+
+      - name: "Add to Cart"
+        request:
+          method: "POST"
+          path: "/cart/add"
+          body: '{"productId": "${productId}", "quantity": 1}'
+        assertions:
+          - statusCode: 201
+        thinkTime: "3s"
+
+      - name: "View Cart"
+        request:
+          method: "GET"
+          path: "/cart"
+        thinkTime: "2s"
+
+      - name: "Proceed to Checkout"
+        request:
+          method: "POST"
+          path: "/checkout"
+          body: '{"shippingMethod": "standard", "paymentMethod": "credit_card"}'
+        assertions:
+          - statusCode: 200
+        thinkTime: "5s"
+
+      - name: "Complete Order"
+        request:
+          method: "POST"
+          path: "/checkout/complete"
+          body: '{"confirmPayment": true}'
+        assertions:
+          - statusCode: 201
+          - jsonPath:
+              path: "$.orderId"
+              expected: "*"
+
+  # Scenario 4: Quick browse (3% of users)
+  - name: "Quick Browse"
+    weight: 3
+    steps:
+      - name: "Homepage"
+        request:
+          method: "GET"
+          path: "/"
+        assertions:
+          - statusCode: 200
+        thinkTime:
+          min: "1s"
+          max: "3s"
+
+      - name: "Random Category"
+        request:
+          method: "GET"
+          path: "/products/featured"
+        thinkTime:
+          min: "1s"
+          max: "2s"
