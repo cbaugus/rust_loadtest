@@ -34,7 +34,7 @@ async fn test_scenario_worker_respects_duration() {
         base_url: "https://ecom.edge.baugus-lab.com".to_string(),
         scenario,
         test_duration: Duration::from_secs(2),
-        load_model: LoadModel::Rps { target_rps:1.0 },
+        load_model: LoadModel::Rps { target_rps: 1.0 },
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
     };
@@ -81,7 +81,7 @@ async fn test_scenario_worker_constant_load() {
         base_url: "https://ecom.edge.baugus-lab.com".to_string(),
         scenario,
         test_duration: Duration::from_secs(3),
-        load_model: LoadModel::Rps { target_rps:2.0 },
+        load_model: LoadModel::Rps { target_rps: 2.0 },
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
     };
@@ -133,7 +133,7 @@ async fn test_scenario_worker_with_think_time() {
         base_url: "https://ecom.edge.baugus-lab.com".to_string(),
         scenario,
         test_duration: Duration::from_secs(2),
-        load_model: LoadModel::Rps { target_rps:0.5 }, // 1 scenario every 2 seconds
+        load_model: LoadModel::Rps { target_rps: 0.5 }, // 1 scenario every 2 seconds
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
     };
