@@ -8,6 +8,32 @@ This document provides comprehensive load testing scenarios for the E-commerce T
 
 ---
 
+## ⚠️ IMPORTANT: Memory Considerations
+
+**Before running high-load tests, read [MEMORY_OPTIMIZATION.md](MEMORY_OPTIMIZATION.md)**
+
+Key limits to avoid OOM (Out of Memory) errors:
+- **With 4GB RAM**: Max 200 concurrent tasks, 5,000 RPS, 1h duration
+- **With 8GB RAM**: Max 1,000 concurrent tasks, 25,000 RPS, 2h duration
+- **HDR histograms consume 2-4MB each** - they grow unbounded per scenario/step
+
+⚠️ **Your attempted config would need 8-12GB minimum:**
+```bash
+NUM_CONCURRENT_TASKS=5000  # ❌ Too high for 4GB
+TARGET_RPS=50000           # ❌ Too high for 4GB
+TEST_DURATION=24h          # ❌ Too long for 4GB
+```
+
+✅ **Safe starting config for 4GB:**
+```bash
+NUM_CONCURRENT_TASKS=200
+TARGET_RPS=5000
+TEST_DURATION=1h
+LOAD_MODEL_TYPE=Rps
+```
+
+---
+
 ## Table of Contents
 
 1. [Quick Reference](#quick-reference)
@@ -1183,6 +1209,24 @@ Valid test tokens:
 7. **Monitoring**: Set up real-time monitoring dashboard to track test progress and identify issues early.
 
 8. **Baseline**: Always run baseline tests before making changes to compare performance.
+
+---
+
+## Memory & Resource Planning
+
+For detailed information on memory requirements and optimization:
+- See [MEMORY_OPTIMIZATION.md](MEMORY_OPTIMIZATION.md) for memory analysis
+- Estimate: **~1MB per 100 sustained RPS over 1 hour**
+- HDR histogram overhead: **2-4MB per unique scenario/step**
+- Concurrent task overhead: **~8KB per task**
+
+Quick memory requirements:
+- **512MB**: 10 tasks, 500 RPS, 5 min
+- **2GB**: 100 tasks, 5,000 RPS, 30 min
+- **4GB**: 500 tasks, 10,000 RPS, 1 hour
+- **8GB+**: 1,000 tasks, 25,000 RPS, 2+ hours
+
+Always start small and scale up gradually while monitoring `docker stats`.
 
 ---
 

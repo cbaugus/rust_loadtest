@@ -23,6 +23,7 @@ pub struct WorkerConfig {
     pub test_duration: Duration,
     pub load_model: LoadModel,
     pub num_concurrent_tasks: usize,
+    pub percentile_tracking_enabled: bool,
 }
 
 /// Runs a single worker task that sends HTTP requests according to the load model.
@@ -114,8 +115,10 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         REQUEST_DURATION_SECONDS.observe(request_start_time.elapsed().as_secs_f64());
         CONCURRENT_REQUESTS.dec();
 
-        // Record latency in percentile tracker (Issue #33)
-        GLOBAL_REQUEST_PERCENTILES.record_ms(actual_latency_ms);
+        // Record latency in percentile tracker (Issue #33, #66)
+        if config.percentile_tracking_enabled {
+            GLOBAL_REQUEST_PERCENTILES.record_ms(actual_latency_ms);
+        }
 
         // Record connection pool statistics (Issue #36)
         GLOBAL_POOL_STATS.record_request(actual_latency_ms);
@@ -182,6 +185,7 @@ pub struct ScenarioWorkerConfig {
     pub test_duration: Duration,
     pub load_model: LoadModel,
     pub num_concurrent_tasks: usize,
+    pub percentile_tracking_enabled: bool,
 }
 
 /// Runs a scenario-based worker task that executes multi-step scenarios according to the load model.
@@ -258,13 +262,15 @@ pub async fn run_scenario_worker(
             "Scenario execution completed"
         );
 
-        // Record scenario latency in percentile tracker (Issue #33)
-        GLOBAL_SCENARIO_PERCENTILES.record(&config.scenario.name, result.total_time_ms);
+        // Record scenario latency in percentile tracker (Issue #33, #66)
+        if config.percentile_tracking_enabled {
+            GLOBAL_SCENARIO_PERCENTILES.record(&config.scenario.name, result.total_time_ms);
 
-        // Record individual step latencies (Issue #33)
-        for step in &result.steps {
-            let label = format!("{}:{}", config.scenario.name, step.step_name);
-            GLOBAL_STEP_PERCENTILES.record(&label, step.response_time_ms);
+            // Record individual step latencies (Issue #33, #66)
+            for step in &result.steps {
+                let label = format!("{}:{}", config.scenario.name, step.step_name);
+                GLOBAL_STEP_PERCENTILES.record(&label, step.response_time_ms);
+            }
         }
 
         // Record throughput (Issue #35)

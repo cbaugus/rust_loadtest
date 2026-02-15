@@ -52,6 +52,9 @@ pub struct Config {
     pub client_cert_path: Option<String>,
     pub client_key_path: Option<String>,
     pub custom_headers: Option<String>,
+
+    // Memory optimization settings (Issue #66)
+    pub percentile_tracking_enabled: bool,
 }
 
 /// Helper to get a required environment variable.
@@ -162,6 +165,9 @@ impl Config {
         let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
 
+        // Memory optimization settings (Issue #66)
+        let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
+
         let config = Config {
             target_url,
             request_type,
@@ -175,6 +181,7 @@ impl Config {
             client_cert_path,
             client_key_path,
             custom_headers,
+            percentile_tracking_enabled,
         };
 
         config.validate()?;
@@ -293,6 +300,9 @@ impl Config {
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
         let custom_headers = env::var("CUSTOM_HEADERS").ok();
 
+        // Memory optimization settings (Issue #66)
+        let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
+
         let config = Config {
             target_url,
             request_type,
@@ -306,6 +316,7 @@ impl Config {
             client_cert_path,
             client_key_path,
             custom_headers,
+            percentile_tracking_enabled,
         };
 
         config.validate()?;
@@ -490,6 +501,7 @@ impl Config {
             client_cert_path: None,
             client_key_path: None,
             custom_headers: None,
+            percentile_tracking_enabled: true,
         }
     }
 
@@ -519,8 +531,17 @@ impl Config {
             skip_tls_verify = self.skip_tls_verify,
             mtls_enabled = mtls_enabled,
             custom_headers_count = custom_headers_count,
+            percentile_tracking = self.percentile_tracking_enabled,
             "Starting load test"
         );
+
+        if !self.percentile_tracking_enabled {
+            warn!(
+                "Percentile tracking is DISABLED - no latency percentiles will be collected. \
+                 This reduces memory usage for high-load tests. \
+                 Set PERCENTILE_TRACKING_ENABLED=true to enable."
+            );
+        }
 
         if !parsed_headers.is_empty() {
             for (name, value) in parsed_headers.iter() {

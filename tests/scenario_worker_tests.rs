@@ -35,6 +35,7 @@ async fn test_scenario_worker_respects_duration() {
         test_duration: Duration::from_secs(2),
         load_model: LoadModel::Constant { rps: 1.0 },
         num_concurrent_tasks: 1,
+        percentile_tracking_enabled: true,
     };
 
     let client = reqwest::Client::new();
@@ -81,6 +82,7 @@ async fn test_scenario_worker_constant_load() {
         test_duration: Duration::from_secs(3),
         load_model: LoadModel::Constant { rps: 2.0 },
         num_concurrent_tasks: 1,
+        percentile_tracking_enabled: true,
     };
 
     let client = reqwest::Client::new();
@@ -132,6 +134,7 @@ async fn test_scenario_worker_with_think_time() {
         test_duration: Duration::from_secs(2),
         load_model: LoadModel::Constant { rps: 0.5 }, // 1 scenario every 2 seconds
         num_concurrent_tasks: 1,
+        percentile_tracking_enabled: true,
     };
 
     let client = reqwest::Client::new();

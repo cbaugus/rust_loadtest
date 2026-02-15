@@ -35,10 +35,20 @@ fn init_tracing() {
 }
 
 /// Prints percentile latency statistics.
-fn print_percentile_report() {
+fn print_percentile_report(enabled: bool) {
     info!("\n{}", "=".repeat(120));
     info!("PERCENTILE LATENCY REPORT (Issue #33)");
     info!("{}", "=".repeat(120));
+
+    if !enabled {
+        info!("\n⚠️  Percentile tracking was DISABLED (PERCENTILE_TRACKING_ENABLED=false)");
+        info!("No latency percentile data was collected to reduce memory usage.");
+        info!("To enable percentile tracking, set PERCENTILE_TRACKING_ENABLED=true\n");
+        info!("{}", "=".repeat(120));
+        info!("END OF PERCENTILE REPORT");
+        info!("{}\n", "=".repeat(120));
+        return;
+    }
 
     // Single request percentiles
     if let Some(request_stats) = GLOBAL_REQUEST_PERCENTILES.stats() {
@@ -250,6 +260,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             test_duration: config.test_duration,
             load_model: config.load_model.clone(),
             num_concurrent_tasks: config.num_concurrent_tasks,
+            percentile_tracking_enabled: config.percentile_tracking_enabled,
         };
 
         let client_clone = client.clone();
@@ -272,8 +283,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tokio::time::sleep(Duration::from_secs(2)).await;
     info!("Collecting final metrics");
 
-    // Print percentile latency statistics (Issue #33)
-    print_percentile_report();
+    // Print percentile latency statistics (Issue #33, #66)
+    print_percentile_report(config.percentile_tracking_enabled);
 
     // Print per-scenario throughput statistics (Issue #35)
     print_throughput_report();
