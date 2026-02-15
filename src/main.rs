@@ -7,7 +7,7 @@ use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
 use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server, update_memory_metrics, CONNECTION_POOL_MAX_IDLE, CONNECTION_POOL_IDLE_TIMEOUT_SECONDS};
-use rust_loadtest::percentiles::{format_percentile_table, GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
+use rust_loadtest::percentiles::{format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
 
@@ -247,6 +247,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     });
     info!("Memory monitoring started (updates every 10s)");
+
+    // Spawn histogram rotation task if enabled (Issue #67)
+    if config.histogram_rotation_interval.as_secs() > 0 {
+        let rotation_interval = config.histogram_rotation_interval;
+        tokio::spawn(async move {
+            let mut interval = time::interval(rotation_interval);
+            interval.tick().await; // Skip the first immediate tick
+            loop {
+                interval.tick().await;
+                info!(
+                    rotation_interval_secs = rotation_interval.as_secs(),
+                    "Rotating histograms - clearing percentile data to free memory"
+                );
+                rotate_all_histograms();
+                info!("Histogram rotation complete - memory freed");
+            }
+        });
+        info!(
+            rotation_interval_secs = config.histogram_rotation_interval.as_secs(),
+            "Histogram rotation enabled - will rotate every {} seconds",
+            config.histogram_rotation_interval.as_secs()
+        );
+    }
 
     // Initialize connection pool configuration metrics (Issue #36)
     let pool_config = PoolConfig::default();

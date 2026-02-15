@@ -302,6 +302,23 @@ impl MultiLabelPercentileTracker {
         let mut warned = self.warned_at_80_percent.lock().unwrap();
         *warned = false;
     }
+
+    /// Rotate histograms by clearing all data (Issue #67).
+    ///
+    /// This resets all histogram data to free memory while keeping
+    /// the label structure intact. Called periodically for long-running tests.
+    pub fn rotate(&self) {
+        let mut trackers = self.trackers.lock().unwrap();
+
+        // Clear data in each histogram
+        for (_label, tracker) in trackers.iter() {
+            tracker.reset();
+        }
+
+        // Reset the warning flag since we're starting fresh
+        let mut warned = self.warned_at_80_percent.lock().unwrap();
+        *warned = false;
+    }
 }
 
 impl Default for MultiLabelPercentileTracker {
@@ -322,6 +339,16 @@ lazy_static::lazy_static! {
 
     /// Global tracker for step latencies (by scenario:step)
     pub static ref GLOBAL_STEP_PERCENTILES: MultiLabelPercentileTracker = MultiLabelPercentileTracker::new();
+}
+
+/// Rotate all global histogram trackers (Issue #67).
+///
+/// Clears histogram data to free memory while keeping labels intact.
+/// Should be called periodically for long-running tests to bound memory usage.
+pub fn rotate_all_histograms() {
+    GLOBAL_REQUEST_PERCENTILES.reset();
+    GLOBAL_SCENARIO_PERCENTILES.rotate();
+    GLOBAL_STEP_PERCENTILES.rotate();
 }
 
 /// Format percentile statistics as a table.

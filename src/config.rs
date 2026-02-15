@@ -53,9 +53,10 @@ pub struct Config {
     pub client_key_path: Option<String>,
     pub custom_headers: Option<String>,
 
-    // Memory optimization settings (Issue #66, #68)
+    // Memory optimization settings (Issue #66, #68, #67)
     pub percentile_tracking_enabled: bool,
     pub max_histogram_labels: usize,
+    pub histogram_rotation_interval: Duration,  // 0 = disabled
 }
 
 /// Helper to get a required environment variable.
@@ -166,9 +167,19 @@ impl Config {
         let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
 
-        // Memory optimization settings (Issue #66, #68)
+        // Memory optimization settings (Issue #66, #68, #67)
         let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
         let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
+
+        // Histogram rotation interval (0 = disabled)
+        let histogram_rotation_interval = if let Ok(interval_str) = env::var("HISTOGRAM_ROTATION_INTERVAL") {
+            parse_duration_string(&interval_str).map_err(|e| ConfigError::InvalidDuration {
+                var: "HISTOGRAM_ROTATION_INTERVAL".into(),
+                message: e,
+            })?
+        } else {
+            Duration::from_secs(0) // Disabled by default
+        };
 
         let config = Config {
             target_url,
@@ -185,6 +196,7 @@ impl Config {
             custom_headers,
             percentile_tracking_enabled,
             max_histogram_labels,
+            histogram_rotation_interval,
         };
 
         config.validate()?;
@@ -303,9 +315,19 @@ impl Config {
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
         let custom_headers = env::var("CUSTOM_HEADERS").ok();
 
-        // Memory optimization settings (Issue #66, #68)
+        // Memory optimization settings (Issue #66, #68, #67)
         let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
         let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
+
+        // Histogram rotation interval (0 = disabled)
+        let histogram_rotation_interval = if let Ok(interval_str) = env::var("HISTOGRAM_ROTATION_INTERVAL") {
+            parse_duration_string(&interval_str).map_err(|e| ConfigError::InvalidDuration {
+                var: "HISTOGRAM_ROTATION_INTERVAL".into(),
+                message: e,
+            })?
+        } else {
+            Duration::from_secs(0) // Disabled by default
+        };
 
         let config = Config {
             target_url,
@@ -322,6 +344,7 @@ impl Config {
             custom_headers,
             percentile_tracking_enabled,
             max_histogram_labels,
+            histogram_rotation_interval,
         };
 
         config.validate()?;
@@ -508,6 +531,7 @@ impl Config {
             custom_headers: None,
             percentile_tracking_enabled: true,
             max_histogram_labels: 100,
+            histogram_rotation_interval: Duration::from_secs(0),
         }
     }
 
@@ -552,6 +576,22 @@ impl Config {
                 max_histogram_labels = self.max_histogram_labels,
                 "Histogram label limit configured (Issue #68)"
             );
+
+            if self.histogram_rotation_interval.as_secs() > 0 {
+                let interval_secs = self.histogram_rotation_interval.as_secs();
+                let interval_str = if interval_secs >= 3600 {
+                    format!("{}h", interval_secs / 3600)
+                } else if interval_secs >= 60 {
+                    format!("{}m", interval_secs / 60)
+                } else {
+                    format!("{}s", interval_secs)
+                };
+                info!(
+                    rotation_interval_secs = interval_secs,
+                    "Histogram rotation enabled (Issue #67) - histograms will reset every {}",
+                    interval_str
+                );
+            }
         }
 
         if !parsed_headers.is_empty() {
