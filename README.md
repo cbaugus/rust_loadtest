@@ -94,8 +94,26 @@ docker run --memory=4g \\
 **When to disable percentile tracking:**
 - High concurrency tests (>500 tasks)
 - High RPS tests (>10,000 RPS)
-- Long duration tests (>2 hours)
+- Long duration tests (>2 hours without rotation)
 - Limited RAM (2-4GB)
+
+**For long-duration tests (24h+), use histogram rotation:**
+```bash
+docker run --memory=4g \
+  -e TARGET_URL="https://api.example.com" \
+  -e NUM_CONCURRENT_TASKS=200 \
+  -e TARGET_RPS=5000 \
+  -e TEST_DURATION=24h \
+  -e HISTOGRAM_ROTATION_INTERVAL=15m \  # <-- Rotate every 15 minutes
+  cbaugus/rust-loadtester:latest
+```
+
+**What histogram rotation does:**
+- Clears percentile data every N minutes to free memory
+- Keeps histogram labels (no recreation overhead)
+- Enables 24h+ tests without OOM
+- Logs rotation events for visibility
+- Recommended: 15-30 minute intervals for long tests
 
 ### Pre-configured Examples
 
@@ -170,6 +188,7 @@ The load testing tool is configured primarily through environment variables pass
 * RESOLVE_TARGET_ADDR (Optional): Allows overriding DNS resolution for the `TARGET_URL`. The format is `"hostname:ip_address:port"`. For example, if `TARGET_URL` is `http://example.com/api` and `RESOLVE_TARGET_ADDR` is set to `"example.com:192.168.1.50:8080"`, all requests to `example.com` will be directed to `192.168.1.50` on port `8080`. This is useful for targeting services not in DNS or for specific routing during tests.
 * PERCENTILE_TRACKING_ENABLED (Optional, default: true): Set to "false" to disable HDR histogram tracking for percentile latency calculation. Disabling this can save significant memory (2-4MB per unique scenario/step) in high-load tests. When disabled, P50/P90/P95/P99 percentiles won't be available, but Prometheus metrics continue to work. See [Memory Configuration](#️-memory-configuration) for details.
 * MAX_HISTOGRAM_LABELS (Optional, default: 100): Maximum number of unique scenario/step labels to track for percentile calculation. Uses LRU eviction when limit is reached. Each label consumes 2-4MB. Increase for tests with many unique scenarios, or decrease to save memory. Warning logged at 80% capacity.
+* HISTOGRAM_ROTATION_INTERVAL (Optional, default: disabled): Periodically reset histogram data to prevent unbounded memory growth in long tests. Format: `15m`, `1h`, `2h`. Clears percentile data while keeping labels. Essential for 24h+ tests. Example: `HISTOGRAM_ROTATION_INTERVAL=15m`
 
 Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:
