@@ -155,6 +155,18 @@ docker run --memory=4g \
 
 Set `AUTO_DISABLE_PERCENTILES_ON_WARNING=false` for monitoring-only mode (logs warnings but doesn't take action).
 
+**Response Body Memory Management (Issue #73):**
+
+At high RPS (50K+), HTTP response bodies are now automatically consumed and discarded to prevent memory accumulation. Previous versions only checked status codes without reading response bodies, which could cause rapid memory growth (~215 MB/second at 50K RPS).
+
+**Fixed behavior:**
+- Response bodies are explicitly read and discarded in single-request mode
+- Prevents unbuffered response accumulation
+- Enables sustained high-RPS testing without memory leaks
+- Scenario mode was already handling this correctly
+
+**No configuration needed** - this fix is automatic and transparent. If you previously experienced rapid memory growth at high RPS even with percentile tracking disabled, this fix resolves it.
+
 ### Pre-configured Examples
 
 See `docker-compose.loadtest-examples.yml` for ready-to-use configurations:

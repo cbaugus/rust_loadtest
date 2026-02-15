@@ -87,6 +87,10 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
                         .inc();
                 }
 
+                // Explicitly consume and discard response body to prevent memory accumulation (Issue #73)
+                // At high RPS, unbuffered response bodies can accumulate and cause OOM
+                let _ = response.bytes().await;
+
                 debug!(
                     task_id = config.task_id,
                     url = %config.url,
