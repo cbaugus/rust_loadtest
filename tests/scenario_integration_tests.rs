@@ -7,8 +7,7 @@
 
 use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{
-    Assertion, Extractor, RequestConfig, Scenario, ScenarioContext, Step, ThinkTime,
-    VariableExtraction,
+    Assertion, RequestConfig, Scenario, ScenarioContext, Step, ThinkTime,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -158,7 +157,7 @@ async fn test_multi_step_with_delays() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(200)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
             },
             Step {
                 name: "Step 2".to_string(),
@@ -170,7 +169,7 @@ async fn test_multi_step_with_delays() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(200)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
             },
             Step {
                 name: "Step 3".to_string(),
