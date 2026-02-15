@@ -585,7 +585,10 @@ fn test_env_override_documentation() {
         ("DAILY_MIN_RPS", "load.min (DailyTraffic model)"),
         ("DAILY_MID_RPS", "load.mid (DailyTraffic model)"),
         ("DAILY_MAX_RPS", "load.max (DailyTraffic model)"),
-        ("DAILY_CYCLE_DURATION", "load.cycleDuration (DailyTraffic model)"),
+        (
+            "DAILY_CYCLE_DURATION",
+            "load.cycleDuration (DailyTraffic model)",
+        ),
     ];
 
     println!("\n=== Environment Variable Override Mapping ===");

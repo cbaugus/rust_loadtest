@@ -110,8 +110,8 @@ fn extract_value(
 /// ```
 pub fn extract_json_path(json_body: &str, path: &str) -> Result<String, ExtractionError> {
     // Parse JSON
-    let json: Value = serde_json::from_str(json_body)
-        .map_err(|e| ExtractionError::InvalidJson(e.to_string()))?;
+    let json: Value =
+        serde_json::from_str(json_body).map_err(|e| ExtractionError::InvalidJson(e.to_string()))?;
 
     // Use serde_json_path to query
     use serde_json_path::JsonPath;

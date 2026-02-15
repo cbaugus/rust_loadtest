@@ -331,7 +331,9 @@ impl ScenarioMetrics {
             });
         }
 
-        ScenarioMetricsSummary { scenarios: summaries }
+        ScenarioMetricsSummary {
+            scenarios: summaries,
+        }
     }
 }
 
@@ -360,7 +362,11 @@ impl ScenarioMetricsSummary {
         for summary in &self.scenarios {
             println!("Scenario: {}", summary.name);
             println!("  Executions: {}", summary.executions);
-            println!("  Successes:  {} ({:.1}%)", summary.successes, summary.success_rate * 100.0);
+            println!(
+                "  Successes:  {} ({:.1}%)",
+                summary.successes,
+                summary.success_rate * 100.0
+            );
             println!("  Failures:   {}", summary.failures);
             println!("  Avg Time:   {:.2}ms", summary.average_time_ms);
             println!();
@@ -443,8 +449,12 @@ mod tests {
         assert!((delete_pct - 0.05).abs() < 0.05);
 
         println!("✅ ScenarioSelector weighted distribution works");
-        println!("   Read: {:.1}%, Write: {:.1}%, Delete: {:.1}%",
-            read_pct * 100.0, write_pct * 100.0, delete_pct * 100.0);
+        println!(
+            "   Read: {:.1}%, Write: {:.1}%, Delete: {:.1}%",
+            read_pct * 100.0,
+            write_pct * 100.0,
+            delete_pct * 100.0
+        );
     }
 
     #[test]

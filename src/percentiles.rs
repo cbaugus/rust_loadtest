@@ -99,8 +99,8 @@ impl PercentileTracker {
     /// with 3 significant digits of precision.
     pub fn new() -> Self {
         // Create histogram that can track 1μs to 60s with 3 significant digits
-        let histogram = Histogram::new_with_bounds(1, 60_000_000, 3)
-            .expect("Failed to create histogram");
+        let histogram =
+            Histogram::new_with_bounds(1, 60_000_000, 3).expect("Failed to create histogram");
 
         Self {
             histogram: Arc::new(Mutex::new(histogram)),
@@ -359,7 +359,10 @@ pub fn rotate_all_histograms() {
 ///
 /// # Returns
 /// Formatted table string
-pub fn format_percentile_table(title: &str, stats_map: &HashMap<String, PercentileStats>) -> String {
+pub fn format_percentile_table(
+    title: &str,
+    stats_map: &HashMap<String, PercentileStats>,
+) -> String {
     if stats_map.is_empty() {
         return format!("## {}\n\nNo data available.\n", title);
     }
@@ -484,14 +487,14 @@ mod tests {
     fn test_percentile_stats_format() {
         let stats = PercentileStats {
             count: 100,
-            min: 1_000,    // 1ms
-            max: 100_000,  // 100ms
+            min: 1_000,     // 1ms
+            max: 100_000,   // 100ms
             mean: 50_000.0, // 50ms
-            p50: 50_000,   // 50ms
-            p90: 90_000,   // 90ms
-            p95: 95_000,   // 95ms
-            p99: 99_000,   // 99ms
-            p99_9: 99_900, // 99.9ms
+            p50: 50_000,    // 50ms
+            p90: 90_000,    // 90ms
+            p95: 95_000,    // 95ms
+            p99: 99_000,    // 99ms
+            p99_9: 99_900,  // 99.9ms
         };
 
         let formatted = stats.format();

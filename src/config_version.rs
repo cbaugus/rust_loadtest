@@ -397,8 +397,8 @@ mod tests {
     #[test]
     fn test_version_needs_migration() {
         assert!(!Version::new(1, 0).needs_migration()); // Current version
-        // Future: when we have 2.0, version 1.0 will need migration
-        // assert!(Version::new(1, 0).needs_migration());
+                                                        // Future: when we have 2.0, version 1.0 will need migration
+                                                        // assert!(Version::new(1, 0).needs_migration());
 
         println!("✅ Version migration checking works");
     }

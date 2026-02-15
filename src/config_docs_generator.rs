@@ -379,7 +379,9 @@ impl ConfigDocsGenerator {
         md.push_str("```yaml\nload:\n  model: \"concurrent\"\n```\n\n");
         md.push_str("### RPS Model\n\n");
         md.push_str("Target requests per second.\n\n");
-        md.push_str("```yaml\nload:\n  model: \"rps\"\n  target: 100  # 100 requests/second\n```\n\n");
+        md.push_str(
+            "```yaml\nload:\n  model: \"rps\"\n  target: 100  # 100 requests/second\n```\n\n",
+        );
         md.push_str("### Ramp Model\n\n");
         md.push_str("Gradually increase RPS over time.\n\n");
         md.push_str("```yaml\nload:\n  model: \"ramp\"\n  min: 10       # Starting RPS\n  max: 500      # Ending RPS\n  rampDuration: \"5m\"  # Ramp over 5 minutes\n```\n\n");
@@ -421,127 +423,154 @@ impl ConfigDocsGenerator {
         let mut snippets = HashMap::new();
 
         // Basic config snippet
-        snippets.insert("loadtest-basic", serde_json::json!({
-            "prefix": "loadtest-basic",
-            "body": [
-                "version: \"1.0\"",
-                "",
-                "config:",
-                "  baseUrl: \"${1:https://api.example.com}\"",
-                "  workers: ${2:10}",
-                "  duration: \"${3:5m}\"",
-                "",
-                "load:",
-                "  model: \"${4|concurrent,rps,ramp|}\"",
-                "  ${5:target: 100}",
-                "",
-                "scenarios:",
-                "  - name: \"${6:My Scenario}\"",
-                "    steps:",
-                "      - request:",
-                "          method: \"${7|GET,POST,PUT,DELETE|}\"",
-                "          path: \"${8:/endpoint}\"",
-                "        assertions:",
-                "          - statusCode: ${9:200}"
-            ],
-            "description": "Basic load test configuration"
-        }));
+        snippets.insert(
+            "loadtest-basic",
+            serde_json::json!({
+                "prefix": "loadtest-basic",
+                "body": [
+                    "version: \"1.0\"",
+                    "",
+                    "config:",
+                    "  baseUrl: \"${1:https://api.example.com}\"",
+                    "  workers: ${2:10}",
+                    "  duration: \"${3:5m}\"",
+                    "",
+                    "load:",
+                    "  model: \"${4|concurrent,rps,ramp|}\"",
+                    "  ${5:target: 100}",
+                    "",
+                    "scenarios:",
+                    "  - name: \"${6:My Scenario}\"",
+                    "    steps:",
+                    "      - request:",
+                    "          method: \"${7|GET,POST,PUT,DELETE|}\"",
+                    "          path: \"${8:/endpoint}\"",
+                    "        assertions:",
+                    "          - statusCode: ${9:200}"
+                ],
+                "description": "Basic load test configuration"
+            }),
+        );
 
         // RPS load model snippet
-        snippets.insert("loadtest-rps", serde_json::json!({
-            "prefix": "loadtest-rps",
-            "body": [
-                "load:",
-                "  model: \"rps\"",
-                "  target: ${1:100}"
-            ],
-            "description": "RPS load model"
-        }));
+        snippets.insert(
+            "loadtest-rps",
+            serde_json::json!({
+                "prefix": "loadtest-rps",
+                "body": [
+                    "load:",
+                    "  model: \"rps\"",
+                    "  target: ${1:100}"
+                ],
+                "description": "RPS load model"
+            }),
+        );
 
         // Ramp load model snippet
-        snippets.insert("loadtest-ramp", serde_json::json!({
-            "prefix": "loadtest-ramp",
-            "body": [
-                "load:",
-                "  model: \"ramp\"",
-                "  min: ${1:10}",
-                "  max: ${2:500}",
-                "  rampDuration: \"${3:5m}\""
-            ],
-            "description": "Ramp load model"
-        }));
+        snippets.insert(
+            "loadtest-ramp",
+            serde_json::json!({
+                "prefix": "loadtest-ramp",
+                "body": [
+                    "load:",
+                    "  model: \"ramp\"",
+                    "  min: ${1:10}",
+                    "  max: ${2:500}",
+                    "  rampDuration: \"${3:5m}\""
+                ],
+                "description": "Ramp load model"
+            }),
+        );
 
         // Scenario snippet
-        snippets.insert("loadtest-scenario", serde_json::json!({
-            "prefix": "loadtest-scenario",
-            "body": [
-                "- name: \"${1:Scenario Name}\"",
-                "  weight: ${2:100}",
-                "  steps:",
-                "    - name: \"${3:Step Name}\"",
-                "      request:",
-                "        method: \"${4|GET,POST,PUT,DELETE|}\"",
-                "        path: \"${5:/path}\"",
-                "      assertions:",
-                "        - statusCode: ${6:200}"
-            ],
-            "description": "Test scenario"
-        }));
+        snippets.insert(
+            "loadtest-scenario",
+            serde_json::json!({
+                "prefix": "loadtest-scenario",
+                "body": [
+                    "- name: \"${1:Scenario Name}\"",
+                    "  weight: ${2:100}",
+                    "  steps:",
+                    "    - name: \"${3:Step Name}\"",
+                    "      request:",
+                    "        method: \"${4|GET,POST,PUT,DELETE|}\"",
+                    "        path: \"${5:/path}\"",
+                    "      assertions:",
+                    "        - statusCode: ${6:200}"
+                ],
+                "description": "Test scenario"
+            }),
+        );
 
         // Step snippet
-        snippets.insert("loadtest-step", serde_json::json!({
-            "prefix": "loadtest-step",
-            "body": [
-                "- name: \"${1:Step Name}\"",
-                "  request:",
-                "    method: \"${2|GET,POST,PUT,DELETE|}\"",
-                "    path: \"${3:/path}\"",
-                "    ${4:body: '${5:{}}'",
-                "  ${6:thinkTime: \"${7:2s}\"}",
-                "  assertions:",
-                "    - statusCode: ${8:200}"
-            ],
-            "description": "Test step"
-        }));
+        snippets.insert(
+            "loadtest-step",
+            serde_json::json!({
+                "prefix": "loadtest-step",
+                "body": [
+                    "- name: \"${1:Step Name}\"",
+                    "  request:",
+                    "    method: \"${2|GET,POST,PUT,DELETE|}\"",
+                    "    path: \"${3:/path}\"",
+                    "    ${4:body: '${5:{}}'",
+                    "  ${6:thinkTime: \"${7:2s}\"}",
+                    "  assertions:",
+                    "    - statusCode: ${8:200}"
+                ],
+                "description": "Test step"
+            }),
+        );
 
         // Assertion snippets
-        snippets.insert("loadtest-assertion-status", serde_json::json!({
-            "prefix": "loadtest-assertion-status",
-            "body": ["- statusCode: ${1:200}"],
-            "description": "Status code assertion"
-        }));
+        snippets.insert(
+            "loadtest-assertion-status",
+            serde_json::json!({
+                "prefix": "loadtest-assertion-status",
+                "body": ["- statusCode: ${1:200}"],
+                "description": "Status code assertion"
+            }),
+        );
 
-        snippets.insert("loadtest-assertion-jsonpath", serde_json::json!({
-            "prefix": "loadtest-assertion-jsonpath",
-            "body": [
-                "- jsonPath:",
-                "    path: \"${1:\\$.field}\"",
-                "    expected: \"${2:value}\""
-            ],
-            "description": "JSONPath assertion"
-        }));
+        snippets.insert(
+            "loadtest-assertion-jsonpath",
+            serde_json::json!({
+                "prefix": "loadtest-assertion-jsonpath",
+                "body": [
+                    "- jsonPath:",
+                    "    path: \"${1:\\$.field}\"",
+                    "    expected: \"${2:value}\""
+                ],
+                "description": "JSONPath assertion"
+            }),
+        );
 
         // Extractor snippets
-        snippets.insert("loadtest-extract-jsonpath", serde_json::json!({
-            "prefix": "loadtest-extract-jsonpath",
-            "body": [
-                "- name: \"${1:varName}\"",
-                "  jsonPath: \"${2:\\$.field}\""
-            ],
-            "description": "JSONPath extractor"
-        }));
+        snippets.insert(
+            "loadtest-extract-jsonpath",
+            serde_json::json!({
+                "prefix": "loadtest-extract-jsonpath",
+                "body": [
+                    "- name: \"${1:varName}\"",
+                    "  jsonPath: \"${2:\\$.field}\""
+                ],
+                "description": "JSONPath extractor"
+            }),
+        );
 
         // Data file snippet
-        snippets.insert("loadtest-datafile", serde_json::json!({
-            "prefix": "loadtest-datafile",
-            "body": [
-                "dataFile:",
-                "  path: \"${1:./data.csv}\"",
-                "  format: \"${2|csv,json|}\"",
-                "  strategy: \"${3|sequential,random,cycle|}\""
-            ],
-            "description": "External data file"
-        }));
+        snippets.insert(
+            "loadtest-datafile",
+            serde_json::json!({
+                "prefix": "loadtest-datafile",
+                "body": [
+                    "dataFile:",
+                    "  path: \"${1:./data.csv}\"",
+                    "  format: \"${2|csv,json|}\"",
+                    "  strategy: \"${3|sequential,random,cycle|}\""
+                ],
+                "description": "External data file"
+            }),
+        );
 
         serde_json::to_string_pretty(&snippets).unwrap()
     }

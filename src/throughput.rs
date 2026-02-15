@@ -45,10 +45,7 @@ impl ThroughputStats {
     pub fn format_table_row(&self) -> String {
         format!(
             "{:<30} {:>10} {:>10.2} {:>10.2}",
-            self.scenario_name,
-            self.total_count,
-            self.rps,
-            self.avg_time_ms
+            self.scenario_name, self.total_count, self.rps, self.avg_time_ms
         )
     }
 }
@@ -86,7 +83,9 @@ impl ThroughputTracker {
         *counts.entry(scenario_name.to_string()).or_insert(0) += 1;
 
         let mut times = self.total_times.lock().unwrap();
-        *times.entry(scenario_name.to_string()).or_insert(Duration::ZERO) += duration;
+        *times
+            .entry(scenario_name.to_string())
+            .or_insert(Duration::ZERO) += duration;
 
         debug!(
             scenario = scenario_name,

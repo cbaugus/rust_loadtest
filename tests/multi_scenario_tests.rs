@@ -6,9 +6,7 @@
 //! - Per-scenario metrics tracking
 //! - Multi-scenario YAML loading
 
-use rust_loadtest::multi_scenario::{
-    RoundRobinDistributor, ScenarioMetrics, ScenarioSelector,
-};
+use rust_loadtest::multi_scenario::{RoundRobinDistributor, ScenarioMetrics, ScenarioSelector};
 use rust_loadtest::scenario::Scenario;
 use rust_loadtest::yaml_config::YamlConfig;
 use std::collections::HashMap;

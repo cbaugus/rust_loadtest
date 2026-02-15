@@ -311,11 +311,8 @@ impl ScenarioExecutor {
                                 "Extracting variables from response"
                             );
 
-                            let extracted = extractor::extract_variables(
-                                &step.extractions,
-                                &body,
-                                &headers,
-                            );
+                            let extracted =
+                                extractor::extract_variables(&step.extractions, &body, &headers);
 
                             let count = extracted.len();
 
@@ -336,7 +333,8 @@ impl ScenarioExecutor {
                         };
 
                         // Run assertions on response (#30 - IMPLEMENTED)
-                        let (assertions_passed, assertions_failed) = if !step.assertions.is_empty() {
+                        let (assertions_passed, assertions_failed) = if !step.assertions.is_empty()
+                        {
                             debug!(
                                 step = %step.name,
                                 assertions = step.assertions.len(),
@@ -400,7 +398,13 @@ impl ScenarioExecutor {
                             None
                         };
 
-                        (success, extracted_count, assertions_passed, assertions_failed, error_msg)
+                        (
+                            success,
+                            extracted_count,
+                            assertions_passed,
+                            assertions_failed,
+                            error_msg,
+                        )
                     }
                     Err(e) => {
                         warn!(
@@ -408,11 +412,18 @@ impl ScenarioExecutor {
                             error = %e,
                             "Failed to read response body"
                         );
-                        (false, 0, 0, 0, Some(format!("Failed to read response body: {}", e)))
+                        (
+                            false,
+                            0,
+                            0,
+                            0,
+                            Some(format!("Failed to read response body: {}", e)),
+                        )
                     }
                 };
 
-                let (success, _extracted_count, assertions_passed, assertions_failed, error_msg) = body_result_data;
+                let (success, _extracted_count, assertions_passed, assertions_failed, error_msg) =
+                    body_result_data;
 
                 // Record step metrics
                 let response_time_secs = response_time_ms as f64 / 1000.0;

@@ -45,8 +45,9 @@ impl YamlDuration {
     pub fn to_std_duration(&self) -> Result<StdDuration, YamlConfigError> {
         match self {
             YamlDuration::Seconds(s) => Ok(StdDuration::from_secs(*s)),
-            YamlDuration::String(s) => crate::utils::parse_duration_string(s)
-                .map_err(|e| YamlConfigError::Validation(format!("Invalid duration '{}': {}", s, e))),
+            YamlDuration::String(s) => crate::utils::parse_duration_string(s).map_err(|e| {
+                YamlConfigError::Validation(format!("Invalid duration '{}': {}", s, e))
+            }),
         }
     }
 }
@@ -93,11 +94,21 @@ fn default_workers() -> usize {
 /// Load model configuration in YAML.
 ///
 /// Default ratios for DailyTraffic pattern
-fn default_morning_ramp_ratio() -> f64 { 0.2 }
-fn default_peak_sustain_ratio() -> f64 { 0.1 }
-fn default_mid_decline_ratio() -> f64 { 0.2 }
-fn default_mid_sustain_ratio() -> f64 { 0.1 }
-fn default_evening_decline_ratio() -> f64 { 0.2 }
+fn default_morning_ramp_ratio() -> f64 {
+    0.2
+}
+fn default_peak_sustain_ratio() -> f64 {
+    0.1
+}
+fn default_mid_decline_ratio() -> f64 {
+    0.2
+}
+fn default_mid_sustain_ratio() -> f64 {
+    0.1
+}
+fn default_evening_decline_ratio() -> f64 {
+    0.2
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "model", rename_all = "lowercase")]
@@ -127,7 +138,10 @@ pub enum YamlLoadModel {
         mid_decline_ratio: f64,
         #[serde(rename = "midSustainRatio", default = "default_mid_sustain_ratio")]
         mid_sustain_ratio: f64,
-        #[serde(rename = "eveningDeclineRatio", default = "default_evening_decline_ratio")]
+        #[serde(
+            rename = "eveningDeclineRatio",
+            default = "default_evening_decline_ratio"
+        )]
         evening_decline_ratio: f64,
     },
 }
@@ -136,14 +150,18 @@ impl YamlLoadModel {
     pub fn to_load_model(&self) -> Result<LoadModel, YamlConfigError> {
         match self {
             YamlLoadModel::Concurrent => Ok(LoadModel::Concurrent),
-            YamlLoadModel::Rps { target } => Ok(LoadModel::Rps { target_rps: *target }),
-            YamlLoadModel::Ramp { min, max, ramp_duration } => {
-                Ok(LoadModel::RampRps {
-                    min_rps: *min,
-                    max_rps: *max,
-                    ramp_duration: ramp_duration.to_std_duration()?,
-                })
-            }
+            YamlLoadModel::Rps { target } => Ok(LoadModel::Rps {
+                target_rps: *target,
+            }),
+            YamlLoadModel::Ramp {
+                min,
+                max,
+                ramp_duration,
+            } => Ok(LoadModel::RampRps {
+                min_rps: *min,
+                max_rps: *max,
+                ramp_duration: ramp_duration.to_std_duration()?,
+            }),
             YamlLoadModel::DailyTraffic {
                 min,
                 mid,
@@ -154,19 +172,17 @@ impl YamlLoadModel {
                 mid_decline_ratio,
                 mid_sustain_ratio,
                 evening_decline_ratio,
-            } => {
-                Ok(LoadModel::DailyTraffic {
-                    min_rps: *min,
-                    mid_rps: *mid,
-                    max_rps: *max,
-                    cycle_duration: cycle_duration.to_std_duration()?,
-                    morning_ramp_ratio: *morning_ramp_ratio,
-                    peak_sustain_ratio: *peak_sustain_ratio,
-                    mid_decline_ratio: *mid_decline_ratio,
-                    mid_sustain_ratio: *mid_sustain_ratio,
-                    evening_decline_ratio: *evening_decline_ratio,
-                })
-            }
+            } => Ok(LoadModel::DailyTraffic {
+                min_rps: *min,
+                mid_rps: *mid,
+                max_rps: *max,
+                cycle_duration: cycle_duration.to_std_duration()?,
+                morning_ramp_ratio: *morning_ramp_ratio,
+                peak_sustain_ratio: *peak_sustain_ratio,
+                mid_decline_ratio: *mid_decline_ratio,
+                mid_sustain_ratio: *mid_sustain_ratio,
+                evening_decline_ratio: *evening_decline_ratio,
+            }),
         }
     }
 }
@@ -249,15 +265,13 @@ pub enum YamlThinkTime {
 impl YamlThinkTime {
     pub fn to_think_time(&self) -> Result<crate::scenario::ThinkTime, YamlConfigError> {
         match self {
-            YamlThinkTime::Fixed(duration) => {
-                Ok(crate::scenario::ThinkTime::Fixed(duration.to_std_duration()?))
-            }
-            YamlThinkTime::Random { min, max } => {
-                Ok(crate::scenario::ThinkTime::Random {
-                    min: min.to_std_duration()?,
-                    max: max.to_std_duration()?,
-                })
-            }
+            YamlThinkTime::Fixed(duration) => Ok(crate::scenario::ThinkTime::Fixed(
+                duration.to_std_duration()?,
+            )),
+            YamlThinkTime::Random { min, max } => Ok(crate::scenario::ThinkTime::Random {
+                min: min.to_std_duration()?,
+                max: max.to_std_duration()?,
+            }),
         }
     }
 }
@@ -322,30 +336,20 @@ pub enum YamlExtractor {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum YamlAssertion {
     #[serde(rename = "statusCode")]
-    StatusCode {
-        expected: u16,
-    },
+    StatusCode { expected: u16 },
     #[serde(rename = "responseTime")]
-    ResponseTime {
-        max: YamlDuration,
-    },
+    ResponseTime { max: YamlDuration },
     #[serde(rename = "jsonPath")]
     JsonPath {
         path: String,
         expected: Option<String>,
     },
     #[serde(rename = "bodyContains")]
-    BodyContains {
-        text: String,
-    },
+    BodyContains { text: String },
     #[serde(rename = "bodyMatches")]
-    BodyMatches {
-        regex: String,
-    },
+    BodyMatches { regex: String },
     #[serde(rename = "headerExists")]
-    HeaderExists {
-        header: String,
-    },
+    HeaderExists { header: String },
 }
 
 /// Root YAML configuration structure.
@@ -404,12 +408,9 @@ impl YamlConfig {
         {
             ctx.field_error(e.to_string());
         }
-        if let Err(e) = RangeValidator::validate_u64(
-            self.config.workers as u64,
-            1,
-            10000,
-            "workers",
-        ) {
+        if let Err(e) =
+            RangeValidator::validate_u64(self.config.workers as u64, 1, 10000, "workers")
+        {
             ctx.field_error(format!(
                 "Workers should be between 1 and 10000, got: {}",
                 self.config.workers
@@ -511,7 +512,9 @@ impl YamlConfig {
             let mut steps = Vec::new();
 
             for (idx, yaml_step) in yaml_scenario.steps.iter().enumerate() {
-                let step_name = yaml_step.name.clone()
+                let step_name = yaml_step
+                    .name
+                    .clone()
                     .unwrap_or_else(|| format!("Step {}", idx + 1));
 
                 // Build request config
@@ -522,7 +525,8 @@ impl YamlConfig {
 
                 // Build body with query params if present
                 let path = if let Some(query_params) = &yaml_step.request.query_params {
-                    let query_string: Vec<String> = query_params.iter()
+                    let query_string: Vec<String> = query_params
+                        .iter()
                         .map(|(k, v)| format!("{}={}", k, v))
                         .collect();
                     format!("{}?{}", yaml_step.request.path, query_string.join("&"))
@@ -538,12 +542,16 @@ impl YamlConfig {
                 };
 
                 // Convert extractors
-                let extractors = yaml_step.extract.iter()
+                let extractors = yaml_step
+                    .extract
+                    .iter()
                     .map(|e| self.convert_extractor(e))
                     .collect();
 
                 // Convert assertions
-                let assertions = yaml_step.assertions.iter()
+                let assertions = yaml_step
+                    .assertions
+                    .iter()
                     .map(|a| self.convert_assertion(a))
                     .collect::<Result<Vec<_>, _>>()?;
 
@@ -575,12 +583,10 @@ impl YamlConfig {
 
     fn convert_extractor(&self, extractor: &YamlExtractor) -> VariableExtraction {
         match extractor {
-            YamlExtractor::JsonPath { name, json_path } => {
-                VariableExtraction {
-                    name: name.clone(),
-                    extractor: Extractor::JsonPath(json_path.clone()),
-                }
-            }
+            YamlExtractor::JsonPath { name, json_path } => VariableExtraction {
+                name: name.clone(),
+                extractor: Extractor::JsonPath(json_path.clone()),
+            },
             YamlExtractor::Regex { name, regex } => {
                 // For Regex, we need to parse the regex to extract pattern and group
                 // For now, use the entire regex as pattern and empty group
@@ -593,44 +599,30 @@ impl YamlConfig {
                     },
                 }
             }
-            YamlExtractor::Header { name, header } => {
-                VariableExtraction {
-                    name: name.clone(),
-                    extractor: Extractor::Header(header.clone()),
-                }
-            }
-            YamlExtractor::Cookie { name, cookie } => {
-                VariableExtraction {
-                    name: name.clone(),
-                    extractor: Extractor::Cookie(cookie.clone()),
-                }
-            }
+            YamlExtractor::Header { name, header } => VariableExtraction {
+                name: name.clone(),
+                extractor: Extractor::Header(header.clone()),
+            },
+            YamlExtractor::Cookie { name, cookie } => VariableExtraction {
+                name: name.clone(),
+                extractor: Extractor::Cookie(cookie.clone()),
+            },
         }
     }
 
     fn convert_assertion(&self, assertion: &YamlAssertion) -> Result<Assertion, YamlConfigError> {
         match assertion {
-            YamlAssertion::StatusCode { expected } => {
-                Ok(Assertion::StatusCode(*expected))
-            }
+            YamlAssertion::StatusCode { expected } => Ok(Assertion::StatusCode(*expected)),
             YamlAssertion::ResponseTime { max } => {
                 Ok(Assertion::ResponseTime(max.to_std_duration()?))
             }
-            YamlAssertion::JsonPath { path, expected } => {
-                Ok(Assertion::JsonPath {
-                    path: path.clone(),
-                    expected: expected.clone(),
-                })
-            }
-            YamlAssertion::BodyContains { text } => {
-                Ok(Assertion::BodyContains(text.clone()))
-            }
-            YamlAssertion::BodyMatches { regex } => {
-                Ok(Assertion::BodyMatches(regex.clone()))
-            }
-            YamlAssertion::HeaderExists { header } => {
-                Ok(Assertion::HeaderExists(header.clone()))
-            }
+            YamlAssertion::JsonPath { path, expected } => Ok(Assertion::JsonPath {
+                path: path.clone(),
+                expected: expected.clone(),
+            }),
+            YamlAssertion::BodyContains { text } => Ok(Assertion::BodyContains(text.clone())),
+            YamlAssertion::BodyMatches { regex } => Ok(Assertion::BodyMatches(regex.clone())),
+            YamlAssertion::HeaderExists { header } => Ok(Assertion::HeaderExists(header.clone())),
         }
     }
 }
@@ -732,7 +724,10 @@ scenarios:
 
         let result = YamlConfig::from_str(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unsupported config version"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unsupported config version"));
     }
 
     #[test]
@@ -771,7 +766,10 @@ scenarios: []
 
         let result = YamlConfig::from_str(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("At least one scenario"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("At least one scenario"));
     }
 
     #[test]
@@ -834,7 +832,11 @@ scenarios:
         let load_model = config.load.to_load_model().unwrap();
 
         match load_model {
-            LoadModel::RampRps { min_rps, max_rps, ramp_duration } => {
+            LoadModel::RampRps {
+                min_rps,
+                max_rps,
+                ramp_duration,
+            } => {
                 assert_eq!(min_rps, 10.0);
                 assert_eq!(max_rps, 100.0);
                 assert_eq!(ramp_duration, StdDuration::from_secs(30));

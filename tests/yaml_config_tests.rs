@@ -153,7 +153,11 @@ scenarios:
     let config = YamlConfig::from_str(yaml_ramp).unwrap();
     let load_model = config.load.to_load_model().unwrap();
     match load_model {
-        rust_loadtest::load_models::LoadModel::RampRps { min_rps, max_rps, ramp_duration } => {
+        rust_loadtest::load_models::LoadModel::RampRps {
+            min_rps,
+            max_rps,
+            ramp_duration,
+        } => {
             assert_eq!(min_rps, 10.0);
             assert_eq!(max_rps, 100.0);
             assert_eq!(ramp_duration.as_secs(), 30);
@@ -243,7 +247,10 @@ scenarios:
 
     // Check extractor types
     match &scenarios[0].steps[0].extractions[0] {
-        rust_loadtest::scenario::Extractor::JsonPath { var_name, json_path } => {
+        rust_loadtest::scenario::Extractor::JsonPath {
+            var_name,
+            json_path,
+        } => {
             assert_eq!(var_name, "productId");
             assert_eq!(json_path, "$.products[0].id");
         }
@@ -312,7 +319,10 @@ scenarios:
 
     let headers = &scenarios[0].steps[0].request.headers;
     assert_eq!(headers.get("X-Custom-Header"), Some(&"value".to_string()));
-    assert_eq!(headers.get("Content-Type"), Some(&"application/json".to_string()));
+    assert_eq!(
+        headers.get("Content-Type"),
+        Some(&"application/json".to_string())
+    );
 
     println!("✅ Custom headers work correctly");
 }
@@ -616,7 +626,10 @@ scenarios:
     let config = YamlConfig::from_str(yaml).unwrap();
 
     // Validate metadata
-    assert_eq!(config.metadata.name, Some("E-commerce Load Test".to_string()));
+    assert_eq!(
+        config.metadata.name,
+        Some("E-commerce Load Test".to_string())
+    );
     assert_eq!(config.metadata.tags.len(), 2);
 
     // Validate config
@@ -626,7 +639,9 @@ scenarios:
     // Validate load model
     let load_model = config.load.to_load_model().unwrap();
     match load_model {
-        rust_loadtest::load_models::LoadModel::RampRps { min_rps, max_rps, .. } => {
+        rust_loadtest::load_models::LoadModel::RampRps {
+            min_rps, max_rps, ..
+        } => {
             assert_eq!(min_rps, 10.0);
             assert_eq!(max_rps, 100.0);
         }

@@ -202,7 +202,8 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
 
     // Connection pool metrics
     prometheus::default_registry().register(Box::new(CONNECTION_POOL_MAX_IDLE.clone()))?;
-    prometheus::default_registry().register(Box::new(CONNECTION_POOL_IDLE_TIMEOUT_SECONDS.clone()))?;
+    prometheus::default_registry()
+        .register(Box::new(CONNECTION_POOL_IDLE_TIMEOUT_SECONDS.clone()))?;
     prometheus::default_registry().register(Box::new(CONNECTION_POOL_REQUESTS_TOTAL.clone()))?;
     prometheus::default_registry().register(Box::new(CONNECTION_POOL_LIKELY_REUSED.clone()))?;
     prometheus::default_registry().register(Box::new(CONNECTION_POOL_LIKELY_NEW.clone()))?;
@@ -303,11 +304,17 @@ pub fn update_memory_metrics() -> Result<(), Box<dyn std::error::Error + Send + 
     }
 
     // Histogram metrics (platform-independent)
-    use crate::percentiles::{GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
+    use crate::percentiles::{
+        GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES,
+    };
 
     let scenario_count = GLOBAL_SCENARIO_PERCENTILES.len();
     let step_count = GLOBAL_STEP_PERCENTILES.len();
-    let request_count = if GLOBAL_REQUEST_PERCENTILES.stats().is_some() { 1 } else { 0 };
+    let request_count = if GLOBAL_REQUEST_PERCENTILES.stats().is_some() {
+        1
+    } else {
+        0
+    };
     let total_histograms = scenario_count + step_count + request_count;
 
     HISTOGRAM_COUNT.set(total_histograms as f64);

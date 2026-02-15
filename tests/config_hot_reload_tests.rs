@@ -324,7 +324,10 @@ fn test_config_watcher_invalid_config_handling() {
 
     // Check for reload event
     let event = notifier_clone.try_recv();
-    assert!(event.is_some(), "Should receive reload event even for invalid config");
+    assert!(
+        event.is_some(),
+        "Should receive reload event even for invalid config"
+    );
 
     let event = event.unwrap();
     assert!(!event.is_success(), "Reload should fail for invalid config");
@@ -388,7 +391,10 @@ scenarios:
         event_count
     );
 
-    println!("✅ ConfigWatcher debounces rapid changes (got {} events)", event_count);
+    println!(
+        "✅ ConfigWatcher debounces rapid changes (got {} events)",
+        event_count
+    );
 }
 
 #[test]

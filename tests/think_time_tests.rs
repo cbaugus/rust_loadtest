@@ -81,7 +81,10 @@ async fn test_fixed_think_time() {
 
     println!("\nFixed Think Time Test:");
     println!("  Total duration: {}ms", total_duration.as_millis());
-    println!("  Step 1 latency: {}ms (excludes think time)", result.steps[0].response_time_ms);
+    println!(
+        "  Step 1 latency: {}ms (excludes think time)",
+        result.steps[0].response_time_ms
+    );
     println!("  Step 2 latency: {}ms", result.steps[1].response_time_ms);
     println!("  ✅ Think time does NOT count towards request latency");
 }
@@ -154,10 +157,7 @@ async fn test_random_think_time() {
 
     // Check that durations vary (randomness working)
     let all_same = durations.windows(2).all(|w| w[0] == w[1]);
-    assert!(
-        !all_same,
-        "Durations should vary due to random think time"
-    );
+    assert!(!all_same, "Durations should vary due to random think time");
 
     println!("  ✅ Think times are random and vary between runs");
 }
@@ -226,10 +226,22 @@ async fn test_multiple_think_times() {
     );
 
     println!("\nMultiple Think Times Test:");
-    println!("  Total duration: {}ms (includes 600ms think time)", total_duration.as_millis());
-    println!("  Step 1: {}ms + 100ms think", result.steps[0].response_time_ms);
-    println!("  Step 2: {}ms + 200ms think", result.steps[1].response_time_ms);
-    println!("  Step 3: {}ms + 300ms think", result.steps[2].response_time_ms);
+    println!(
+        "  Total duration: {}ms (includes 600ms think time)",
+        total_duration.as_millis()
+    );
+    println!(
+        "  Step 1: {}ms + 100ms think",
+        result.steps[0].response_time_ms
+    );
+    println!(
+        "  Step 2: {}ms + 200ms think",
+        result.steps[1].response_time_ms
+    );
+    println!(
+        "  Step 3: {}ms + 300ms think",
+        result.steps[2].response_time_ms
+    );
     println!("  ✅ Multiple think times accumulate correctly");
 }
 
@@ -362,8 +374,17 @@ async fn test_realistic_user_behavior() {
 
     println!("\nRealistic User Behavior Test:");
     println!("  Total duration: {:.1}s", total_duration.as_secs_f64());
-    println!("  Step 1 (homepage): {}ms + 1-3s think", result.steps[0].response_time_ms);
-    println!("  Step 2 (browse): {}ms + 2-5s think", result.steps[1].response_time_ms);
-    println!("  Step 3 (details): {}ms + 3-10s think", result.steps[2].response_time_ms);
+    println!(
+        "  Step 1 (homepage): {}ms + 1-3s think",
+        result.steps[0].response_time_ms
+    );
+    println!(
+        "  Step 2 (browse): {}ms + 2-5s think",
+        result.steps[1].response_time_ms
+    );
+    println!(
+        "  Step 3 (details): {}ms + 3-10s think",
+        result.steps[2].response_time_ms
+    );
     println!("  ✅ Realistic user delays applied");
 }

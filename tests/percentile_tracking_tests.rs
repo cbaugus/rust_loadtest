@@ -154,9 +154,11 @@ fn test_percentile_tracker_skewed_distribution() {
 
     println!("✅ Skewed distribution percentiles correct");
     println!("   {}", stats.format());
-    println!("   Shows P90 at {}ms and P95 at {}ms",
+    println!(
+        "   Shows P90 at {}ms and P95 at {}ms",
         stats.p90 as f64 / 1000.0,
-        stats.p95 as f64 / 1000.0);
+        stats.p95 as f64 / 1000.0
+    );
 }
 
 #[test]
@@ -287,7 +289,10 @@ fn test_percentile_tracker_reset() {
     assert!(tracker.stats().is_some());
 
     tracker.reset();
-    assert!(tracker.stats().is_none(), "Stats should be None after reset");
+    assert!(
+        tracker.stats().is_none(),
+        "Stats should be None after reset"
+    );
 
     println!("✅ Tracker reset works correctly");
 }
@@ -369,8 +374,10 @@ async fn test_realistic_latency_distribution() {
 
     println!("✅ Realistic latency distribution captured correctly");
     println!("   {}", stats.format());
-    println!("   P50 at {:.2}ms, P90 at {:.2}ms, P99 at {:.2}ms",
+    println!(
+        "   P50 at {:.2}ms, P90 at {:.2}ms, P99 at {:.2}ms",
         stats.p50 as f64 / 1000.0,
         stats.p90 as f64 / 1000.0,
-        stats.p99 as f64 / 1000.0);
+        stats.p99 as f64 / 1000.0
+    );
 }

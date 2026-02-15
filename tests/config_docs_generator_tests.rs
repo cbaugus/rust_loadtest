@@ -211,7 +211,8 @@ fn test_vscode_snippet_basic_config() {
     let body = basic["body"].as_array().unwrap();
 
     // Check that basic config includes all essential parts
-    let body_str = body.iter()
+    let body_str = body
+        .iter()
         .map(|v| v.as_str().unwrap())
         .collect::<Vec<_>>()
         .join("\n");

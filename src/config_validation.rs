@@ -124,10 +124,7 @@ impl UrlValidator {
         if !url.starts_with("http://") && !url.starts_with("https://") {
             return Err(ValidationError::InvalidFormat {
                 field: "url".to_string(),
-                message: format!(
-                    "URL must start with http:// or https://, got: {}",
-                    url
-                ),
+                message: format!("URL must start with http:// or https://, got: {}", url),
             });
         }
 
@@ -273,7 +270,11 @@ impl LoadModelValidator {
         Ok(())
     }
 
-    pub fn validate_daily_traffic(min_rps: f64, mid_rps: f64, max_rps: f64) -> ValidationResult<()> {
+    pub fn validate_daily_traffic(
+        min_rps: f64,
+        mid_rps: f64,
+        max_rps: f64,
+    ) -> ValidationResult<()> {
         RangeValidator::validate_positive_f64(min_rps, "load.min")?;
         RangeValidator::validate_positive_f64(mid_rps, "load.mid")?;
         RangeValidator::validate_positive_f64(max_rps, "load.max")?;

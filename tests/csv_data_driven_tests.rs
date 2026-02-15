@@ -5,9 +5,7 @@
 
 use rust_loadtest::data_source::CsvDataSource;
 use rust_loadtest::executor::ScenarioExecutor;
-use rust_loadtest::scenario::{
-    Assertion, RequestConfig, Scenario, ScenarioContext, Step,
-};
+use rust_loadtest::scenario::{Assertion, RequestConfig, Scenario, ScenarioContext, Step};
 use std::collections::HashMap;
 use std::fs;
 use std::time::Duration;
@@ -41,7 +39,8 @@ fn test_csv_load_from_string() {
 #[test]
 fn test_csv_load_from_file() {
     // Create temporary CSV file
-    let csv_content = "product_id,name,price\n101,Widget,19.99\n102,Gadget,29.99\n103,Doohickey,39.99";
+    let csv_content =
+        "product_id,name,price\n101,Widget,19.99\n102,Gadget,29.99\n103,Doohickey,39.99";
 
     let mut temp_file = NamedTempFile::new().unwrap();
     use std::io::Write;
@@ -101,7 +100,10 @@ fn test_context_load_data_row() {
     let mut context = ScenarioContext::new();
     context.load_data_row(&row);
 
-    assert_eq!(context.get_variable("username"), Some(&"testuser".to_string()));
+    assert_eq!(
+        context.get_variable("username"),
+        Some(&"testuser".to_string())
+    );
     assert_eq!(context.get_variable("api_key"), Some(&"abc123".to_string()));
     assert_eq!(context.get_variable("region"), Some(&"us-west".to_string()));
 
@@ -117,7 +119,8 @@ fn test_variable_substitution_from_csv() {
     let mut context = ScenarioContext::new();
     context.load_data_row(&row);
 
-    let path = context.substitute_variables("/users/${user_id}/cart?product=${product_id}&qty=${quantity}");
+    let path = context
+        .substitute_variables("/users/${user_id}/cart?product=${product_id}&qty=${quantity}");
     assert_eq!(path, "/users/42/cart?product=SKU-999&qty=5");
 
     println!("✅ Variable substitution from CSV works");
@@ -161,7 +164,11 @@ async fn test_scenario_with_csv_data() {
         let result = executor.execute(&scenario, &mut context).await;
 
         assert!(result.steps[0].status_code.is_some());
-        println!("  Execution {} completed with status {:?}", i + 1, result.steps[0].status_code);
+        println!(
+            "  Execution {} completed with status {:?}",
+            i + 1,
+            result.steps[0].status_code
+        );
     }
 
     println!("✅ Scenario with CSV data works");

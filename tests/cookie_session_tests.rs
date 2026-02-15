@@ -15,7 +15,7 @@ const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
 /// Create a cookie-enabled HTTP client for testing
 fn create_cookie_client() -> reqwest::Client {
     reqwest::Client::builder()
-        .cookie_store(true)  // Enable automatic cookie management
+        .cookie_store(true) // Enable automatic cookie management
         .timeout(Duration::from_secs(30))
         .build()
         .expect("Failed to create HTTP client")
@@ -56,7 +56,7 @@ async fn test_cookies_persist_across_steps() {
                     method: "GET".to_string(),
                     path: "/users/me".to_string(),
                     body: None,
-                    headers: HashMap::new(),  // No manual auth header needed - cookies handle it
+                    headers: HashMap::new(), // No manual auth header needed - cookies handle it
                 },
                 extractions: vec![],
                 assertions: vec![],
@@ -75,9 +75,23 @@ async fn test_cookies_persist_across_steps() {
     // Step 1: Login sets session cookie
     // Step 2: Uses session cookie automatically
     println!("\nCookie Persistence Test:");
-    println!("  Step 1 (Login): {}", if result.steps[0].success { "✓" } else { "✗" });
+    println!(
+        "  Step 1 (Login): {}",
+        if result.steps[0].success {
+            "✓"
+        } else {
+            "✗"
+        }
+    );
     if result.steps.len() > 1 {
-        println!("  Step 2 (Protected): {}", if result.steps[1].success { "✓" } else { "✗" });
+        println!(
+            "  Step 2 (Protected): {}",
+            if result.steps[1].success {
+                "✓"
+            } else {
+                "✗"
+            }
+        );
     }
 }
 
@@ -126,7 +140,10 @@ async fn test_auth_flow_with_token_and_cookies() {
                     headers: {
                         let mut headers = HashMap::new();
                         // Use extracted token in Authorization header
-                        headers.insert("Authorization".to_string(), "Bearer ${auth_token}".to_string());
+                        headers.insert(
+                            "Authorization".to_string(),
+                            "Bearer ${auth_token}".to_string(),
+                        );
                         headers
                     },
                 },
@@ -144,14 +161,31 @@ async fn test_auth_flow_with_token_and_cookies() {
     let result = executor.execute(&scenario, &mut context).await;
 
     println!("\nAuth Flow Test:");
-    println!("  Registration: {}", if result.steps[0].success { "✓" } else { "✗" });
+    println!(
+        "  Registration: {}",
+        if result.steps[0].success {
+            "✓"
+        } else {
+            "✗"
+        }
+    );
 
     // Token should be extracted
     let token = context.get_variable("auth_token");
-    println!("  Token extracted: {}", if token.is_some() { "✓" } else { "✗" });
+    println!(
+        "  Token extracted: {}",
+        if token.is_some() { "✓" } else { "✗" }
+    );
 
     if result.steps.len() > 1 {
-        println!("  Profile access: {}", if result.steps[1].success { "✓" } else { "✗" });
+        println!(
+            "  Profile access: {}",
+            if result.steps[1].success {
+                "✓"
+            } else {
+                "✗"
+            }
+        );
     }
 }
 
@@ -205,7 +239,10 @@ async fn test_cookie_isolation_between_clients() {
     println!("  Client 2: {}", if result2.success { "✓" } else { "✗" });
 
     // Both should succeed independently (cookies are isolated)
-    assert!(result1.success || result2.success, "At least one should succeed");
+    assert!(
+        result1.success || result2.success,
+        "At least one should succeed"
+    );
 }
 
 #[tokio::test]
@@ -306,10 +343,15 @@ async fn test_shopping_flow_with_session() {
 
     println!("\nShopping Flow with Session:");
     println!("  Success: {}", result.success);
-    println!("  Steps completed: {}/{}", result.steps_completed, result.steps.len());
+    println!(
+        "  Steps completed: {}/{}",
+        result.steps_completed,
+        result.steps.len()
+    );
 
     for (idx, step) in result.steps.iter().enumerate() {
-        println!("  Step {}: {} - {}",
+        println!(
+            "  Step {}: {} - {}",
             idx + 1,
             step.step_name,
             if step.success { "✓" } else { "✗" }
@@ -323,31 +365,29 @@ async fn test_client_without_cookies_fails_session() {
     let scenario = Scenario {
         name: "No Cookie Test".to_string(),
         weight: 1.0,
-        steps: vec![
-            Step {
-                name: "Login".to_string(),
-                request: RequestConfig {
-                    method: "POST".to_string(),
-                    path: "/auth/register".to_string(),
-                    body: Some(
-                        r#"{
+        steps: vec![Step {
+            name: "Login".to_string(),
+            request: RequestConfig {
+                method: "POST".to_string(),
+                path: "/auth/register".to_string(),
+                body: Some(
+                    r#"{
                             "email": "nocookie-${timestamp}@example.com",
                             "password": "Test123!",
                             "name": "No Cookie User"
                         }"#
-                        .to_string(),
-                    ),
-                    headers: {
-                        let mut headers = HashMap::new();
-                        headers.insert("Content-Type".to_string(), "application/json".to_string());
-                        headers
-                    },
+                    .to_string(),
+                ),
+                headers: {
+                    let mut headers = HashMap::new();
+                    headers.insert("Content-Type".to_string(), "application/json".to_string());
+                    headers
                 },
-                extractions: vec![],
-                assertions: vec![],
-                think_time: None,
             },
-        ],
+            extractions: vec![],
+            assertions: vec![],
+            think_time: None,
+        }],
     };
 
     // Client WITHOUT cookies
@@ -365,10 +405,28 @@ async fn test_client_without_cookies_fails_session() {
     let mut context_no_cookies = ScenarioContext::new();
     let mut context_with_cookies = ScenarioContext::new();
 
-    let result_no_cookies = executor_no_cookies.execute(&scenario, &mut context_no_cookies).await;
-    let result_with_cookies = executor_with_cookies.execute(&scenario, &mut context_with_cookies).await;
+    let result_no_cookies = executor_no_cookies
+        .execute(&scenario, &mut context_no_cookies)
+        .await;
+    let result_with_cookies = executor_with_cookies
+        .execute(&scenario, &mut context_with_cookies)
+        .await;
 
     println!("\nCookie Enabled Comparison:");
-    println!("  Without cookies: {}", if result_no_cookies.success { "✓" } else { "✗" });
-    println!("  With cookies: {}", if result_with_cookies.success { "✓" } else { "✗" });
+    println!(
+        "  Without cookies: {}",
+        if result_no_cookies.success {
+            "✓"
+        } else {
+            "✗"
+        }
+    );
+    println!(
+        "  With cookies: {}",
+        if result_with_cookies.success {
+            "✓"
+        } else {
+            "✗"
+        }
+    );
 }

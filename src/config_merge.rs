@@ -122,11 +122,7 @@ impl ConfigMerger {
     }
 
     /// Merge string value with precedence: env > yaml > default.
-    pub fn merge_string(
-        yaml_value: Option<String>,
-        env_var: &str,
-        default: String,
-    ) -> String {
+    pub fn merge_string(yaml_value: Option<String>, env_var: &str, default: String) -> String {
         // Check environment variable first
         if let Ok(env_val) = env::var(env_var) {
             if !env_val.is_empty() {
@@ -139,10 +135,7 @@ impl ConfigMerger {
     }
 
     /// Merge optional string with precedence: env > yaml.
-    pub fn merge_optional_string(
-        yaml_value: Option<String>,
-        env_var: &str,
-    ) -> Option<String> {
+    pub fn merge_optional_string(yaml_value: Option<String>, env_var: &str) -> Option<String> {
         // Check environment variable first
         if let Ok(env_val) = env::var(env_var) {
             if !env_val.is_empty() {
@@ -474,7 +467,10 @@ mod tests {
         assert_eq!(ConfigMerger::merge_rps(None, "TEST_RPS_1"), None);
 
         // YAML value
-        assert_eq!(ConfigMerger::merge_rps(Some(100.0), "TEST_RPS_2"), Some(100.0));
+        assert_eq!(
+            ConfigMerger::merge_rps(Some(100.0), "TEST_RPS_2"),
+            Some(100.0)
+        );
 
         // Env overrides YAML
         env::set_var("TEST_RPS_3", "200.5");
@@ -512,7 +508,8 @@ mod tests {
         assert_eq!(result, "yaml-value");
 
         // Test with default only
-        let result = ConfigMerger::merge_string(None, "TEST_PRECEDENCE", "default-value".to_string());
+        let result =
+            ConfigMerger::merge_string(None, "TEST_PRECEDENCE", "default-value".to_string());
 
         assert_eq!(result, "default-value");
 

@@ -7,10 +7,12 @@ use crate::executor::ScenarioExecutor;
 use crate::load_models::LoadModel;
 use crate::memory_guard::is_percentile_tracking_active;
 use crate::metrics::{
-    CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_ERRORS_BY_CATEGORY, REQUEST_STATUS_CODES, REQUEST_TOTAL,
-    SCENARIO_REQUESTS_TOTAL, SCENARIO_THROUGHPUT_RPS,
+    CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_ERRORS_BY_CATEGORY,
+    REQUEST_STATUS_CODES, REQUEST_TOTAL, SCENARIO_REQUESTS_TOTAL, SCENARIO_THROUGHPUT_RPS,
 };
-use crate::percentiles::{GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
+use crate::percentiles::{
+    GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES,
+};
 use crate::scenario::{Scenario, ScenarioContext};
 use crate::throughput::GLOBAL_THROUGHPUT_TRACKER;
 
@@ -200,7 +202,7 @@ pub struct ScenarioWorkerConfig {
 /// For proper session isolation, each scenario execution gets its own cookie-enabled
 /// HTTP client. This ensures cookies from one virtual user don't leak to another.
 pub async fn run_scenario_worker(
-    _client: reqwest::Client,  // Ignored - we create per-execution clients
+    _client: reqwest::Client, // Ignored - we create per-execution clients
     config: ScenarioWorkerConfig,
     start_time: Instant,
 ) {
@@ -241,7 +243,7 @@ pub async fn run_scenario_worker(
         // Create new cookie-enabled client for this virtual user
         // This ensures cookie isolation between scenario executions
         let client = reqwest::Client::builder()
-            .cookie_store(true)  // Enable automatic cookie management
+            .cookie_store(true) // Enable automatic cookie management
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
@@ -282,7 +284,7 @@ pub async fn run_scenario_worker(
             .inc();
         GLOBAL_THROUGHPUT_TRACKER.record(
             &config.scenario.name,
-            std::time::Duration::from_millis(result.total_time_ms)
+            std::time::Duration::from_millis(result.total_time_ms),
         );
 
         // Apply the calculated delay between scenario executions

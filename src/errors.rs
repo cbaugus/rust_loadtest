@@ -70,7 +70,10 @@ impl ErrorCategory {
             // Check error message for common patterns
             let error_msg = error.to_string().to_lowercase();
 
-            if error_msg.contains("certificate") || error_msg.contains("tls") || error_msg.contains("ssl") {
+            if error_msg.contains("certificate")
+                || error_msg.contains("tls")
+                || error_msg.contains("ssl")
+            {
                 ErrorCategory::TlsError
             } else if error_msg.contains("timeout") {
                 ErrorCategory::TimeoutError
@@ -145,7 +148,11 @@ pub struct CategorizedError {
 
 impl CategorizedError {
     /// Create a new categorized error from an HTTP status code.
-    pub fn from_status(status_code: u16, message: String, endpoint: Option<String>) -> Option<Self> {
+    pub fn from_status(
+        status_code: u16,
+        message: String,
+        endpoint: Option<String>,
+    ) -> Option<Self> {
         ErrorCategory::from_status_code(status_code).map(|category| Self {
             category,
             status_code: Some(status_code),
@@ -182,7 +189,13 @@ impl CategorizedError {
 impl fmt::Display for CategorizedError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(status) = self.status_code {
-            write!(f, "[{}] HTTP {}: {}", self.category.label(), status, self.message)
+            write!(
+                f,
+                "[{}] HTTP {}: {}",
+                self.category.label(),
+                status,
+                self.message
+            )
         } else {
             write!(f, "[{}] {}", self.category.label(), self.message)
         }
@@ -281,7 +294,9 @@ mod tests {
     fn test_error_category_descriptions() {
         assert!(ErrorCategory::ClientError.description().contains("4xx"));
         assert!(ErrorCategory::ServerError.description().contains("5xx"));
-        assert!(ErrorCategory::NetworkError.description().contains("Network"));
+        assert!(ErrorCategory::NetworkError
+            .description()
+            .contains("Network"));
     }
 
     #[test]

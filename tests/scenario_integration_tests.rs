@@ -259,7 +259,11 @@ async fn test_scenario_failure_handling() {
     // Scenario should fail on step 2
     assert!(!result.success, "Scenario should fail");
     assert_eq!(result.steps_completed, 1, "Should complete only 1 step");
-    assert_eq!(result.failed_at_step, Some(1), "Should fail at step 1 (index 1)");
+    assert_eq!(
+        result.failed_at_step,
+        Some(1),
+        "Should fail at step 1 (index 1)"
+    );
     assert_eq!(result.steps.len(), 2, "Should have 2 step results");
 
     // Step 1 should succeed

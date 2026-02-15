@@ -208,7 +208,10 @@ fn test_env_invalid_value_fallback() {
 
     env::set_var("ENV_INVALID_2", "not-a-number");
     let result = ConfigMerger::merge_workers(None, "ENV_INVALID_2");
-    assert_eq!(result, 10, "Should fall back to default when env is invalid");
+    assert_eq!(
+        result, 10,
+        "Should fall back to default when env is invalid"
+    );
     env::remove_var("ENV_INVALID_2");
 
     println!("✅ Invalid env values fall back to YAML or default");
@@ -316,19 +319,31 @@ fn test_precedence_isolation() {
 fn test_case_sensitivity_boolean() {
     // Test boolean env var case insensitivity
     env::set_var("BOOL_TEST_1", "TRUE");
-    assert_eq!(ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_1"), true);
+    assert_eq!(
+        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_1"),
+        true
+    );
     env::remove_var("BOOL_TEST_1");
 
     env::set_var("BOOL_TEST_2", "True");
-    assert_eq!(ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_2"), true);
+    assert_eq!(
+        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_2"),
+        true
+    );
     env::remove_var("BOOL_TEST_2");
 
     env::set_var("BOOL_TEST_3", "true");
-    assert_eq!(ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_3"), true);
+    assert_eq!(
+        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_3"),
+        true
+    );
     env::remove_var("BOOL_TEST_3");
 
     env::set_var("BOOL_TEST_4", "false");
-    assert_eq!(ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_4"), false);
+    assert_eq!(
+        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_4"),
+        false
+    );
     env::remove_var("BOOL_TEST_4");
 
     println!("✅ Boolean env vars are case insensitive");

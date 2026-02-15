@@ -300,10 +300,10 @@ mod tests {
 
         // Simulate mixed requests
         tracker.record_request(150); // New connection (slow)
-        tracker.record_request(30);  // Reused (fast)
-        tracker.record_request(25);  // Reused (fast)
+        tracker.record_request(30); // Reused (fast)
+        tracker.record_request(25); // Reused (fast)
         tracker.record_request(120); // New connection (slow)
-        tracker.record_request(40);  // Reused (fast)
+        tracker.record_request(40); // Reused (fast)
 
         let stats = tracker.stats();
         assert_eq!(stats.total_requests, 5);

@@ -238,8 +238,8 @@ impl ConfigWatcher {
         let debounce_ms = self.config.debounce_ms;
         let last_reload = self.last_reload.clone();
 
-        let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-            match res {
+        let mut watcher =
+            notify::recommended_watcher(move |res: Result<Event, notify::Error>| match res {
                 Ok(event) => {
                     if should_reload(&event) {
                         debug!("File change detected: {:?}", event);
@@ -249,9 +249,8 @@ impl ConfigWatcher {
                 Err(e) => {
                     error!("Watch error: {:?}", e);
                 }
-            }
-        })
-        .map_err(ConfigWatcherError::WatcherCreation)?;
+            })
+            .map_err(ConfigWatcherError::WatcherCreation)?;
 
         watcher
             .watch(&self.config.file_path, RecursiveMode::NonRecursive)
@@ -354,8 +353,8 @@ fn handle_reload(
 /// Load and validate a config file.
 fn load_and_validate_config(file_path: &Path) -> Result<YamlConfig, String> {
     // Load YAML
-    let config = YamlConfig::from_file(file_path)
-        .map_err(|e| format!("Failed to parse YAML: {}", e))?;
+    let config =
+        YamlConfig::from_file(file_path).map_err(|e| format!("Failed to parse YAML: {}", e))?;
 
     // Validate
     config

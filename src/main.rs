@@ -6,9 +6,17 @@ use tracing_subscriber::{fmt, EnvFilter};
 use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
-use rust_loadtest::memory_guard::{init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig};
-use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server, update_memory_metrics, CONNECTION_POOL_MAX_IDLE, CONNECTION_POOL_IDLE_TIMEOUT_SECONDS};
-use rust_loadtest::percentiles::{format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
+use rust_loadtest::memory_guard::{
+    init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig,
+};
+use rust_loadtest::metrics::{
+    gather_metrics_string, register_metrics, start_metrics_server, update_memory_metrics,
+    CONNECTION_POOL_IDLE_TIMEOUT_SECONDS, CONNECTION_POOL_MAX_IDLE,
+};
+use rust_loadtest::percentiles::{
+    format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES,
+    GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES,
+};
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
 
@@ -94,7 +102,11 @@ fn print_throughput_report() {
 
         let total_rps = GLOBAL_THROUGHPUT_TRACKER.total_throughput();
         let elapsed = GLOBAL_THROUGHPUT_TRACKER.elapsed();
-        info!("\nTotal Throughput: {:.2} scenarios/sec over {:.1}s", total_rps, elapsed.as_secs_f64());
+        info!(
+            "\nTotal Throughput: {:.2} scenarios/sec over {:.1}s",
+            total_rps,
+            elapsed.as_secs_f64()
+        );
     } else {
         info!("\nNo scenario throughput data collected.\n");
     }
@@ -122,10 +134,16 @@ fn print_pool_report() {
 
         info!("\nInterpretation:");
         if stats.reuse_rate() >= 80.0 {
-            info!("  ✅ Excellent connection reuse ({:.1}%)", stats.reuse_rate());
+            info!(
+                "  ✅ Excellent connection reuse ({:.1}%)",
+                stats.reuse_rate()
+            );
             info!("     Most requests are reusing pooled connections efficiently.");
         } else if stats.reuse_rate() >= 50.0 {
-            info!("  ⚠️  Moderate connection reuse ({:.1}%)", stats.reuse_rate());
+            info!(
+                "  ⚠️  Moderate connection reuse ({:.1}%)",
+                stats.reuse_rate()
+            );
             info!("     Consider increasing pool size or idle timeout.");
         } else {
             info!("  ❌ Low connection reuse ({:.1}%)", stats.reuse_rate());

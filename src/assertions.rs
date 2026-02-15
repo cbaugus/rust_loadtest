@@ -36,10 +36,7 @@ pub enum AssertionError {
     StatusCodeMismatch { expected: u16, actual: u16 },
 
     #[error("Response time {actual_ms}ms exceeds threshold {threshold_ms}ms")]
-    ResponseTimeTooSlow {
-        actual_ms: u64,
-        threshold_ms: u64,
-    },
+    ResponseTimeTooSlow { actual_ms: u64, threshold_ms: u64 },
 
     #[error("JSONPath assertion failed: {0}")]
     JsonPathFailed(String),
@@ -95,7 +92,12 @@ pub fn run_assertions(
                 AssertionResult {
                     assertion: assertion.clone(),
                     passed: true,
-                    actual: format_actual_value(assertion, status_code, response_time_ms, response_body),
+                    actual: format_actual_value(
+                        assertion,
+                        status_code,
+                        response_time_ms,
+                        response_body,
+                    ),
                     expected: format_expected_value(assertion),
                     error_message: None,
                 }
@@ -105,7 +107,12 @@ pub fn run_assertions(
                 AssertionResult {
                     assertion: assertion.clone(),
                     passed: false,
-                    actual: format_actual_value(assertion, status_code, response_time_ms, response_body),
+                    actual: format_actual_value(
+                        assertion,
+                        status_code,
+                        response_time_ms,
+                        response_body,
+                    ),
                     expected: format_expected_value(assertion),
                     error_message: Some(e.to_string()),
                 }
@@ -190,12 +197,13 @@ fn assert_json_path(
     use serde_json_path::JsonPath;
 
     // Parse JSON
-    let json: Value = serde_json::from_str(json_body)
-        .map_err(|e| AssertionError::InvalidJson(e.to_string()))?;
+    let json: Value =
+        serde_json::from_str(json_body).map_err(|e| AssertionError::InvalidJson(e.to_string()))?;
 
     // Parse JSONPath
-    let json_path = JsonPath::parse(path)
-        .map_err(|e| AssertionError::JsonPathFailed(format!("Invalid JSONPath '{}': {}", path, e)))?;
+    let json_path = JsonPath::parse(path).map_err(|e| {
+        AssertionError::JsonPathFailed(format!("Invalid JSONPath '{}': {}", path, e))
+    })?;
 
     // Query
     let node_list = json_path.query(&json);
@@ -401,8 +409,8 @@ mod tests {
     #[test]
     fn test_run_assertions_with_failures() {
         let assertions = vec![
-            Assertion::StatusCode(200),        // Pass
-            Assertion::StatusCode(404),        // Fail
+            Assertion::StatusCode(200),                  // Pass
+            Assertion::StatusCode(404),                  // Fail
             Assertion::BodyContains("test".to_string()), // Pass
         ];
 

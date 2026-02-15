@@ -116,7 +116,10 @@ async fn test_put_request() {
     // PUT may return 2xx/3xx or 4xx depending on endpoint implementation
     assert!(result.steps[0].status_code.is_some());
 
-    println!("✅ PUT request works (status: {:?})", result.steps[0].status_code);
+    println!(
+        "✅ PUT request works (status: {:?})",
+        result.steps[0].status_code
+    );
 }
 
 #[tokio::test]
@@ -151,7 +154,10 @@ async fn test_patch_request() {
     // PATCH may return 2xx/3xx or 4xx depending on endpoint implementation
     assert!(result.steps[0].status_code.is_some());
 
-    println!("✅ PATCH request works (status: {:?})", result.steps[0].status_code);
+    println!(
+        "✅ PATCH request works (status: {:?})",
+        result.steps[0].status_code
+    );
 }
 
 #[tokio::test]
@@ -182,7 +188,10 @@ async fn test_delete_request() {
     // DELETE may return 2xx/3xx or 4xx depending on endpoint implementation
     assert!(result.steps[0].status_code.is_some());
 
-    println!("✅ DELETE request works (status: {:?})", result.steps[0].status_code);
+    println!(
+        "✅ DELETE request works (status: {:?})",
+        result.steps[0].status_code
+    );
 }
 
 #[tokio::test]
@@ -214,7 +223,10 @@ async fn test_head_request() {
     assert!(result.success, "HEAD request should succeed");
     assert!(result.steps[0].status_code.is_some());
 
-    println!("✅ HEAD request works (status: {:?})", result.steps[0].status_code);
+    println!(
+        "✅ HEAD request works (status: {:?})",
+        result.steps[0].status_code
+    );
 }
 
 #[tokio::test]
@@ -245,7 +257,10 @@ async fn test_options_request() {
     // OPTIONS typically returns 200 or 204 with Allow header
     assert!(result.steps[0].status_code.is_some());
 
-    println!("✅ OPTIONS request works (status: {:?})", result.steps[0].status_code);
+    println!(
+        "✅ OPTIONS request works (status: {:?})",
+        result.steps[0].status_code
+    );
 }
 
 #[tokio::test]
@@ -322,12 +337,20 @@ async fn test_mixed_methods_scenario() {
     // All steps should execute (some may fail depending on API implementation)
     assert!(result.steps.len() >= 2, "Should execute multiple steps");
     assert!(result.steps[0].success, "GET should succeed");
-    assert!(result.steps[3].success || result.steps.len() == 4, "HEAD should execute");
+    assert!(
+        result.steps[3].success || result.steps.len() == 4,
+        "HEAD should execute"
+    );
 
     println!("✅ Mixed methods scenario works");
     println!("   Steps executed: {}", result.steps.len());
     for (i, step) in result.steps.iter().enumerate() {
-        println!("   Step {}: {} (status: {:?})", i + 1, step.step_name, step.status_code);
+        println!(
+            "   Step {}: {} (status: {:?})",
+            i + 1,
+            step.step_name,
+            step.status_code
+        );
     }
 }
 
@@ -406,7 +429,9 @@ async fn test_rest_crud_flow() {
                 request: RequestConfig {
                     method: "PUT".to_string(),
                     path: "/status".to_string(),
-                    body: Some(r#"{"name": "Updated Item", "price": 149.99, "stock": 10}"#.to_string()),
+                    body: Some(
+                        r#"{"name": "Updated Item", "price": 149.99, "stock": 10}"#.to_string(),
+                    ),
                     headers: {
                         let mut h = HashMap::new();
                         h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -490,8 +515,14 @@ async fn test_options_cors_preflight() {
                 body: None,
                 headers: {
                     let mut h = HashMap::new();
-                    h.insert("Access-Control-Request-Method".to_string(), "POST".to_string());
-                    h.insert("Access-Control-Request-Headers".to_string(), "Content-Type".to_string());
+                    h.insert(
+                        "Access-Control-Request-Method".to_string(),
+                        "POST".to_string(),
+                    );
+                    h.insert(
+                        "Access-Control-Request-Headers".to_string(),
+                        "Content-Type".to_string(),
+                    );
                     h.insert("Origin".to_string(), "https://example.com".to_string());
                     h
                 },
@@ -510,5 +541,8 @@ async fn test_options_cors_preflight() {
 
     assert!(result.steps[0].status_code.is_some());
 
-    println!("✅ OPTIONS CORS preflight works (status: {:?})", result.steps[0].status_code);
+    println!(
+        "✅ OPTIONS CORS preflight works (status: {:?})",
+        result.steps[0].status_code
+    );
 }

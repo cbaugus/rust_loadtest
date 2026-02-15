@@ -70,10 +70,7 @@ pub enum ThinkTime {
     Fixed(Duration),
 
     /// Random delay within a range (min to max, inclusive)
-    Random {
-        min: Duration,
-        max: Duration,
-    },
+    Random { min: Duration, max: Duration },
 }
 
 impl ThinkTime {
@@ -176,10 +173,7 @@ pub enum Extractor {
     JsonPath(String),
 
     /// Extract using regex with named capture group
-    Regex {
-        pattern: String,
-        group: String,
-    },
+    Regex { pattern: String, group: String },
 
     /// Extract from response header
     Header(String),
@@ -444,20 +438,18 @@ mod tests {
         let scenario = Scenario {
             name: "Test Scenario".to_string(),
             weight: 1.5,
-            steps: vec![
-                Step {
-                    name: "Step 1".to_string(),
-                    request: RequestConfig {
-                        method: "GET".to_string(),
-                        path: "/api/test".to_string(),
-                        body: None,
-                        headers: HashMap::new(),
-                    },
-                    extractions: vec![],
-                    assertions: vec![],
-                    think_time: None,
+            steps: vec![Step {
+                name: "Step 1".to_string(),
+                request: RequestConfig {
+                    method: "GET".to_string(),
+                    path: "/api/test".to_string(),
+                    body: None,
+                    headers: HashMap::new(),
                 },
-            ],
+                extractions: vec![],
+                assertions: vec![],
+                think_time: None,
+            }],
         };
 
         assert_eq!(scenario.name, "Test Scenario");

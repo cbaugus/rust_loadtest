@@ -97,12 +97,8 @@ fn test_error_category_labels() {
 
 #[test]
 fn test_error_category_descriptions() {
-    assert!(ErrorCategory::ClientError
-        .description()
-        .contains("4xx"));
-    assert!(ErrorCategory::ServerError
-        .description()
-        .contains("5xx"));
+    assert!(ErrorCategory::ClientError.description().contains("4xx"));
+    assert!(ErrorCategory::ServerError.description().contains("5xx"));
     assert!(ErrorCategory::NetworkError
         .description()
         .contains("Network"));
@@ -266,7 +262,10 @@ async fn test_network_error_categorization() {
 
     let client = create_test_client();
     // Use invalid base URL to trigger network error
-    let executor = ScenarioExecutor::new("https://invalid-host-that-does-not-exist-12345.com".to_string(), client);
+    let executor = ScenarioExecutor::new(
+        "https://invalid-host-that-does-not-exist-12345.com".to_string(),
+        client,
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;

@@ -56,7 +56,7 @@ pub struct Config {
     // Memory optimization settings (Issue #66, #68, #67, #72)
     pub percentile_tracking_enabled: bool,
     pub max_histogram_labels: usize,
-    pub histogram_rotation_interval: Duration,  // 0 = disabled
+    pub histogram_rotation_interval: Duration, // 0 = disabled
     pub memory_warning_threshold_percent: f64,
     pub memory_critical_threshold_percent: f64,
     pub auto_disable_percentiles_on_warning: bool,
@@ -116,10 +116,8 @@ impl Config {
         );
 
         // Workers: env var NUM_CONCURRENT_TASKS overrides YAML config.workers
-        let num_concurrent_tasks = ConfigMerger::merge_workers(
-            Some(yaml_config.config.workers),
-            "NUM_CONCURRENT_TASKS",
-        );
+        let num_concurrent_tasks =
+            ConfigMerger::merge_workers(Some(yaml_config.config.workers), "NUM_CONCURRENT_TASKS");
 
         // Timeout: env var REQUEST_TIMEOUT overrides YAML config.timeout
         let timeout_duration = ConfigMerger::merge_timeout(
@@ -175,19 +173,23 @@ impl Config {
         let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
 
         // Histogram rotation interval (0 = disabled)
-        let histogram_rotation_interval = if let Ok(interval_str) = env::var("HISTOGRAM_ROTATION_INTERVAL") {
-            parse_duration_string(&interval_str).map_err(|e| ConfigError::InvalidDuration {
-                var: "HISTOGRAM_ROTATION_INTERVAL".into(),
-                message: e,
-            })?
-        } else {
-            Duration::from_secs(0) // Disabled by default
-        };
+        let histogram_rotation_interval =
+            if let Ok(interval_str) = env::var("HISTOGRAM_ROTATION_INTERVAL") {
+                parse_duration_string(&interval_str).map_err(|e| ConfigError::InvalidDuration {
+                    var: "HISTOGRAM_ROTATION_INTERVAL".into(),
+                    message: e,
+                })?
+            } else {
+                Duration::from_secs(0) // Disabled by default
+            };
 
         // Auto-OOM protection settings (Issue #72)
-        let memory_warning_threshold_percent: f64 = env_parse_or("MEMORY_WARNING_THRESHOLD_PERCENT", 80.0)?;
-        let memory_critical_threshold_percent: f64 = env_parse_or("MEMORY_CRITICAL_THRESHOLD_PERCENT", 90.0)?;
-        let auto_disable_percentiles_on_warning = env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
+        let memory_warning_threshold_percent: f64 =
+            env_parse_or("MEMORY_WARNING_THRESHOLD_PERCENT", 80.0)?;
+        let memory_critical_threshold_percent: f64 =
+            env_parse_or("MEMORY_CRITICAL_THRESHOLD_PERCENT", 90.0)?;
+        let auto_disable_percentiles_on_warning =
+            env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
         let config = Config {
             target_url,
@@ -230,8 +232,8 @@ impl Config {
         match base_load_model {
             LoadModel::Rps { target_rps } => {
                 // TARGET_RPS can override YAML target
-                let final_rps = ConfigMerger::merge_rps(Some(target_rps), "TARGET_RPS")
-                    .unwrap_or(target_rps);
+                let final_rps =
+                    ConfigMerger::merge_rps(Some(target_rps), "TARGET_RPS").unwrap_or(target_rps);
                 Ok(LoadModel::Rps {
                     target_rps: final_rps,
                 })
@@ -242,8 +244,10 @@ impl Config {
                 ramp_duration,
             } => {
                 // MIN_RPS, MAX_RPS, RAMP_DURATION can override YAML values
-                let final_min = ConfigMerger::merge_rps(Some(min_rps), "MIN_RPS").unwrap_or(min_rps);
-                let final_max = ConfigMerger::merge_rps(Some(max_rps), "MAX_RPS").unwrap_or(max_rps);
+                let final_min =
+                    ConfigMerger::merge_rps(Some(min_rps), "MIN_RPS").unwrap_or(min_rps);
+                let final_max =
+                    ConfigMerger::merge_rps(Some(max_rps), "MAX_RPS").unwrap_or(max_rps);
                 let final_duration =
                     ConfigMerger::merge_timeout(Some(ramp_duration), "RAMP_DURATION");
                 Ok(LoadModel::RampRps {
@@ -331,19 +335,23 @@ impl Config {
         let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
 
         // Histogram rotation interval (0 = disabled)
-        let histogram_rotation_interval = if let Ok(interval_str) = env::var("HISTOGRAM_ROTATION_INTERVAL") {
-            parse_duration_string(&interval_str).map_err(|e| ConfigError::InvalidDuration {
-                var: "HISTOGRAM_ROTATION_INTERVAL".into(),
-                message: e,
-            })?
-        } else {
-            Duration::from_secs(0) // Disabled by default
-        };
+        let histogram_rotation_interval =
+            if let Ok(interval_str) = env::var("HISTOGRAM_ROTATION_INTERVAL") {
+                parse_duration_string(&interval_str).map_err(|e| ConfigError::InvalidDuration {
+                    var: "HISTOGRAM_ROTATION_INTERVAL".into(),
+                    message: e,
+                })?
+            } else {
+                Duration::from_secs(0) // Disabled by default
+            };
 
         // Auto-OOM protection settings (Issue #72)
-        let memory_warning_threshold_percent: f64 = env_parse_or("MEMORY_WARNING_THRESHOLD_PERCENT", 80.0)?;
-        let memory_critical_threshold_percent: f64 = env_parse_or("MEMORY_CRITICAL_THRESHOLD_PERCENT", 90.0)?;
-        let auto_disable_percentiles_on_warning = env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
+        let memory_warning_threshold_percent: f64 =
+            env_parse_or("MEMORY_WARNING_THRESHOLD_PERCENT", 80.0)?;
+        let memory_critical_threshold_percent: f64 =
+            env_parse_or("MEMORY_CRITICAL_THRESHOLD_PERCENT", 90.0)?;
+        let auto_disable_percentiles_on_warning =
+            env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
         let config = Config {
             target_url,

@@ -12,8 +12,7 @@ use std::path::Path;
 
 fn load_example_config(filename: &str) -> YamlConfig {
     let path = format!("examples/configs/{}", filename);
-    YamlConfig::from_file(&path)
-        .unwrap_or_else(|e| panic!("Failed to load {}: {}", filename, e))
+    YamlConfig::from_file(&path).unwrap_or_else(|e| panic!("Failed to load {}: {}", filename, e))
 }
 
 fn validate_example_config(filename: &str) {
@@ -26,7 +25,11 @@ fn validate_example_config(filename: &str) {
         "{}: baseUrl is empty",
         filename
     );
-    assert!(config.config.workers > 0, "{}: workers must be > 0", filename);
+    assert!(
+        config.config.workers > 0,
+        "{}: workers must be > 0",
+        filename
+    );
     assert!(
         !config.scenarios.is_empty(),
         "{}: scenarios are empty",
@@ -306,17 +309,10 @@ fn test_all_templates_have_valid_scenarios() {
 
 #[test]
 fn test_example_data_files_exist() {
-    let data_files = vec![
-        "examples/data/users.csv",
-        "examples/data/products.json",
-    ];
+    let data_files = vec!["examples/data/users.csv", "examples/data/products.json"];
 
     for file in data_files {
-        assert!(
-            Path::new(file).exists(),
-            "Data file not found: {}",
-            file
-        );
+        assert!(Path::new(file).exists(), "Data file not found: {}", file);
     }
 
     println!("✅ All example data files exist");
@@ -324,8 +320,8 @@ fn test_example_data_files_exist() {
 
 #[test]
 fn test_users_csv_format() {
-    let csv_content = fs::read_to_string("examples/data/users.csv")
-        .expect("Failed to read users.csv");
+    let csv_content =
+        fs::read_to_string("examples/data/users.csv").expect("Failed to read users.csv");
 
     // Check header
     assert!(csv_content.contains("username,email,user_id"));
@@ -342,18 +338,21 @@ fn test_users_csv_format() {
 
 #[test]
 fn test_products_json_format() {
-    let json_content = fs::read_to_string("examples/data/products.json")
-        .expect("Failed to read products.json");
+    let json_content =
+        fs::read_to_string("examples/data/products.json").expect("Failed to read products.json");
 
     // Parse JSON
-    let products: serde_json::Value = serde_json::from_str(&json_content)
-        .expect("Failed to parse products.json");
+    let products: serde_json::Value =
+        serde_json::from_str(&json_content).expect("Failed to parse products.json");
 
     // Should be an array
     assert!(products.is_array(), "products.json should be an array");
 
     let products_array = products.as_array().unwrap();
-    assert!(!products_array.is_empty(), "products.json should not be empty");
+    assert!(
+        !products_array.is_empty(),
+        "products.json should not be empty"
+    );
 
     // Check first product has required fields
     let first_product = &products_array[0];
@@ -362,7 +361,10 @@ fn test_products_json_format() {
     assert!(first_product.get("sku").is_some());
     assert!(first_product.get("price").is_some());
 
-    println!("✅ products.json has correct format ({} products)", products_array.len());
+    println!(
+        "✅ products.json has correct format ({} products)",
+        products_array.len()
+    );
 }
 
 #[test]
@@ -372,8 +374,8 @@ fn test_readme_exists() {
         "README.md not found in examples/configs/"
     );
 
-    let readme = fs::read_to_string("examples/configs/README.md")
-        .expect("Failed to read README.md");
+    let readme =
+        fs::read_to_string("examples/configs/README.md").expect("Failed to read README.md");
 
     // Check that README documents all templates
     assert!(readme.contains("basic-api-test.yaml"));

@@ -118,8 +118,10 @@ async fn test_response_time_assertion_pass() {
     assert_eq!(result.steps[0].assertions_passed, 1);
     assert_eq!(result.steps[0].assertions_failed, 0);
 
-    println!("✅ Response time assertion passed ({}ms < 5000ms)",
-        result.steps[0].response_time_ms);
+    println!(
+        "✅ Response time assertion passed ({}ms < 5000ms)",
+        result.steps[0].response_time_ms
+    );
 }
 
 #[tokio::test]
@@ -151,8 +153,10 @@ async fn test_response_time_assertion_fail() {
     assert_eq!(result.steps[0].assertions_passed, 0);
     assert_eq!(result.steps[0].assertions_failed, 1);
 
-    println!("✅ Response time assertion correctly failed ({}ms > 1ms)",
-        result.steps[0].response_time_ms);
+    println!(
+        "✅ Response time assertion correctly failed ({}ms > 1ms)",
+        result.steps[0].response_time_ms
+    );
 }
 
 #[tokio::test]
@@ -253,7 +257,10 @@ async fn test_json_path_assertion_value_mismatch() {
 
     let result = executor.execute(&scenario, &mut context).await;
 
-    assert!(!result.success, "Scenario should fail due to value mismatch");
+    assert!(
+        !result.success,
+        "Scenario should fail due to value mismatch"
+    );
     assert_eq!(result.steps[0].assertions_passed, 0);
     assert_eq!(result.steps[0].assertions_failed, 1);
 
@@ -476,9 +483,9 @@ async fn test_multiple_assertions_mixed_results() {
             },
             extractions: vec![],
             assertions: vec![
-                Assertion::StatusCode(200),           // PASS
-                Assertion::BodyContains("status".to_string()), // PASS
-                Assertion::StatusCode(404),           // FAIL
+                Assertion::StatusCode(200),                     // PASS
+                Assertion::BodyContains("status".to_string()),  // PASS
+                Assertion::StatusCode(404),                     // FAIL
                 Assertion::BodyContains("MISSING".to_string()), // FAIL
             ],
             think_time: None,
@@ -491,7 +498,10 @@ async fn test_multiple_assertions_mixed_results() {
 
     let result = executor.execute(&scenario, &mut context).await;
 
-    assert!(!result.success, "Scenario should fail (2 failed assertions)");
+    assert!(
+        !result.success,
+        "Scenario should fail (2 failed assertions)"
+    );
     assert_eq!(result.steps[0].assertions_passed, 2);
     assert_eq!(result.steps[0].assertions_failed, 2);
 
@@ -550,7 +560,10 @@ async fn test_multi_step_assertion_stops_on_failure() {
     let result = executor.execute(&scenario, &mut context).await;
 
     assert!(!result.success, "Scenario should fail");
-    assert_eq!(result.steps_completed, 1, "Should stop after step 2 failure");
+    assert_eq!(
+        result.steps_completed, 1,
+        "Should stop after step 2 failure"
+    );
     assert_eq!(result.steps.len(), 2, "Should only have 2 step results");
     assert_eq!(result.failed_at_step, Some(1));
 
@@ -640,10 +653,10 @@ async fn test_realistic_e_commerce_flow_with_assertions() {
     assert_eq!(result.steps[1].assertions_passed, 5);
     assert_eq!(result.steps[2].assertions_passed, 3);
 
-    let total_assertions_passed: usize = result.steps.iter()
-        .map(|s| s.assertions_passed)
-        .sum();
+    let total_assertions_passed: usize = result.steps.iter().map(|s| s.assertions_passed).sum();
 
-    println!("✅ E-commerce flow completed with {} total assertions passing",
-        total_assertions_passed);
+    println!(
+        "✅ E-commerce flow completed with {} total assertions passing",
+        total_assertions_passed
+    );
 }

@@ -130,7 +130,10 @@ async fn test_extraction_and_reuse_in_next_step() {
 
     // Both steps should have succeeded
     assert!(result.steps[0].success, "First step should succeed");
-    assert!(result.steps[1].success, "Second step (using extracted var) should succeed");
+    assert!(
+        result.steps[1].success,
+        "Second step (using extracted var) should succeed"
+    );
 }
 
 #[tokio::test]
@@ -381,7 +384,10 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
     let result = executor.execute(&scenario, &mut context).await;
 
     // Scenario should still succeed
-    assert!(result.success, "Scenario should succeed even with failed extraction");
+    assert!(
+        result.success,
+        "Scenario should succeed even with failed extraction"
+    );
     assert_eq!(result.steps_completed, 2);
 
     // product_id should be extracted

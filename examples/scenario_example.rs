@@ -38,7 +38,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Scenario: {}", result.scenario_name);
     println!("Success: {}", result.success);
     println!("Total Time: {}ms", result.total_time_ms);
-    println!("Steps Completed: {}/{}", result.steps_completed, result.steps.len());
+    println!(
+        "Steps Completed: {}/{}",
+        result.steps_completed,
+        result.steps.len()
+    );
 
     if let Some(failed_step) = result.failed_at_step {
         println!("Failed at step: {}", failed_step);
@@ -93,7 +97,6 @@ fn create_shopping_scenario() -> Scenario {
                 assertions: vec![Assertion::StatusCode(200)],
                 think_time: Some(Duration::from_millis(500)),
             },
-
             // Step 2: Browse products and extract first product ID
             Step {
                 name: "Browse Products".to_string(),
@@ -117,7 +120,6 @@ fn create_shopping_scenario() -> Scenario {
                 ],
                 think_time: Some(Duration::from_secs(2)),
             },
-
             // Step 3: View product details using extracted product_id
             Step {
                 name: "View Product Details".to_string(),
@@ -135,7 +137,6 @@ fn create_shopping_scenario() -> Scenario {
                 ],
                 think_time: Some(Duration::from_secs(3)),
             },
-
             // Step 4: Register user
             Step {
                 name: "Register User".to_string(),
@@ -166,7 +167,6 @@ fn create_shopping_scenario() -> Scenario {
                 assertions: vec![Assertion::StatusCode(201)],
                 think_time: Some(Duration::from_secs(1)),
             },
-
             // Step 5: Add item to cart (using auth token)
             Step {
                 name: "Add to Cart".to_string(),
@@ -183,20 +183,20 @@ fn create_shopping_scenario() -> Scenario {
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert("Content-Type".to_string(), "application/json".to_string());
-                        headers.insert("Authorization".to_string(), "Bearer ${auth_token}".to_string());
+                        headers.insert(
+                            "Authorization".to_string(),
+                            "Bearer ${auth_token}".to_string(),
+                        );
                         headers
                     },
                 },
-                extractions: vec![
-                    VariableExtraction {
-                        name: "cart_id".to_string(),
-                        extractor: Extractor::JsonPath("$.cart.id".to_string()),
-                    },
-                ],
+                extractions: vec![VariableExtraction {
+                    name: "cart_id".to_string(),
+                    extractor: Extractor::JsonPath("$.cart.id".to_string()),
+                }],
                 assertions: vec![Assertion::StatusCode(201)],
                 think_time: Some(Duration::from_secs(2)),
             },
-
             // Step 6: View cart
             Step {
                 name: "View Cart".to_string(),
@@ -206,7 +206,10 @@ fn create_shopping_scenario() -> Scenario {
                     body: None,
                     headers: {
                         let mut headers = HashMap::new();
-                        headers.insert("Authorization".to_string(), "Bearer ${auth_token}".to_string());
+                        headers.insert(
+                            "Authorization".to_string(),
+                            "Bearer ${auth_token}".to_string(),
+                        );
                         headers
                     },
                 },

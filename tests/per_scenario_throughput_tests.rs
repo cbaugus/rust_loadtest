@@ -133,7 +133,10 @@ fn test_total_throughput() {
     let total_rps = tracker.total_throughput();
     assert!(total_rps > 0.0, "Total RPS should be greater than 0");
 
-    println!("✅ Total throughput calculation works (Total RPS: {:.2})", total_rps);
+    println!(
+        "✅ Total throughput calculation works (Total RPS: {:.2})",
+        total_rps
+    );
 }
 
 #[test]
@@ -180,10 +183,7 @@ async fn test_scenario_throughput_tracking() {
         assert!(result.success);
 
         // Record throughput
-        tracker.record(
-            &scenario.name,
-            Duration::from_millis(result.total_time_ms)
-        );
+        tracker.record(&scenario.name, Duration::from_millis(result.total_time_ms));
     }
 
     let stats = tracker.stats(&scenario.name).unwrap();
@@ -253,7 +253,10 @@ async fn test_multiple_scenarios_different_throughput() {
         let mut context = ScenarioContext::new();
 
         let result = executor.execute(&fast_scenario, &mut context).await;
-        tracker.record(&fast_scenario.name, Duration::from_millis(result.total_time_ms));
+        tracker.record(
+            &fast_scenario.name,
+            Duration::from_millis(result.total_time_ms),
+        );
     }
 
     // Execute slow scenario 2 times
@@ -263,7 +266,10 @@ async fn test_multiple_scenarios_different_throughput() {
         let mut context = ScenarioContext::new();
 
         let result = executor.execute(&slow_scenario, &mut context).await;
-        tracker.record(&slow_scenario.name, Duration::from_millis(result.total_time_ms));
+        tracker.record(
+            &slow_scenario.name,
+            Duration::from_millis(result.total_time_ms),
+        );
     }
 
     let fast_stats = tracker.stats(&fast_scenario.name).unwrap();
@@ -300,7 +306,7 @@ fn test_throughput_tracker_concurrent_access() {
             for _ in 0..10 {
                 tracker_clone.record(
                     &format!("scenario{}", thread_id % 2),
-                    Duration::from_millis(50)
+                    Duration::from_millis(50),
                 );
             }
         });

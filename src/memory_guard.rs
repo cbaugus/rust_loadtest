@@ -49,7 +49,10 @@ fn detect_memory_limit() -> Option<u64> {
     if let Ok(content) = std::fs::read_to_string("/sys/fs/cgroup/memory.max") {
         if let Ok(limit) = content.trim().parse::<u64>() {
             if limit != u64::MAX {
-                info!(limit_mb = limit / 1024 / 1024, "Detected cgroup v2 memory limit");
+                info!(
+                    limit_mb = limit / 1024 / 1024,
+                    "Detected cgroup v2 memory limit"
+                );
                 return Some(limit);
             }
         }
@@ -60,7 +63,10 @@ fn detect_memory_limit() -> Option<u64> {
         if let Ok(limit) = content.trim().parse::<u64>() {
             // cgroup v1 uses a very large number to indicate "no limit"
             if limit < (1u64 << 60) {
-                info!(limit_mb = limit / 1024 / 1024, "Detected cgroup v1 memory limit");
+                info!(
+                    limit_mb = limit / 1024 / 1024,
+                    "Detected cgroup v1 memory limit"
+                );
                 return Some(limit);
             }
         }
@@ -249,7 +255,8 @@ pub async fn spawn_memory_guard(config: MemoryGuardConfig) {
         }
 
         // If memory drops back below warning threshold, consider re-enabling (with hysteresis)
-        if status.usage_percent < config.warning_threshold_percent - 10.0 && state.warning_triggered {
+        if status.usage_percent < config.warning_threshold_percent - 10.0 && state.warning_triggered
+        {
             if let Some(disabled_at) = state.percentiles_disabled_at {
                 // Only re-enable if it's been at least 60 seconds since we disabled
                 let elapsed = disabled_at.elapsed();
@@ -315,8 +322,8 @@ mod tests {
     fn test_memory_status_calculation() {
         // Simulate a memory status
         let status = MemoryStatus {
-            current_bytes: 800_000_000,  // 800 MB
-            limit_bytes: 1_000_000_000,  // 1 GB
+            current_bytes: 800_000_000, // 800 MB
+            limit_bytes: 1_000_000_000, // 1 GB
             usage_percent: 80.0,
         };
 
