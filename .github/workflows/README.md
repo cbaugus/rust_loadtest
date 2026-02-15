@@ -1,10 +1,26 @@
 # GitHub Actions Workflows
 
-## Docker Publish
+## Overview
 
-Automatically builds and publishes Docker images to Docker Hub.
+This repository has two CI/CD pipelines:
 
-### Setup
+### 1. Main Branch Pipeline (`build-cicd.yaml`)
+- **Triggers on:** Push to `main` branch, PRs to main
+- **Builds:** Two Docker images (standard + Chainguard)
+- **Features:** Lint, test, SBOM generation, multi-platform support
+- **Tags:** `latest` (main branch)
+
+### 2. Dev Branch Pipeline (`docker-publish.yml`)
+- **Triggers on:** Push to `dev` branch, PRs to dev
+- **Builds:** Single Docker image with multi-arch support
+- **Features:** Fast builds with caching, artifact attestation
+- **Tags:** `dev`, `dev-<sha>`
+
+---
+
+## Setup
+
+### Docker Hub Credentials
 
 1. **Create Docker Hub Access Token**
    - Go to https://hub.docker.com/settings/security
@@ -19,26 +35,42 @@ Automatically builds and publishes Docker images to Docker Hub.
      - `DOCKERHUB_USERNAME`: Your Docker Hub username
      - `DOCKERHUB_TOKEN`: The access token from step 1
 
-### Triggers
+### Pipeline Details
 
-The workflow runs on:
-- **Push to `dev` branch** → Builds `cbaugus/rust-loadtest:dev`
-- **Push to `main` branch** → Builds `cbaugus/rust-loadtest:latest`
-- **Push tag `v*`** → Builds versioned tags (e.g., `v0.2.0`, `0.2`, `0`)
-- **Pull request** → Builds only (doesn't push)
-- **Manual trigger** → Via GitHub UI
+#### Main Branch (`build-cicd.yaml`)
+**Triggers:**
+- Push to `main` branch
+- Pull requests to `main`
 
-### Tags Generated
+**Process:**
+1. Lint (rustfmt & clippy)
+2. Run test suite
+3. Build two Docker images:
+   - Standard Ubuntu-based image
+   - Minimal Chainguard static image
+4. Generate SBOMs for both images
+5. Push to Docker Hub
 
-| Event | Tags |
-|-------|------|
-| `dev` branch push | `dev`, `dev-<sha>` |
-| `main` branch push | `latest`, `main-<sha>` |
-| Tag `v1.2.3` | `1.2.3`, `1.2`, `1`, `v1.2.3` |
+**Images:**
+- `cbaugus/rust_loadtest:latest`
+- `cbaugus/rust_loadtest:latest-Chainguard`
 
-### Multi-Architecture
+#### Dev Branch (`docker-publish.yml`)
+**Triggers:**
+- Push to `dev` branch
+- Pull requests to `dev`
+- Manual trigger via GitHub UI
 
-Builds for:
+**Process:**
+1. Build multi-arch Docker image
+2. Generate artifact attestation
+3. Push to Docker Hub with caching
+
+**Images:**
+- `cbaugus/rust_loadtest:dev`
+- `cbaugus/rust_loadtest:dev-<git-sha>`
+
+**Multi-Architecture:**
 - `linux/amd64` (x86_64)
 - `linux/arm64` (ARM)
 

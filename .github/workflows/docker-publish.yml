@@ -1,16 +1,12 @@
-name: Build and Push Docker Images
+name: Dev Branch - Docker Build
 
 on:
   push:
     branches:
       - dev
-      - main
-    tags:
-      - 'v*'
   pull_request:
     branches:
       - dev
-      - main
   workflow_dispatch:
 
 env:
@@ -44,18 +40,10 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            # Tag with branch name for branch pushes
-            type=ref,event=branch
-            # Tag with semver for tags
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            # Add dev suffix for dev branch
-            type=raw,value=dev,enable={{is_default_branch}}
-            # Add latest for main branch
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            # Add SHA for all pushes
-            type=sha,prefix={{branch}}-
+            # Tag with dev for dev branch
+            type=raw,value=dev
+            # Add SHA for traceability
+            type=sha,prefix=dev-
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
