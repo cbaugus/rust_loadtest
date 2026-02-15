@@ -7,7 +7,8 @@
 
 use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{
-    Assertion, Extractor, RequestConfig, Scenario, ScenarioContext, Step, VariableExtraction,
+    Assertion, Extractor, RequestConfig, Scenario, ScenarioContext, Step, ThinkTime,
+    VariableExtraction,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -95,7 +96,7 @@ fn create_shopping_scenario() -> Scenario {
                 },
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
-                think_time: Some(Duration::from_millis(500)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             // Step 2: Browse products and extract first product ID
             Step {
@@ -118,7 +119,7 @@ fn create_shopping_scenario() -> Scenario {
                     Assertion::StatusCode(200),
                     Assertion::BodyContains("products".to_string()),
                 ],
-                think_time: Some(Duration::from_secs(2)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_secs(2))),
             },
             // Step 3: View product details using extracted product_id
             Step {
@@ -135,7 +136,7 @@ fn create_shopping_scenario() -> Scenario {
                     Assertion::StatusCode(200),
                     Assertion::ResponseTime(Duration::from_millis(500)),
                 ],
-                think_time: Some(Duration::from_secs(3)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_secs(3))),
             },
             // Step 4: Register user
             Step {
@@ -165,7 +166,7 @@ fn create_shopping_scenario() -> Scenario {
                     },
                 ],
                 assertions: vec![Assertion::StatusCode(201)],
-                think_time: Some(Duration::from_secs(1)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_secs(1))),
             },
             // Step 5: Add item to cart (using auth token)
             Step {
@@ -195,7 +196,7 @@ fn create_shopping_scenario() -> Scenario {
                     extractor: Extractor::JsonPath("$.cart.id".to_string()),
                 }],
                 assertions: vec![Assertion::StatusCode(201)],
-                think_time: Some(Duration::from_secs(2)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_secs(2))),
             },
             // Step 6: View cart
             Step {
