@@ -244,10 +244,8 @@ impl ScenarioMetrics {
             if let Some(counter) = self.successes.get(scenario_name) {
                 counter.fetch_add(1, Ordering::Relaxed);
             }
-        } else {
-            if let Some(counter) = self.failures.get(scenario_name) {
-                counter.fetch_add(1, Ordering::Relaxed);
-            }
+        } else if let Some(counter) = self.failures.get(scenario_name) {
+            counter.fetch_add(1, Ordering::Relaxed);
         }
 
         if let Some(counter) = self.total_time_ms.get(scenario_name) {

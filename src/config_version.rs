@@ -226,10 +226,9 @@ impl MigrationRegistry {
 
     /// Create the default migration registry with all migrations.
     pub fn default_migrations() -> Self {
-        let registry = Self::new();
         // Future migrations will be registered here
         // Example: registry.register(Box::new(MigrationV1ToV2));
-        registry
+        Self::new()
     }
 
     /// Register a migration.
