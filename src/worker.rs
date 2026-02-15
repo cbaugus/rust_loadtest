@@ -72,10 +72,8 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         // Build and send request
         let req = build_request(&client, &config);
 
-        let latency_ms = request_start_time.elapsed().as_millis() as u64;
-
         match req.send().await {
-            Ok(response) => {
+            Ok(mut response) => {
                 let status = response.status().as_u16();
                 let status_str = status.to_string();
                 REQUEST_STATUS_CODES.with_label_values(&[&status_str]).inc();
@@ -87,15 +85,17 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
                         .inc();
                 }
 
-                // Explicitly consume and discard response body to prevent memory accumulation (Issue #73)
-                // At high RPS, unbuffered response bodies can accumulate and cause OOM
-                let _ = response.bytes().await;
+                // Issue #74: CRITICAL - Must consume response body in chunks to prevent buffering
+                // At 50K RPS, unconsumed bodies accumulate in memory causing rapid OOM
+                // Stream and discard body without allocating full buffer
+                while let Ok(Some(_chunk)) = response.chunk().await {
+                    // Chunk read and immediately dropped - minimal memory footprint
+                }
 
                 debug!(
                     task_id = config.task_id,
                     url = %config.url,
                     status_code = status,
-                    latency_ms = latency_ms,
                     "Request completed"
                 );
             }
