@@ -111,6 +111,37 @@ docker-compose -f docker-compose.loadtest-examples.yml up loadtest-high
 
 📚 **Full documentation:** See `MEMORY_OPTIMIZATION.md` for detailed analysis, memory breakdown, and optimization strategies.
 
+### Memory Monitoring (Issue #69)
+
+Real-time memory metrics are available via Prometheus on port 9090:
+
+**Available Metrics:**
+- `rust_loadtest_process_memory_rss_bytes` - Resident set size (actual RAM used)
+- `rust_loadtest_process_memory_virtual_bytes` - Virtual memory size
+- `rust_loadtest_histogram_count` - Number of active HDR histograms
+- `rust_loadtest_histogram_memory_estimate_bytes` - Estimated histogram memory (3MB per histogram)
+
+**Example queries:**
+\`\`\`promql
+# Memory usage in MB
+rust_loadtest_process_memory_rss_bytes / 1024 / 1024
+
+# Memory usage percentage (if you know container limit)
+(rust_loadtest_process_memory_rss_bytes / 4294967296) * 100  # For 4GB limit
+
+# Histogram memory overhead
+rust_loadtest_histogram_memory_estimate_bytes / 1024 / 1024
+\`\`\`
+
+**Set up alerts:**
+\`\`\`yaml
+# Prometheus alert when approaching 80% of 4GB limit
+- alert: LoadTestHighMemory
+  expr: rust_loadtest_process_memory_rss_bytes > 3.4e9
+  annotations:
+    summary: "Load test using >80% of memory limit"
+\`\`\`
+
 ## Project Structure
 
 ```
