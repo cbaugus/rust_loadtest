@@ -63,8 +63,7 @@ This repository has two CI/CD pipelines:
 
 **Process:**
 1. Build Docker image (amd64 only)
-2. Generate artifact attestation
-3. Push to Docker Hub with caching
+2. Push to Docker Hub with caching
 
 **Images:**
 - `cbaugus/rust_loadtest:dev`
