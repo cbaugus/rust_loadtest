@@ -4,10 +4,11 @@
 //! according to load models and respects timing constraints.
 
 use rust_loadtest::load_models::LoadModel;
-use rust_loadtest::scenario::{RequestConfig, Scenario, Step};
+use rust_loadtest::scenario::{RequestConfig, Scenario, Step, ThinkTime};
 use rust_loadtest::worker::{run_scenario_worker, ScenarioWorkerConfig};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 
 #[tokio::test]
 async fn test_scenario_worker_respects_duration() {
@@ -33,7 +34,7 @@ async fn test_scenario_worker_respects_duration() {
         base_url: "https://ecom.edge.baugus-lab.com".to_string(),
         scenario,
         test_duration: Duration::from_secs(2),
-        load_model: LoadModel::Constant { rps: 1.0 },
+        load_model: LoadModel::Rps { target_rps:1.0 },
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
     };
@@ -80,7 +81,7 @@ async fn test_scenario_worker_constant_load() {
         base_url: "https://ecom.edge.baugus-lab.com".to_string(),
         scenario,
         test_duration: Duration::from_secs(3),
-        load_model: LoadModel::Constant { rps: 2.0 },
+        load_model: LoadModel::Rps { target_rps:2.0 },
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
     };
@@ -110,7 +111,7 @@ async fn test_scenario_worker_with_think_time() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: Some(Duration::from_millis(500)),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Step 2".to_string(),
@@ -132,7 +133,7 @@ async fn test_scenario_worker_with_think_time() {
         base_url: "https://ecom.edge.baugus-lab.com".to_string(),
         scenario,
         test_duration: Duration::from_secs(2),
-        load_model: LoadModel::Constant { rps: 0.5 }, // 1 scenario every 2 seconds
+        load_model: LoadModel::Rps { target_rps:0.5 }, // 1 scenario every 2 seconds
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
     };
