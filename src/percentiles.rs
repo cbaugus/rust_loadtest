@@ -11,7 +11,9 @@
 //! - Memory-efficient histogram storage
 
 use hdrhistogram::Histogram;
+use lru::LruCache;
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, warn};
 
@@ -169,20 +171,35 @@ impl Default for PercentileTracker {
     }
 }
 
-/// Multi-label percentile tracker.
+/// Multi-label percentile tracker with LRU eviction (Issue #68).
 ///
 /// Tracks percentiles separately for different labels (e.g., endpoints, scenarios).
-/// Thread-safe for concurrent updates.
+/// Thread-safe for concurrent updates. Uses LRU eviction to limit memory usage.
 pub struct MultiLabelPercentileTracker {
-    trackers: Arc<Mutex<HashMap<String, PercentileTracker>>>,
+    trackers: Arc<Mutex<LruCache<String, PercentileTracker>>>,
+    max_labels: usize,
+    warned_at_80_percent: Arc<Mutex<bool>>,
 }
 
 impl MultiLabelPercentileTracker {
-    /// Create a new multi-label tracker.
-    pub fn new() -> Self {
+    /// Create a new multi-label tracker with a maximum number of labels.
+    ///
+    /// # Arguments
+    /// * `max_labels` - Maximum number of unique labels to track (default: 100)
+    ///
+    /// When the limit is reached, least recently used labels are evicted.
+    pub fn new_with_limit(max_labels: usize) -> Self {
+        let capacity = NonZeroUsize::new(max_labels).unwrap_or(NonZeroUsize::new(100).unwrap());
         Self {
-            trackers: Arc::new(Mutex::new(HashMap::new())),
+            trackers: Arc::new(Mutex::new(LruCache::new(capacity))),
+            max_labels,
+            warned_at_80_percent: Arc::new(Mutex::new(false)),
         }
+    }
+
+    /// Create a new multi-label tracker with default limit of 100 labels.
+    pub fn new() -> Self {
+        Self::new_with_limit(100)
     }
 
     /// Record a latency for a specific label.
@@ -190,23 +207,58 @@ impl MultiLabelPercentileTracker {
     /// # Arguments
     /// * `label` - Label to track (e.g., endpoint path, scenario name)
     /// * `latency_ms` - Latency in milliseconds
+    ///
+    /// If the label doesn't exist and we're at capacity, the least recently
+    /// used label will be evicted to make room.
     pub fn record(&self, label: &str, latency_ms: u64) {
         let mut trackers = self.trackers.lock().unwrap();
 
-        // Get or create tracker for this label
-        let tracker = trackers
-            .entry(label.to_string())
-            .or_insert_with(PercentileTracker::new);
+        // Check if we're approaching the limit (80%)
+        let current_size = trackers.len();
+        let threshold_80 = (self.max_labels as f64 * 0.8) as usize;
 
-        tracker.record_ms(latency_ms);
+        if current_size >= threshold_80 && !trackers.contains(&label.to_string()) {
+            let mut warned = self.warned_at_80_percent.lock().unwrap();
+            if !*warned {
+                warn!(
+                    current_labels = current_size,
+                    max_labels = self.max_labels,
+                    threshold_percent = 80,
+                    "⚠️  Histogram label limit approaching: {}/{} labels ({}%). \
+                     Consider increasing MAX_HISTOGRAM_LABELS or using fewer unique scenario/step names. \
+                     Least recently used labels will be evicted when limit is reached.",
+                    current_size, self.max_labels, (current_size as f64 / self.max_labels as f64 * 100.0) as u32
+                );
+                *warned = true;
+            }
+        }
+
+        // Get or create tracker for this label
+        // LRU will automatically evict oldest entry if at capacity
+        if !trackers.contains(&label.to_string()) {
+            if trackers.len() >= self.max_labels {
+                debug!(
+                    label = label,
+                    max_labels = self.max_labels,
+                    "Histogram label limit reached, evicting least recently used label"
+                );
+            }
+            trackers.put(label.to_string(), PercentileTracker::new());
+        }
+
+        // Record the latency
+        if let Some(tracker) = trackers.get_mut(&label.to_string()) {
+            tracker.record_ms(latency_ms);
+        }
     }
 
     /// Get statistics for a specific label.
     ///
     /// Returns None if label doesn't exist or has no samples.
     pub fn stats(&self, label: &str) -> Option<PercentileStats> {
-        let trackers = self.trackers.lock().unwrap();
-        trackers.get(label).and_then(|t| t.stats())
+        let mut trackers = self.trackers.lock().unwrap();
+        // peek() doesn't update LRU order
+        trackers.peek(label).and_then(|t| t.stats())
     }
 
     /// Get statistics for all labels.
@@ -228,13 +280,27 @@ impl MultiLabelPercentileTracker {
     /// Get all labels currently being tracked.
     pub fn labels(&self) -> Vec<String> {
         let trackers = self.trackers.lock().unwrap();
-        trackers.keys().cloned().collect()
+        trackers.iter().map(|(k, _)| k.clone()).collect()
+    }
+
+    /// Get the current number of tracked labels.
+    pub fn len(&self) -> usize {
+        let trackers = self.trackers.lock().unwrap();
+        trackers.len()
+    }
+
+    /// Get the maximum number of labels that can be tracked.
+    pub fn capacity(&self) -> usize {
+        self.max_labels
     }
 
     /// Reset all trackers.
     pub fn reset_all(&self) {
         let mut trackers = self.trackers.lock().unwrap();
         trackers.clear();
+        // Reset the warning flag
+        let mut warned = self.warned_at_80_percent.lock().unwrap();
+        *warned = false;
     }
 }
 

@@ -53,8 +53,9 @@ pub struct Config {
     pub client_key_path: Option<String>,
     pub custom_headers: Option<String>,
 
-    // Memory optimization settings (Issue #66)
+    // Memory optimization settings (Issue #66, #68)
     pub percentile_tracking_enabled: bool,
+    pub max_histogram_labels: usize,
 }
 
 /// Helper to get a required environment variable.
@@ -165,8 +166,9 @@ impl Config {
         let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
 
-        // Memory optimization settings (Issue #66)
+        // Memory optimization settings (Issue #66, #68)
         let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
+        let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
 
         let config = Config {
             target_url,
@@ -182,6 +184,7 @@ impl Config {
             client_key_path,
             custom_headers,
             percentile_tracking_enabled,
+            max_histogram_labels,
         };
 
         config.validate()?;
@@ -300,8 +303,9 @@ impl Config {
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
         let custom_headers = env::var("CUSTOM_HEADERS").ok();
 
-        // Memory optimization settings (Issue #66)
+        // Memory optimization settings (Issue #66, #68)
         let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
+        let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
 
         let config = Config {
             target_url,
@@ -317,6 +321,7 @@ impl Config {
             client_key_path,
             custom_headers,
             percentile_tracking_enabled,
+            max_histogram_labels,
         };
 
         config.validate()?;
@@ -502,6 +507,7 @@ impl Config {
             client_key_path: None,
             custom_headers: None,
             percentile_tracking_enabled: true,
+            max_histogram_labels: 100,
         }
     }
 
@@ -540,6 +546,11 @@ impl Config {
                 "Percentile tracking is DISABLED - no latency percentiles will be collected. \
                  This reduces memory usage for high-load tests. \
                  Set PERCENTILE_TRACKING_ENABLED=true to enable."
+            );
+        } else {
+            info!(
+                max_histogram_labels = self.max_histogram_labels,
+                "Histogram label limit configured (Issue #68)"
             );
         }
 
