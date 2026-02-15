@@ -6,6 +6,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
+use rust_loadtest::memory_guard::{init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig};
 use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server, update_memory_metrics, CONNECTION_POOL_MAX_IDLE, CONNECTION_POOL_IDLE_TIMEOUT_SECONDS};
 use rust_loadtest::percentiles::{format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
@@ -235,6 +236,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         metrics_port = metrics_port,
         "Prometheus metrics server started"
     );
+
+    // Initialize percentile tracking runtime flag (Issue #72)
+    init_percentile_tracking_flag(config.percentile_tracking_enabled);
+    if config.percentile_tracking_enabled {
+        info!("Percentile tracking initialized and enabled");
+    } else {
+        info!("Percentile tracking initialized but DISABLED via config");
+    }
+
+    // Spawn auto-OOM memory guard (Issue #72)
+    if config.percentile_tracking_enabled {
+        let memory_guard_config = MemoryGuardConfig {
+            warning_threshold_percent: config.memory_warning_threshold_percent,
+            critical_threshold_percent: config.memory_critical_threshold_percent,
+            auto_disable_on_warning: config.auto_disable_percentiles_on_warning,
+            check_interval: Duration::from_secs(5),
+        };
+        tokio::spawn(async move {
+            spawn_memory_guard(memory_guard_config).await;
+        });
+    } else {
+        info!("Memory guard not started - percentile tracking disabled via config");
+    }
 
     // Spawn memory monitoring task (Issue #69)
     tokio::spawn(async move {

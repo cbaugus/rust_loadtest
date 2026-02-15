@@ -53,10 +53,13 @@ pub struct Config {
     pub client_key_path: Option<String>,
     pub custom_headers: Option<String>,
 
-    // Memory optimization settings (Issue #66, #68, #67)
+    // Memory optimization settings (Issue #66, #68, #67, #72)
     pub percentile_tracking_enabled: bool,
     pub max_histogram_labels: usize,
     pub histogram_rotation_interval: Duration,  // 0 = disabled
+    pub memory_warning_threshold_percent: f64,
+    pub memory_critical_threshold_percent: f64,
+    pub auto_disable_percentiles_on_warning: bool,
 }
 
 /// Helper to get a required environment variable.
@@ -167,7 +170,7 @@ impl Config {
         let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
 
-        // Memory optimization settings (Issue #66, #68, #67)
+        // Memory optimization settings (Issue #66, #68, #67, #72)
         let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
         let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
 
@@ -180,6 +183,11 @@ impl Config {
         } else {
             Duration::from_secs(0) // Disabled by default
         };
+
+        // Auto-OOM protection settings (Issue #72)
+        let memory_warning_threshold_percent: f64 = env_parse_or("MEMORY_WARNING_THRESHOLD_PERCENT", 80.0)?;
+        let memory_critical_threshold_percent: f64 = env_parse_or("MEMORY_CRITICAL_THRESHOLD_PERCENT", 90.0)?;
+        let auto_disable_percentiles_on_warning = env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
         let config = Config {
             target_url,
@@ -197,6 +205,9 @@ impl Config {
             percentile_tracking_enabled,
             max_histogram_labels,
             histogram_rotation_interval,
+            memory_warning_threshold_percent,
+            memory_critical_threshold_percent,
+            auto_disable_percentiles_on_warning,
         };
 
         config.validate()?;
@@ -315,7 +326,7 @@ impl Config {
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
         let custom_headers = env::var("CUSTOM_HEADERS").ok();
 
-        // Memory optimization settings (Issue #66, #68, #67)
+        // Memory optimization settings (Issue #66, #68, #67, #72)
         let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
         let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
 
@@ -328,6 +339,11 @@ impl Config {
         } else {
             Duration::from_secs(0) // Disabled by default
         };
+
+        // Auto-OOM protection settings (Issue #72)
+        let memory_warning_threshold_percent: f64 = env_parse_or("MEMORY_WARNING_THRESHOLD_PERCENT", 80.0)?;
+        let memory_critical_threshold_percent: f64 = env_parse_or("MEMORY_CRITICAL_THRESHOLD_PERCENT", 90.0)?;
+        let auto_disable_percentiles_on_warning = env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
         let config = Config {
             target_url,
@@ -345,6 +361,9 @@ impl Config {
             percentile_tracking_enabled,
             max_histogram_labels,
             histogram_rotation_interval,
+            memory_warning_threshold_percent,
+            memory_critical_threshold_percent,
+            auto_disable_percentiles_on_warning,
         };
 
         config.validate()?;
@@ -532,6 +551,9 @@ impl Config {
             percentile_tracking_enabled: true,
             max_histogram_labels: 100,
             histogram_rotation_interval: Duration::from_secs(0),
+            memory_warning_threshold_percent: 80.0,
+            memory_critical_threshold_percent: 90.0,
+            auto_disable_percentiles_on_warning: true,
         }
     }
 
@@ -602,6 +624,22 @@ impl Config {
                     "Custom header configured"
                 );
             }
+        }
+
+        // Auto-OOM protection status (Issue #72)
+        if self.auto_disable_percentiles_on_warning {
+            info!(
+                memory_warning_threshold = self.memory_warning_threshold_percent,
+                memory_critical_threshold = self.memory_critical_threshold_percent,
+                "Auto-OOM protection ENABLED (Issue #72) - will automatically disable percentiles if memory exceeds {}%",
+                self.memory_warning_threshold_percent
+            );
+        } else {
+            info!(
+                memory_warning_threshold = self.memory_warning_threshold_percent,
+                memory_critical_threshold = self.memory_critical_threshold_percent,
+                "Auto-OOM protection monitoring only (Issue #72) - will log warnings but NOT take automatic actions"
+            );
         }
     }
 }

@@ -5,6 +5,7 @@ use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::errors::{CategorizedError, ErrorCategory};
 use crate::executor::ScenarioExecutor;
 use crate::load_models::LoadModel;
+use crate::memory_guard::is_percentile_tracking_active;
 use crate::metrics::{
     CONCURRENT_REQUESTS, REQUEST_DURATION_SECONDS, REQUEST_ERRORS_BY_CATEGORY, REQUEST_STATUS_CODES, REQUEST_TOTAL,
     SCENARIO_REQUESTS_TOTAL, SCENARIO_THROUGHPUT_RPS,
@@ -115,8 +116,9 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         REQUEST_DURATION_SECONDS.observe(request_start_time.elapsed().as_secs_f64());
         CONCURRENT_REQUESTS.dec();
 
-        // Record latency in percentile tracker (Issue #33, #66)
-        if config.percentile_tracking_enabled {
+        // Record latency in percentile tracker (Issue #33, #66, #72)
+        // Check both config flag AND runtime flag (can be disabled by memory guard)
+        if config.percentile_tracking_enabled && is_percentile_tracking_active() {
             GLOBAL_REQUEST_PERCENTILES.record_ms(actual_latency_ms);
         }
 
@@ -262,11 +264,12 @@ pub async fn run_scenario_worker(
             "Scenario execution completed"
         );
 
-        // Record scenario latency in percentile tracker (Issue #33, #66)
-        if config.percentile_tracking_enabled {
+        // Record scenario latency in percentile tracker (Issue #33, #66, #72)
+        // Check both config flag AND runtime flag (can be disabled by memory guard)
+        if config.percentile_tracking_enabled && is_percentile_tracking_active() {
             GLOBAL_SCENARIO_PERCENTILES.record(&config.scenario.name, result.total_time_ms);
 
-            // Record individual step latencies (Issue #33, #66)
+            // Record individual step latencies (Issue #33, #66, #72)
             for step in &result.steps {
                 let label = format!("{}:{}", config.scenario.name, step.step_name);
                 GLOBAL_STEP_PERCENTILES.record(&label, step.response_time_ms);

@@ -115,6 +115,46 @@ docker run --memory=4g \
 - Logs rotation events for visibility
 - Recommended: 15-30 minute intervals for long tests
 
+**Auto-OOM Protection (Issue #72):**
+
+The load tester includes automatic memory protection to prevent OOM crashes:
+
+```bash
+docker run --memory=4g \
+  -e TARGET_URL="https://api.example.com" \
+  -e NUM_CONCURRENT_TASKS=1000 \
+  -e TARGET_RPS=20000 \
+  -e MEMORY_WARNING_THRESHOLD_PERCENT=80 \      # <-- Warn at 80% memory
+  -e MEMORY_CRITICAL_THRESHOLD_PERCENT=90 \     # <-- Critical at 90% memory
+  -e AUTO_DISABLE_PERCENTILES_ON_WARNING=true \ # <-- Auto-disable percentiles
+  cbaugus/rust-loadtester:latest
+```
+
+**How it works:**
+- Monitors memory usage every 5 seconds
+- Detects memory limits (Docker cgroup-aware)
+- At **warning threshold (80%)**:
+  - Automatically disables percentile tracking
+  - Rotates existing histograms to free memory
+  - Logs defensive actions taken
+- At **critical threshold (90%)**:
+  - Aggressively rotates histograms again
+  - Logs critical memory warning
+- Works on both bare metal and containerized environments
+
+**Configuration:**
+- `MEMORY_WARNING_THRESHOLD_PERCENT` - Warning threshold (default: 80%)
+- `MEMORY_CRITICAL_THRESHOLD_PERCENT` - Critical threshold (default: 90%)
+- `AUTO_DISABLE_PERCENTILES_ON_WARNING` - Take automatic defensive actions (default: true)
+
+**When to use:**
+- Unknown memory requirements
+- Long-duration tests where memory may grow
+- Protection against misconfiguration
+- Production load tests where stability is critical
+
+Set `AUTO_DISABLE_PERCENTILES_ON_WARNING=false` for monitoring-only mode (logs warnings but doesn't take action).
+
 ### Pre-configured Examples
 
 See `docker-compose.loadtest-examples.yml` for ready-to-use configurations:
@@ -189,6 +229,9 @@ The load testing tool is configured primarily through environment variables pass
 * PERCENTILE_TRACKING_ENABLED (Optional, default: true): Set to "false" to disable HDR histogram tracking for percentile latency calculation. Disabling this can save significant memory (2-4MB per unique scenario/step) in high-load tests. When disabled, P50/P90/P95/P99 percentiles won't be available, but Prometheus metrics continue to work. See [Memory Configuration](#️-memory-configuration) for details.
 * MAX_HISTOGRAM_LABELS (Optional, default: 100): Maximum number of unique scenario/step labels to track for percentile calculation. Uses LRU eviction when limit is reached. Each label consumes 2-4MB. Increase for tests with many unique scenarios, or decrease to save memory. Warning logged at 80% capacity.
 * HISTOGRAM_ROTATION_INTERVAL (Optional, default: disabled): Periodically reset histogram data to prevent unbounded memory growth in long tests. Format: `15m`, `1h`, `2h`. Clears percentile data while keeping labels. Essential for 24h+ tests. Example: `HISTOGRAM_ROTATION_INTERVAL=15m`
+* MEMORY_WARNING_THRESHOLD_PERCENT (Optional, default: 80.0): Memory usage percentage that triggers warning and defensive actions. When memory exceeds this threshold, auto-OOM protection can automatically disable percentile tracking to prevent crashes.
+* MEMORY_CRITICAL_THRESHOLD_PERCENT (Optional, default: 90.0): Memory usage percentage that triggers critical warnings and aggressive cleanup. At this level, histograms are rotated to free as much memory as possible.
+* AUTO_DISABLE_PERCENTILES_ON_WARNING (Optional, default: true): When true, automatically disables percentile tracking and rotates histograms when memory warning threshold is exceeded. Set to false for monitoring-only mode (logs warnings without taking action).
 
 Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:

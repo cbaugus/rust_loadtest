@@ -14,6 +14,7 @@ pub mod errors;
 pub mod executor;
 pub mod extractor;
 pub mod load_models;
+pub mod memory_guard;
 pub mod metrics;
 pub mod multi_scenario;
 pub mod percentiles;
