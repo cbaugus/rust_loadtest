@@ -6,7 +6,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
-use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server, CONNECTION_POOL_MAX_IDLE, CONNECTION_POOL_IDLE_TIMEOUT_SECONDS};
+use rust_loadtest::metrics::{gather_metrics_string, register_metrics, start_metrics_server, update_memory_metrics, CONNECTION_POOL_MAX_IDLE, CONNECTION_POOL_IDLE_TIMEOUT_SECONDS};
 use rust_loadtest::percentiles::{format_percentile_table, GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
@@ -235,6 +235,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         metrics_port = metrics_port,
         "Prometheus metrics server started"
     );
+
+    // Spawn memory monitoring task (Issue #69)
+    tokio::spawn(async move {
+        let mut interval = time::interval(Duration::from_secs(10));
+        loop {
+            interval.tick().await;
+            if let Err(e) = update_memory_metrics() {
+                error!(error = %e, "Failed to update memory metrics");
+            }
+        }
+    });
+    info!("Memory monitoring started (updates every 10s)");
 
     // Initialize connection pool configuration metrics (Issue #36)
     let pool_config = PoolConfig::default();

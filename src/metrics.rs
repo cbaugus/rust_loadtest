@@ -149,6 +149,32 @@ lazy_static::lazy_static! {
             Opts::new("connection_pool_reuse_rate_percent", "Percentage of requests reusing connections")
                 .namespace(METRIC_NAMESPACE.as_str())
         ).unwrap();
+
+    // === Memory Usage Metrics (Issue #69) ===
+
+    pub static ref PROCESS_MEMORY_RSS_BYTES: Gauge =
+        Gauge::with_opts(
+            Opts::new("process_memory_rss_bytes", "Resident set size (RSS) memory in bytes")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
+    pub static ref PROCESS_MEMORY_VIRTUAL_BYTES: Gauge =
+        Gauge::with_opts(
+            Opts::new("process_memory_virtual_bytes", "Virtual memory size in bytes")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
+    pub static ref HISTOGRAM_COUNT: Gauge =
+        Gauge::with_opts(
+            Opts::new("histogram_count", "Number of active HDR histograms")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
+
+    pub static ref HISTOGRAM_MEMORY_ESTIMATE_BYTES: Gauge =
+        Gauge::with_opts(
+            Opts::new("histogram_memory_estimate_bytes", "Estimated memory used by histograms")
+                .namespace(METRIC_NAMESPACE.as_str())
+        ).unwrap();
 }
 
 /// Registers all metrics with the default Prometheus registry.
@@ -181,6 +207,12 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     prometheus::default_registry().register(Box::new(CONNECTION_POOL_LIKELY_REUSED.clone()))?;
     prometheus::default_registry().register(Box::new(CONNECTION_POOL_LIKELY_NEW.clone()))?;
     prometheus::default_registry().register(Box::new(CONNECTION_POOL_REUSE_RATE.clone()))?;
+
+    // Memory usage metrics
+    prometheus::default_registry().register(Box::new(PROCESS_MEMORY_RSS_BYTES.clone()))?;
+    prometheus::default_registry().register(Box::new(PROCESS_MEMORY_VIRTUAL_BYTES.clone()))?;
+    prometheus::default_registry().register(Box::new(HISTOGRAM_COUNT.clone()))?;
+    prometheus::default_registry().register(Box::new(HISTOGRAM_MEMORY_ESTIMATE_BYTES.clone()))?;
 
     Ok(())
 }
@@ -240,4 +272,49 @@ pub fn gather_metrics_string(registry: &Arc<Mutex<Registry>>) -> String {
         eprintln!("Error encoding metrics to UTF-8: {}", e);
         String::from("# ERROR ENCODING METRICS TO UTF-8")
     })
+}
+
+/// Updates memory usage metrics (Issue #69).
+///
+/// Reads process memory stats from /proc on Linux and estimates
+/// histogram memory usage based on active label count.
+pub fn update_memory_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Platform-specific memory stats
+    #[cfg(target_os = "linux")]
+    {
+        use procfs::process::Process;
+
+        match Process::myself() {
+            Ok(me) => {
+                if let Ok(stat) = me.stat() {
+                    // RSS in bytes (Resident Set Size)
+                    let rss_bytes = stat.rss * 4096; // RSS is in pages, typically 4KB per page
+                    PROCESS_MEMORY_RSS_BYTES.set(rss_bytes as f64);
+
+                    // Virtual memory size in bytes
+                    PROCESS_MEMORY_VIRTUAL_BYTES.set(stat.vsize as f64);
+                }
+            }
+            Err(e) => {
+                // Don't fail if we can't read memory stats
+                tracing::debug!(error = %e, "Failed to read /proc memory stats");
+            }
+        }
+    }
+
+    // Histogram metrics (platform-independent)
+    use crate::percentiles::{GLOBAL_REQUEST_PERCENTILES, GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES};
+
+    let scenario_count = GLOBAL_SCENARIO_PERCENTILES.len();
+    let step_count = GLOBAL_STEP_PERCENTILES.len();
+    let request_count = if GLOBAL_REQUEST_PERCENTILES.stats().is_some() { 1 } else { 0 };
+    let total_histograms = scenario_count + step_count + request_count;
+
+    HISTOGRAM_COUNT.set(total_histograms as f64);
+
+    // Estimate: 3MB per histogram (conservative average)
+    let estimated_bytes = total_histograms * 3_000_000;
+    HISTOGRAM_MEMORY_ESTIMATE_BYTES.set(estimated_bytes as f64);
+
+    Ok(())
 }

@@ -29,6 +29,7 @@ csv = "1.3" # For CSV data file parsing
 notify = "6.0" # For file watching (hot-reload)
 schemars = "0.8" # For JSON Schema generation
 lru = "0.12" # For LRU cache to limit histogram labels (Issue #68)
+procfs = "0.16" # For Linux process memory stats (Issue #69)
 
 [dev-dependencies]
 wiremock = "0.5"
