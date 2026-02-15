@@ -52,6 +52,58 @@ This tool is available in two image variants to suit different deployment scenar
 
 **Recommendation:** Use the **static image** for production deployments in secure environments. Use the **standard image** for development and troubleshooting.
 
+## ⚠️ Memory Configuration
+
+Load testing at high concurrency or RPS can consume significant memory. **Read this before running high-load tests.**
+
+### Quick Memory Limits
+
+| Available RAM | Max Concurrent Tasks | Max RPS | Max Duration |
+|---------------|---------------------|---------|--------------|
+| 512MB         | 10                  | 500     | 5 minutes    |
+| 2GB           | 100                 | 5,000   | 30 minutes   |
+| 4GB           | 500                 | 10,000  | 1 hour       |
+| 8GB+          | 1,000               | 25,000  | 2+ hours     |
+
+### Memory Optimization (Issue #66)
+
+For high-load tests that may cause OOM errors, disable percentile tracking:
+
+\`\`\`bash
+docker run --memory=4g \\
+  -e TARGET_URL="https://api.example.com" \\
+  -e NUM_CONCURRENT_TASKS=500 \\
+  -e TARGET_RPS=10000 \\
+  -e PERCENTILE_TRACKING_ENABLED=false \\  # <-- Disables histogram tracking
+  cbaugus/rust-loadtester:latest
+\`\`\`
+
+**What this does:**
+- Saves 2-4MB per unique scenario/step label
+- Disables P50/P90/P95/P99 percentile calculation
+- Allows much higher concurrency and RPS
+- Prometheus metrics still work normally
+
+**When to disable percentile tracking:**
+- High concurrency tests (>500 tasks)
+- High RPS tests (>10,000 RPS)
+- Long duration tests (>2 hours)
+- Limited RAM (2-4GB)
+
+### Pre-configured Examples
+
+See `docker-compose.loadtest-examples.yml` for ready-to-use configurations:
+
+\`\`\`bash
+# Small test (512MB RAM)
+docker-compose -f docker-compose.loadtest-examples.yml up loadtest-small
+
+# High load test (4GB RAM)
+docker-compose -f docker-compose.loadtest-examples.yml up loadtest-high
+\`\`\`
+
+📚 **Full documentation:** See `MEMORY_OPTIMIZATION.md` for detailed analysis, memory breakdown, and optimization strategies.
+
 ## Project Structure
 
 ```
@@ -78,6 +130,7 @@ The load testing tool is configured primarily through environment variables pass
 * CLIENT_CERT_PATH (Optional): Path to the client's PEM-encoded public certificate file for mTLS.
 * CLIENT_KEY_PATH (Optional): Path to the client's PEM-encoded PKCS#8 private key file for mTLS. Both `CLIENT_CERT_PATH` and `CLIENT_KEY_PATH` must be provided to enable mTLS.
 * RESOLVE_TARGET_ADDR (Optional): Allows overriding DNS resolution for the `TARGET_URL`. The format is `"hostname:ip_address:port"`. For example, if `TARGET_URL` is `http://example.com/api` and `RESOLVE_TARGET_ADDR` is set to `"example.com:192.168.1.50:8080"`, all requests to `example.com` will be directed to `192.168.1.50` on port `8080`. This is useful for targeting services not in DNS or for specific routing during tests.
+* PERCENTILE_TRACKING_ENABLED (Optional, default: true): Set to "false" to disable HDR histogram tracking for percentile latency calculation. Disabling this can save significant memory (2-4MB per unique scenario/step) in high-load tests. When disabled, P50/P90/P95/P99 percentiles won't be available, but Prometheus metrics continue to work. See [Memory Configuration](#️-memory-configuration) for details.
 
 Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:
