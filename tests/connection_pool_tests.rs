@@ -341,7 +341,8 @@ fn test_global_pool_stats_singleton() {
     let stats = GLOBAL_POOL_STATS.stats();
 
     // Should be able to get stats (may have data from other tests)
-    assert!(stats.total_requests >= 0);
+    // Just verify we can access it without panicking
+    let _ = stats.total_requests;
 
     println!("✅ Global pool stats singleton accessible");
 }
