@@ -378,20 +378,23 @@ mod tests {
     #[test]
     fn test_merge_skip_tls_verify() {
         // Default
-        assert!(
-            !ConfigMerger::merge_skip_tls_verify(None, "TEST_SKIP_TLS_1")
-        );
+        assert!(!ConfigMerger::merge_skip_tls_verify(
+            None,
+            "TEST_SKIP_TLS_1"
+        ));
 
         // YAML
-        assert!(
-            ConfigMerger::merge_skip_tls_verify(Some(true), "TEST_SKIP_TLS_2")
-        );
+        assert!(ConfigMerger::merge_skip_tls_verify(
+            Some(true),
+            "TEST_SKIP_TLS_2"
+        ));
 
         // Env override
         env::set_var("TEST_SKIP_TLS_3", "true");
-        assert!(
-            ConfigMerger::merge_skip_tls_verify(Some(false), "TEST_SKIP_TLS_3")
-        );
+        assert!(ConfigMerger::merge_skip_tls_verify(
+            Some(false),
+            "TEST_SKIP_TLS_3"
+        ));
         env::remove_var("TEST_SKIP_TLS_3");
 
         println!("✅ Skip TLS verify merging works");

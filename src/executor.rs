@@ -484,8 +484,6 @@ impl ScenarioExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
 
     #[test]
     fn test_scenario_result_success() {

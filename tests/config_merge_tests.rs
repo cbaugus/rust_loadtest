@@ -319,27 +319,19 @@ fn test_precedence_isolation() {
 fn test_case_sensitivity_boolean() {
     // Test boolean env var case insensitivity
     env::set_var("BOOL_TEST_1", "TRUE");
-    assert!(
-        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_1")
-    );
+    assert!(ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_1"));
     env::remove_var("BOOL_TEST_1");
 
     env::set_var("BOOL_TEST_2", "True");
-    assert!(
-        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_2")
-    );
+    assert!(ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_2"));
     env::remove_var("BOOL_TEST_2");
 
     env::set_var("BOOL_TEST_3", "true");
-    assert!(
-        ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_3")
-    );
+    assert!(ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_3"));
     env::remove_var("BOOL_TEST_3");
 
     env::set_var("BOOL_TEST_4", "false");
-    assert!(
-        !ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_4")
-    );
+    assert!(!ConfigMerger::merge_skip_tls_verify(None, "BOOL_TEST_4"));
     env::remove_var("BOOL_TEST_4");
 
     println!("✅ Boolean env vars are case insensitive");

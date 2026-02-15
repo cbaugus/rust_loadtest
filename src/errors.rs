@@ -77,7 +77,11 @@ impl ErrorCategory {
                 ErrorCategory::TlsError
             } else if error_msg.contains("timeout") {
                 ErrorCategory::TimeoutError
-            } else if error_msg.contains("dns") || error_msg.contains("resolve") || error_msg.contains("connect") || error_msg.contains("connection") {
+            } else if error_msg.contains("dns")
+                || error_msg.contains("resolve")
+                || error_msg.contains("connect")
+                || error_msg.contains("connection")
+            {
                 ErrorCategory::NetworkError
             } else {
                 ErrorCategory::OtherError
