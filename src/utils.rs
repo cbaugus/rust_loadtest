@@ -1,9 +1,10 @@
 use std::str::FromStr;
 use tokio::time::Duration;
 
-/// Parses a duration string in the format "10m", "5h", "3d".
+/// Parses a duration string in the format "30s", "10m", "5h", "3d".
 ///
 /// Supported units:
+/// - `s` for seconds
 /// - `m` for minutes
 /// - `h` for hours
 /// - `d` for days
@@ -28,11 +29,12 @@ pub fn parse_duration_string(s: &str) -> Result<Duration, String> {
     };
 
     match unit_char {
+        's' => Ok(Duration::from_secs(value)),
         'm' => Ok(Duration::from_secs(value * 60)),
         'h' => Ok(Duration::from_secs(value * 60 * 60)),
         'd' => Ok(Duration::from_secs(value * 24 * 60 * 60)),
         _ => Err(format!(
-            "Unknown duration unit: '{}'. Use 'm', 'h', or 'd'.",
+            "Unknown duration unit: '{}'. Use 's', 'm', 'h', or 'd'.",
             unit_char
         )),
     }
@@ -162,9 +164,11 @@ mod tests {
         }
 
         #[test]
-        fn seconds_suffix_not_supported() {
-            let err = parse_duration_string("10s").unwrap_err();
-            assert!(err.contains("Unknown duration unit"), "error was: {}", err);
+        fn parse_seconds() {
+            assert_eq!(
+                parse_duration_string("30s").unwrap(),
+                Duration::from_secs(30)
+            );
         }
 
         #[test]

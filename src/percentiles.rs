@@ -414,7 +414,17 @@ mod tests {
         let stats = tracker.stats().expect("Should have stats");
         assert_eq!(stats.count, 5);
         assert_eq!(stats.min, 10_000); // 10ms in microseconds
-        assert_eq!(stats.max, 50_000); // 50ms in microseconds
+
+        // HDR histogram has precision limits - use tolerance for max value
+        // Expected 50_000 but histogram may round to ~50_015 due to bucketing
+        let expected_max = 50_000;
+        let tolerance = 100; // 0.2% tolerance for histogram precision
+        assert!(
+            stats.max >= expected_max && stats.max <= expected_max + tolerance,
+            "max should be ~{} but was {}",
+            expected_max,
+            stats.max
+        );
     }
 
     #[test]
@@ -430,8 +440,23 @@ mod tests {
 
         let stats = tracker.stats().unwrap();
         assert_eq!(stats.count, 1);
-        assert_eq!(stats.p50, 100_000); // 100ms in microseconds
-        assert_eq!(stats.p99, 100_000);
+
+        // HDR histogram has precision limits due to bucketing
+        // Expected 100_000 but may round to ~100_031 (0.03% error)
+        let expected = 100_000;
+        let tolerance = 100; // 0.1% tolerance
+        assert!(
+            stats.p50 >= expected && stats.p50 <= expected + tolerance,
+            "p50 should be ~{} but was {}",
+            expected,
+            stats.p50
+        );
+        assert!(
+            stats.p99 >= expected && stats.p99 <= expected + tolerance,
+            "p99 should be ~{} but was {}",
+            expected,
+            stats.p99
+        );
     }
 
     #[test]
