@@ -126,12 +126,35 @@ impl ThroughputTracker {
 
     /// Get statistics for all scenarios.
     pub fn all_stats(&self) -> Vec<ThroughputStats> {
+        // Fix deadlock: Don't call self.stats() while holding locks
+        // Instead, calculate stats inline to avoid nested mutex acquisition
         let counts = self.counts.lock().unwrap();
+        let times = self.total_times.lock().unwrap();
+        let duration = self.start_time.elapsed();
+
         let mut stats = Vec::new();
 
-        for scenario_name in counts.keys() {
-            if let Some(stat) = self.stats(scenario_name) {
-                stats.push(stat);
+        for (scenario_name, count) in counts.iter() {
+            if let Some(total_time) = times.get(scenario_name) {
+                let rps = if duration.as_secs_f64() > 0.0 {
+                    *count as f64 / duration.as_secs_f64()
+                } else {
+                    0.0
+                };
+
+                let avg_time_ms = if *count > 0 {
+                    total_time.as_millis() as f64 / *count as f64
+                } else {
+                    0.0
+                };
+
+                stats.push(ThroughputStats {
+                    scenario_name: scenario_name.to_string(),
+                    total_count: *count,
+                    duration,
+                    rps,
+                    avg_time_ms,
+                });
             }
         }
 
