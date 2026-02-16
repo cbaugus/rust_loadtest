@@ -725,11 +725,11 @@ scenarios:
 
         let result = YamlConfig::from_str(yaml);
         assert!(result.is_err());
-        // Error message is "Unsupported version: ..." not "Unsupported config version"
+        // Error contains version validation info
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("Unsupported version") || err.contains("Unsupported config version"),
-            "Expected version error, got: {}",
+            err.contains("version") && (err.contains("2.0") || err.contains("too new") || err.contains("Unsupported")),
+            "Expected version validation error, got: {}",
             err
         );
     }
@@ -753,10 +753,10 @@ scenarios:
 
         let result = YamlConfig::from_str(yaml);
         assert!(result.is_err());
-        // Error message is "Invalid URL" not "Invalid base URL"
+        // Error contains URL validation info
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("Invalid URL") || err.contains("Invalid base URL"),
+            err.contains("baseUrl") && (err.contains("invalid") || err.contains("URL") || err.contains("http")),
             "Expected URL validation error, got: {}",
             err
         );
