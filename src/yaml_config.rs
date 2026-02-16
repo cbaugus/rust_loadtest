@@ -728,7 +728,8 @@ scenarios:
         // Error contains version validation info
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("version") && (err.contains("2.0") || err.contains("too new") || err.contains("Unsupported")),
+            err.contains("version")
+                && (err.contains("2.0") || err.contains("too new") || err.contains("Unsupported")),
             "Expected version validation error, got: {}",
             err
         );
@@ -756,7 +757,8 @@ scenarios:
         // Error contains URL validation info
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("baseUrl") && (err.contains("invalid") || err.contains("URL") || err.contains("http")),
+            err.contains("baseUrl")
+                && (err.contains("invalid") || err.contains("URL") || err.contains("http")),
             "Expected URL validation error, got: {}",
             err
         );
