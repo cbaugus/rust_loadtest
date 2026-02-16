@@ -60,12 +60,6 @@ pub fn build_client(
         pool_config.max_idle_per_host, pool_config.idle_timeout
     );
 
-    // Issue #74: Add timeout to prevent response buffering at high RPS
-    client_builder = client_builder
-        .timeout(std::time::Duration::from_secs(30))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .pool_max_idle_per_host(32); // Re-emphasize the pool limit
-
     // Build client with TLS settings
     let client = if config.skip_tls_verify {
         println!("WARNING: Skipping TLS certificate verification.");
