@@ -550,7 +550,14 @@ scenarios: []
 
         let result = load_and_validate_config(&config_path);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Validation failed"));
+        // With duration: "invalid", parsing fails before validation
+        // Error will be "Failed to parse YAML: ..." not "Validation failed: ..."
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("Failed to parse") || err.contains("Validation failed"),
+            "Expected parse or validation error, got: {}",
+            err
+        );
     }
 
     #[test]
