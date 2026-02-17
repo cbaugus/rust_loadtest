@@ -3,16 +3,18 @@
 //! These tests validate that assertions work correctly against a live API,
 //! including proper failure detection, metrics tracking, and mixed scenarios.
 //!
-//! **NOTE**: These tests require access to the live API at ecom.edge.baugus-lab.com
-//! They are marked with #[ignore] to skip in CI. Run locally with:
-//! `cargo test --test assertion_integration_tests -- --ignored`
+//! **NOTE**: Most tests use httpbin.org (public testing API).
+//! E-commerce specific tests require ecom.edge.baugus-lab.com and are marked #[ignore].
 
 use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{Assertion, RequestConfig, Scenario, ScenarioContext, Step};
 use std::collections::HashMap;
 use std::time::Duration;
 
-const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
+// Public testing API - always available
+const HTTPBIN_URL: &str = "https://httpbin.org";
+// E-commerce test API - may not be accessible in all environments
+const ECOM_URL: &str = "https://ecom.edge.baugus-lab.com";
 
 fn create_test_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -23,17 +25,15 @@ fn create_test_client() -> reqwest::Client {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
-
 async fn test_status_code_assertion_pass() {
     let scenario = Scenario {
         name: "Status Code Assertion - Pass".to_string(),
         weight: 1.0,
         steps: vec![Step {
-            name: "Health Check".to_string(),
+            name: "Get 200 Response".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/status/200".to_string(), // httpbin returns 200
                 body: None,
                 headers: HashMap::new(),
             },
@@ -44,7 +44,7 @@ async fn test_status_code_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -59,8 +59,6 @@ async fn test_status_code_assertion_pass() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
-
 async fn test_status_code_assertion_fail() {
     let scenario = Scenario {
         name: "Status Code Assertion - Fail".to_string(),
@@ -69,7 +67,7 @@ async fn test_status_code_assertion_fail() {
             name: "Expect 404".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(), // Returns 200, not 404
+                path: "/status/200".to_string(), // Returns 200, not 404
                 body: None,
                 headers: HashMap::new(),
             },
@@ -80,7 +78,7 @@ async fn test_status_code_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -96,7 +94,6 @@ async fn test_status_code_assertion_fail() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
 
 async fn test_response_time_assertion_pass() {
     let scenario = Scenario {
@@ -106,7 +103,7 @@ async fn test_response_time_assertion_pass() {
             name: "Fast Response".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -117,7 +114,7 @@ async fn test_response_time_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -141,7 +138,7 @@ async fn test_response_time_assertion_fail() {
             name: "Unrealistic Threshold".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -152,7 +149,7 @@ async fn test_response_time_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -168,23 +165,22 @@ async fn test_response_time_assertion_fail() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
 
 async fn test_json_path_assertion_existence() {
     let scenario = Scenario {
         name: "JSONPath Existence".to_string(),
         weight: 1.0,
         steps: vec![Step {
-            name: "Check Status Field Exists".to_string(),
+            name: "Check Field Exists".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/json".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
             assertions: vec![Assertion::JsonPath {
-                path: "$.status".to_string(),
+                path: "$.slideshow".to_string(),
                 expected: None, // Just check it exists
             }],
             think_time: None,
@@ -192,7 +188,7 @@ async fn test_json_path_assertion_existence() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -205,31 +201,30 @@ async fn test_json_path_assertion_existence() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
 
 async fn test_json_path_assertion_value_match() {
     let scenario = Scenario {
         name: "JSONPath Value Match".to_string(),
         weight: 1.0,
         steps: vec![Step {
-            name: "Check Status Value".to_string(),
+            name: "Check JSON Value".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/json".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
             assertions: vec![Assertion::JsonPath {
-                path: "$.status".to_string(),
-                expected: Some("ok".to_string()),
+                path: "$.slideshow.title".to_string(),
+                expected: Some("Sample Slide Show".to_string()),
             }],
             think_time: None,
         }],
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -250,21 +245,21 @@ async fn test_json_path_assertion_value_mismatch() {
             name: "Check Wrong Value".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/json".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
             assertions: vec![Assertion::JsonPath {
-                path: "$.status".to_string(),
-                expected: Some("error".to_string()), // Should be "ok"
+                path: "$.slideshow.title".to_string(),
+                expected: Some("Wrong Title".to_string()), // Should be "Sample Slide Show"
             }],
             think_time: None,
         }],
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -280,7 +275,6 @@ async fn test_json_path_assertion_value_mismatch() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
 
 async fn test_body_contains_assertion_pass() {
     let scenario = Scenario {
@@ -290,18 +284,18 @@ async fn test_body_contains_assertion_pass() {
             name: "Check Response Contains Text".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/json".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
-            assertions: vec![Assertion::BodyContains("status".to_string())],
+            assertions: vec![Assertion::BodyContains("slideshow".to_string())],
             think_time: None,
         }],
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -322,7 +316,7 @@ async fn test_body_contains_assertion_fail() {
             name: "Check Missing Text".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/json".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -333,7 +327,7 @@ async fn test_body_contains_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -346,7 +340,6 @@ async fn test_body_contains_assertion_fail() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
 
 async fn test_body_matches_regex_assertion() {
     let scenario = Scenario {
@@ -356,18 +349,18 @@ async fn test_body_matches_regex_assertion() {
             name: "Check JSON Pattern".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/json".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
-            assertions: vec![Assertion::BodyMatches(r#""status"\s*:\s*"ok""#.to_string())],
+            assertions: vec![Assertion::BodyMatches(r#""slideshow"\s*:\s*\{"#.to_string())],
             think_time: None,
         }],
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -380,7 +373,6 @@ async fn test_body_matches_regex_assertion() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
 
 async fn test_header_exists_assertion_pass() {
     let scenario = Scenario {
@@ -390,7 +382,7 @@ async fn test_header_exists_assertion_pass() {
             name: "Check Content-Type Header".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/headers".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -401,7 +393,7 @@ async fn test_header_exists_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -422,7 +414,7 @@ async fn test_header_exists_assertion_fail() {
             name: "Check Missing Header".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/headers".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -433,7 +425,7 @@ async fn test_header_exists_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -446,7 +438,6 @@ async fn test_header_exists_assertion_fail() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
 
 async fn test_multiple_assertions_all_pass() {
     let scenario = Scenario {
@@ -456,7 +447,7 @@ async fn test_multiple_assertions_all_pass() {
             name: "Multiple Checks".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -465,10 +456,10 @@ async fn test_multiple_assertions_all_pass() {
                 Assertion::StatusCode(200),
                 Assertion::ResponseTime(Duration::from_secs(5)),
                 Assertion::JsonPath {
-                    path: "$.status".to_string(),
-                    expected: Some("ok".to_string()),
+                    path: "$.url".to_string(),
+                    expected: None, // Just check it exists
                 },
-                Assertion::BodyContains("status".to_string()),
+                Assertion::BodyContains("headers".to_string()),
                 Assertion::HeaderExists("content-type".to_string()),
             ],
             think_time: None,
@@ -476,7 +467,7 @@ async fn test_multiple_assertions_all_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -489,7 +480,6 @@ async fn test_multiple_assertions_all_pass() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
 
 async fn test_multiple_assertions_mixed_results() {
     let scenario = Scenario {
@@ -499,14 +489,14 @@ async fn test_multiple_assertions_mixed_results() {
             name: "Mixed Results".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
             assertions: vec![
                 Assertion::StatusCode(200),                     // PASS
-                Assertion::BodyContains("status".to_string()),  // PASS
+                Assertion::BodyContains("headers".to_string()), // PASS
                 Assertion::StatusCode(404),                     // FAIL
                 Assertion::BodyContains("MISSING".to_string()), // FAIL
             ],
@@ -515,7 +505,7 @@ async fn test_multiple_assertions_mixed_results() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -531,7 +521,6 @@ async fn test_multiple_assertions_mixed_results() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
 
 async fn test_multi_step_assertion_stops_on_failure() {
     let scenario = Scenario {
@@ -542,7 +531,7 @@ async fn test_multi_step_assertion_stops_on_failure() {
                 name: "Step 1 - Pass".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/status/200".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -554,7 +543,7 @@ async fn test_multi_step_assertion_stops_on_failure() {
                 name: "Step 2 - Fail".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/status/200".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -566,7 +555,7 @@ async fn test_multi_step_assertion_stops_on_failure() {
                 name: "Step 3 - Never Reached".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -578,7 +567,7 @@ async fn test_multi_step_assertion_stops_on_failure() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -603,8 +592,7 @@ async fn test_multi_step_assertion_stops_on_failure() {
 }
 
 #[tokio::test]
-#[ignore] // Requires live API access
-
+#[ignore] // Requires ecom.edge.baugus-lab.com
 async fn test_realistic_e_commerce_flow_with_assertions() {
     let scenario = Scenario {
         name: "E-Commerce Flow with Assertions".to_string(),
@@ -666,7 +654,7 @@ async fn test_realistic_e_commerce_flow_with_assertions() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(ECOM_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
