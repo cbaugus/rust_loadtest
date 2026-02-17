@@ -54,7 +54,8 @@ scenarios:
           path: "/auth/login"
           body: '{"username": "testuser@example.com", "password": "securePassword123"}'
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
           - jsonPath:
               path: "$.token"
               expected: "*"
@@ -72,7 +73,8 @@ scenarios:
           headers:
             Authorization: "Bearer ${jwtToken}"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
           - jsonPath:
               path: "$.id"
               expected: "${userId}"
@@ -85,7 +87,8 @@ scenarios:
           headers:
             Authorization: "Bearer ${jwtToken}"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "2s"
 
       - name: "Create Resource"
@@ -96,7 +99,8 @@ scenarios:
             Authorization: "Bearer ${jwtToken}"
           body: '{"name": "test-resource", "description": "Created by load test"}'
         assertions:
-          - statusCode: 201
+          - type: statusCode
+            expected: 201
         extract:
           - name: "resourceId"
             jsonPath: "$.id"
@@ -110,7 +114,8 @@ scenarios:
             Authorization: "Bearer ${jwtToken}"
           body: '{"name": "updated-resource"}'
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
 
   # Scenario 2: API Key Authentication (30% of traffic)
   - name: "API Key Authenticated Requests"
@@ -122,7 +127,8 @@ scenarios:
           path: "/public/data"
           # API key automatically added from customHeaders in config
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "2s"
 
       - name: "Get Specific Item"
@@ -130,7 +136,8 @@ scenarios:
           method: "GET"
           path: "/public/data/123"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         extract:
           - name: "itemId"
             jsonPath: "$.id"
@@ -146,7 +153,8 @@ scenarios:
           path: "/oauth/token"
           body: '{"grant_type": "client_credentials", "client_id": "test-client", "client_secret": "test-secret"}'
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         extract:
           - name: "accessToken"
             jsonPath: "$.access_token"
@@ -161,7 +169,8 @@ scenarios:
           headers:
             Authorization: "Bearer ${accessToken}"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "3s"
 
       - name: "Refresh Token"
@@ -170,7 +179,8 @@ scenarios:
           path: "/oauth/token"
           body: '{"grant_type": "refresh_token", "refresh_token": "${refreshToken}"}'
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         extract:
           - name: "newAccessToken"
             jsonPath: "$.access_token"
@@ -183,4 +193,5 @@ scenarios:
           headers:
             Authorization: "Bearer ${newAccessToken}"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200

@@ -64,15 +64,18 @@ scenarios:
           method: "GET"
           path: "/api/resources"
         assertions:
-          - statusCode: 200
-          - responseTime: "2s"
+          - type: statusCode
+            expected: 200
+          - type: responseTime
+            max: "2s"
 
       - name: "Get Resource Details"
         request:
           method: "GET"
           path: "/api/resources/123"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         extract:
           - name: "resourceId"
             jsonPath: "$.id"
@@ -87,7 +90,8 @@ scenarios:
           path: "/api/resources"
           body: '{"name": "test-resource", "type": "stress-test"}'
         assertions:
-          - statusCode: 201
+          - type: statusCode
+            expected: 201
         extract:
           - name: "newResourceId"
             jsonPath: "$.id"
@@ -98,7 +102,8 @@ scenarios:
           path: "/api/resources/${newResourceId}"
           body: '{"name": "updated-resource"}'
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
 
   # Delete operations (10% of traffic)
   - name: "Delete Operations"
@@ -118,4 +123,5 @@ scenarios:
           method: "DELETE"
           path: "/api/resources/${tempId}"
         assertions:
-          - statusCode: 204
+          - type: statusCode
+            expected: 204

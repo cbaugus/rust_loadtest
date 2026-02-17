@@ -36,7 +36,8 @@ scenarios:
           method: "GET"
           path: "/status/200"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "1s"
 
   - name: "HTTPBin GET Request"
@@ -47,7 +48,8 @@ scenarios:
           method: "GET"
           path: "/get"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         extract:
           - name: "userAgent"
             jsonPath: "$.headers.User-Agent"
@@ -62,7 +64,8 @@ scenarios:
           path: "/post"
           body: '{"test": "data", "timestamp": "2024-01-01"}'
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "1s"
 
   - name: "HTTPBin Delay Test"
@@ -73,4 +76,5 @@ scenarios:
           method: "GET"
           path: "/delay/1"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200

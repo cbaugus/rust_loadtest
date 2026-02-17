@@ -58,7 +58,8 @@ scenarios:
           method: "GET"
           path: "/api/popular/resource"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
           - responseTime: "3s"  # Allow more time during spike
         thinkTime:
           min: "100ms"
@@ -69,7 +70,8 @@ scenarios:
           method: "GET"
           path: "/api/related?id=123"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
 
   # Write operations during spike (15%)
   - name: "Spike Write Operations"
@@ -82,7 +84,8 @@ scenarios:
           body: '{"type": "user_action", "timestamp": "2024-01-01T00:00:00Z"}'
         assertions:
           # Accept 429 (rate limited) or 503 (service unavailable) during spike
-          - statusCode: 201
+          - type: statusCode
+            expected: 201
           # Note: In real tests, you'd track these error rates
         thinkTime:
           min: "50ms"
@@ -97,7 +100,8 @@ scenarios:
           method: "GET"
           path: "/health"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "1s"
 
       - name: "Check Database Health"
@@ -105,7 +109,8 @@ scenarios:
           method: "GET"
           path: "/health/database"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
 
 # Spike Test Execution Plan:
 #

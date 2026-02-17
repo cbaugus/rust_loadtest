@@ -47,7 +47,8 @@ scenarios:
           method: "GET"
           path: "/"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "2s"
 
       - name: "Category Page"
@@ -55,7 +56,8 @@ scenarios:
           method: "GET"
           path: "/products/electronics"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "3s"
 
       - name: "Product Details"
@@ -63,8 +65,10 @@ scenarios:
           method: "GET"
           path: "/products/laptop-123"
         assertions:
-          - statusCode: 200
-          - bodyContains: "Add to Cart"
+          - type: statusCode
+            expected: 200
+          - type: bodyContains
+            text: "Add to Cart"
         thinkTime: "5s"
 
   # Scenario 2: Browse and add to cart (25% of users)
@@ -98,7 +102,8 @@ scenarios:
           path: "/cart/add"
           body: '{"productId": "${productId}", "quantity": 1}'
         assertions:
-          - statusCode: 201
+          - type: statusCode
+            expected: 201
           - jsonPath:
               path: "$.success"
               expected: "true"
@@ -109,7 +114,8 @@ scenarios:
           method: "GET"
           path: "/cart"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
 
   # Scenario 3: Complete purchase (12% of users)
   - name: "Complete Purchase"
@@ -132,7 +138,8 @@ scenarios:
           path: "/cart/add"
           body: '{"productId": "${productId}", "quantity": 1}'
         assertions:
-          - statusCode: 201
+          - type: statusCode
+            expected: 201
         thinkTime: "3s"
 
       - name: "View Cart"
@@ -147,7 +154,8 @@ scenarios:
           path: "/checkout"
           body: '{"shippingMethod": "standard", "paymentMethod": "credit_card"}'
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "5s"
 
       - name: "Complete Order"
@@ -156,7 +164,8 @@ scenarios:
           path: "/checkout/complete"
           body: '{"confirmPayment": true}'
         assertions:
-          - statusCode: 201
+          - type: statusCode
+            expected: 201
           - jsonPath:
               path: "$.orderId"
               expected: "*"
@@ -170,7 +179,8 @@ scenarios:
           method: "GET"
           path: "/"
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime:
           min: "1s"
           max: "3s"

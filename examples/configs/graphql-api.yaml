@@ -53,7 +53,8 @@ scenarios:
               "query": "query { users(limit: 10) { id name email } }"
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
           - jsonPath:
               path: "$.data.users"
               expected: "*"
@@ -71,7 +72,8 @@ scenarios:
               "query": "query { user(id: \"${userId}\") { id name email posts { id title } } }"
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
           - jsonPath:
               path: "$.data.user.id"
               expected: "${userId}"
@@ -90,7 +92,8 @@ scenarios:
               "query": "query { posts(limit: 5) { id title author { id name } comments { id text author { name } } likes } }"
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         extract:
           - name: "postId"
             jsonPath: "$.data.posts[0].id"
@@ -106,7 +109,8 @@ scenarios:
               "variables": { "postId": "${postId}" }
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "3s"
 
   # Scenario 3: Mutations (25%)
@@ -129,7 +133,8 @@ scenarios:
               }
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
           - jsonPath:
               path: "$.data.createPost.id"
               expected: "*"
@@ -153,7 +158,8 @@ scenarios:
               }
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "2s"
 
       - name: "Add Comment"
@@ -169,7 +175,8 @@ scenarios:
               }
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "3s"
 
       - name: "Delete Post"
@@ -184,7 +191,8 @@ scenarios:
               }
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
           - jsonPath:
               path: "$.data.deletePost.success"
               expected: "true"
@@ -205,7 +213,8 @@ scenarios:
               }
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200
         thinkTime: "2s"
 
       - name: "Filter Posts by Tag"
@@ -217,4 +226,5 @@ scenarios:
               "query": "query { posts(filter: { tags: [\"technology\"] }) { id title tags } }"
             }
         assertions:
-          - statusCode: 200
+          - type: statusCode
+            expected: 200

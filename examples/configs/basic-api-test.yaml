@@ -51,5 +51,7 @@ scenarios:
           method: "GET"
           path: "/health"
         assertions:
-          - statusCode: 200
-          - responseTime: "1s"
+          - type: statusCode
+            expected: 200
+          - type: responseTime
+            max: "1s"
