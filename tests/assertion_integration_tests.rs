@@ -354,7 +354,9 @@ async fn test_body_matches_regex_assertion() {
                 headers: HashMap::new(),
             },
             extractions: vec![],
-            assertions: vec![Assertion::BodyMatches(r#""slideshow"\s*:\s*\{"#.to_string())],
+            assertions: vec![Assertion::BodyMatches(
+                r#""slideshow"\s*:\s*\{"#.to_string(),
+            )],
             think_time: None,
         }],
     };
