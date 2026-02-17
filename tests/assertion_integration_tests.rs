@@ -2,6 +2,10 @@
 //!
 //! These tests validate that assertions work correctly against a live API,
 //! including proper failure detection, metrics tracking, and mixed scenarios.
+//!
+//! **NOTE**: These tests require access to the live API at ecom.edge.baugus-lab.com
+//! They are marked with #[ignore] to skip in CI. Run locally with:
+//! `cargo test --test assertion_integration_tests -- --ignored`
 
 use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{Assertion, RequestConfig, Scenario, ScenarioContext, Step};
@@ -19,6 +23,8 @@ fn create_test_client() -> reqwest::Client {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_status_code_assertion_pass() {
     let scenario = Scenario {
         name: "Status Code Assertion - Pass".to_string(),
@@ -53,6 +59,8 @@ async fn test_status_code_assertion_pass() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_status_code_assertion_fail() {
     let scenario = Scenario {
         name: "Status Code Assertion - Fail".to_string(),
@@ -88,6 +96,8 @@ async fn test_status_code_assertion_fail() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_response_time_assertion_pass() {
     let scenario = Scenario {
         name: "Response Time Assertion - Pass".to_string(),
@@ -158,6 +168,8 @@ async fn test_response_time_assertion_fail() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_json_path_assertion_existence() {
     let scenario = Scenario {
         name: "JSONPath Existence".to_string(),
@@ -193,6 +205,8 @@ async fn test_json_path_assertion_existence() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_json_path_assertion_value_match() {
     let scenario = Scenario {
         name: "JSONPath Value Match".to_string(),
@@ -266,6 +280,8 @@ async fn test_json_path_assertion_value_mismatch() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_body_contains_assertion_pass() {
     let scenario = Scenario {
         name: "Body Contains - Pass".to_string(),
@@ -330,6 +346,8 @@ async fn test_body_contains_assertion_fail() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_body_matches_regex_assertion() {
     let scenario = Scenario {
         name: "Body Matches Regex".to_string(),
@@ -362,6 +380,8 @@ async fn test_body_matches_regex_assertion() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_header_exists_assertion_pass() {
     let scenario = Scenario {
         name: "Header Exists - Pass".to_string(),
@@ -426,6 +446,8 @@ async fn test_header_exists_assertion_fail() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_multiple_assertions_all_pass() {
     let scenario = Scenario {
         name: "Multiple Assertions - All Pass".to_string(),
@@ -467,6 +489,8 @@ async fn test_multiple_assertions_all_pass() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_multiple_assertions_mixed_results() {
     let scenario = Scenario {
         name: "Multiple Assertions - Mixed".to_string(),
@@ -507,6 +531,8 @@ async fn test_multiple_assertions_mixed_results() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_multi_step_assertion_stops_on_failure() {
     let scenario = Scenario {
         name: "Multi-Step with Assertion Failure".to_string(),
@@ -577,6 +603,8 @@ async fn test_multi_step_assertion_stops_on_failure() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live API access
+
 async fn test_realistic_e_commerce_flow_with_assertions() {
     let scenario = Scenario {
         name: "E-Commerce Flow with Assertions".to_string(),
