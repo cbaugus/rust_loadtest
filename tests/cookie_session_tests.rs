@@ -10,6 +10,7 @@ use rust_loadtest::scenario::{
 use std::collections::HashMap;
 use std::time::Duration;
 
+// E-commerce test API - not accessible in CI
 const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
 
 /// Create a cookie-enabled HTTP client for testing
@@ -22,6 +23,7 @@ fn create_cookie_client() -> reqwest::Client {
 }
 
 #[tokio::test]
+#[ignore] // Requires ecom.edge.baugus-lab.com
 async fn test_cookies_persist_across_steps() {
     // Test that cookies set in one step are sent in subsequent steps
     let scenario = Scenario {
@@ -96,6 +98,7 @@ async fn test_cookies_persist_across_steps() {
 }
 
 #[tokio::test]
+#[ignore] // Requires ecom.edge.baugus-lab.com
 async fn test_auth_flow_with_token_and_cookies() {
     // Test a realistic auth flow that combines token extraction and cookies
     let scenario = Scenario {
@@ -190,6 +193,7 @@ async fn test_auth_flow_with_token_and_cookies() {
 }
 
 #[tokio::test]
+#[ignore] // Requires ecom.edge.baugus-lab.com
 async fn test_cookie_isolation_between_clients() {
     // Test that different client instances have isolated cookies
     let scenario = Scenario {
@@ -246,6 +250,7 @@ async fn test_cookie_isolation_between_clients() {
 }
 
 #[tokio::test]
+#[ignore] // Requires ecom.edge.baugus-lab.com
 async fn test_shopping_flow_with_session() {
     // Realistic e-commerce flow using session cookies
     let scenario = Scenario {
@@ -360,6 +365,7 @@ async fn test_shopping_flow_with_session() {
 }
 
 #[tokio::test]
+#[ignore] // Requires ecom.edge.baugus-lab.com
 async fn test_client_without_cookies_fails_session() {
     // Demonstrate that without cookies, session-based auth fails
     let scenario = Scenario {
