@@ -60,7 +60,8 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - responseTime: "3s"  # Allow more time during spike
+          - type: responseTime
+            max: "3s"  # Allow more time during spike
         thinkTime:
           min: "100ms"
           max: "500ms"  # Shorter think time = more aggressive spike

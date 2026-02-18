@@ -53,7 +53,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "userAgent"
-            path: "$.headers.User-Agent"
+            jsonPath: "$.headers.User-Agent"
         thinkTime: "1s"
 
   - name: "HTTPBin POST Request"

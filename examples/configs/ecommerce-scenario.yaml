@@ -88,7 +88,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "productId"
-            path: "$.products[0].id"
+            jsonPath: "$.products[0].id"
         thinkTime: "3s"
 
       - name: "Product Details"
@@ -106,7 +106,7 @@ scenarios:
           - type: statusCode
             expected: 201
           - type: jsonPath
-            path: "$.success"
+            jsonPath: "$.success"
             expected: "true"
         thinkTime: "2s"
 
@@ -129,10 +129,10 @@ scenarios:
         extract:
           - type: jsonPath
             name: "productId"
-            path: "$.products[0].id"
+            jsonPath: "$.products[0].id"
           - type: jsonPath
             name: "price"
-            path: "$.products[0].price"
+            jsonPath: "$.products[0].price"
         thinkTime: "2s"
 
       - name: "Add to Cart"
@@ -170,7 +170,7 @@ scenarios:
           - type: statusCode
             expected: 201
           - type: jsonPath
-            path: "$.orderId"
+            jsonPath: "$.orderId"
             expected: "*"
 
   # Scenario 4: Quick browse (3% of users)

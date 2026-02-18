@@ -67,7 +67,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "authToken"
-            path: "$.token"
+            jsonPath: "$.token"
         thinkTime: "2s"
 
       - name: "Get User Profile"
@@ -80,7 +80,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            path: "$.email"
+            jsonPath: "$.email"
             expected: "${email}"
         thinkTime: "3s"
 
@@ -113,7 +113,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            path: "$.name"
+            jsonPath: "$.name"
             expected: "${product_name}"
         thinkTime: "3s"
 

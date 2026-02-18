@@ -79,7 +79,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "resourceId"
-            path: "$.id"
+            jsonPath: "$.id"
 
   # Write operations stress (20% of traffic)
   - name: "Write Operations"
@@ -96,7 +96,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "newResourceId"
-            path: "$.id"
+            jsonPath: "$.id"
 
       - name: "Update Resource"
         request:
@@ -119,7 +119,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "tempId"
-            path: "$.id"
+            jsonPath: "$.id"
 
       - name: "Delete Resource"
         request:

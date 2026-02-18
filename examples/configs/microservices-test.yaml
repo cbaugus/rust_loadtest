@@ -59,10 +59,10 @@ scenarios:
         extract:
           - type: jsonPath
             name: "userId"
-            path: "$.userId"
+            jsonPath: "$.userId"
           - type: jsonPath
             name: "token"
-            path: "$.token"
+            jsonPath: "$.token"
         thinkTime: "2s"
 
       - name: "Get User Profile"
@@ -101,7 +101,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "productId"
-            path: "$.products[0].id"
+            jsonPath: "$.products[0].id"
         thinkTime: "3s"
 
       - name: "Get Product Details"
@@ -116,10 +116,10 @@ scenarios:
         extract:
           - type: jsonPath
             name: "productName"
-            path: "$.name"
+            jsonPath: "$.name"
           - type: jsonPath
             name: "productPrice"
-            path: "$.price"
+            jsonPath: "$.price"
         thinkTime: "4s"
 
       - name: "Check Product Reviews"
@@ -146,7 +146,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "orderId"
-            path: "$.orderId"
+            jsonPath: "$.orderId"
         thinkTime: "3s"
 
       - name: "Get Order Status"
@@ -157,7 +157,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            path: "$.status"
+            jsonPath: "$.status"
             expected: "*"
         thinkTime: "2s"
 
@@ -184,7 +184,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "stockLevel"
-            path: "$.quantity"
+            jsonPath: "$.quantity"
         thinkTime: "2s"
 
       - name: "Reserve Inventory"
@@ -198,7 +198,7 @@ scenarios:
         extract:
           - type: jsonPath
             name: "reservationId"
-            path: "$.reservationId"
+            jsonPath: "$.reservationId"
         thinkTime: "1s"
 
       - name: "Confirm Reservation"
