@@ -65,8 +65,9 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "authToken"
-            jsonPath: "$.token"
+          - type: jsonPath
+            name: "authToken"
+            path: "$.token"
         thinkTime: "2s"
 
       - name: "Get User Profile"
@@ -78,9 +79,9 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - jsonPath:
-              path: "$.email"
-              expected: "${email}"
+          - type: jsonPath
+            path: "$.email"
+            expected: "${email}"
         thinkTime: "3s"
 
   # Scenario using JSON data file
@@ -111,9 +112,9 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - jsonPath:
-              path: "$.name"
-              expected: "${product_name}"
+          - type: jsonPath
+            path: "$.name"
+            expected: "${product_name}"
         thinkTime: "3s"
 
       - name: "Check Inventory"

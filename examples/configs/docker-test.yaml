@@ -51,8 +51,9 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "userAgent"
-            jsonPath: "$.headers.User-Agent"
+          - type: jsonPath
+            name: "userAgent"
+            path: "$.headers.User-Agent"
         thinkTime: "1s"
 
   - name: "HTTPBin POST Request"

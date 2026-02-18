@@ -55,12 +55,13 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - jsonPath:
-              path: "$.data.users"
-              expected: "*"
+          - type: jsonPath
+            path: "$.data.users"
+            expected: "*"
         extract:
-          - name: "userId"
-            jsonPath: "$.data.users[0].id"
+          - type: jsonPath
+            name: "userId"
+            path: "$.data.users[0].id"
         thinkTime: "2s"
 
       - name: "Get User Details"
@@ -74,9 +75,9 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - jsonPath:
-              path: "$.data.user.id"
-              expected: "${userId}"
+          - type: jsonPath
+            path: "$.data.user.id"
+            expected: "${userId}"
         thinkTime: "3s"
 
   # Scenario 2: Complex Nested Queries (25%)
@@ -95,8 +96,9 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "postId"
-            jsonPath: "$.data.posts[0].id"
+          - type: jsonPath
+            name: "postId"
+            path: "$.data.posts[0].id"
         thinkTime: "2s"
 
       - name: "Get Post Details"
@@ -135,12 +137,13 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - jsonPath:
-              path: "$.data.createPost.id"
-              expected: "*"
+          - type: jsonPath
+            path: "$.data.createPost.id"
+            expected: "*"
         extract:
-          - name: "newPostId"
-            jsonPath: "$.data.createPost.id"
+          - type: jsonPath
+            name: "newPostId"
+            path: "$.data.createPost.id"
         thinkTime: "2s"
 
       - name: "Update Post"
@@ -193,9 +196,9 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - jsonPath:
-              path: "$.data.deletePost.success"
-              expected: "true"
+          - type: jsonPath
+            path: "$.data.deletePost.success"
+            expected: "true"
 
   # Scenario 4: Search and Filter (10%)
   - name: "GraphQL Search and Filter"

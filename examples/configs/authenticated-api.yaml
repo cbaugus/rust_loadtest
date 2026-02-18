@@ -56,14 +56,16 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - jsonPath:
-              path: "$.token"
-              expected: "*"
+          - type: jsonPath
+            path: "$.token"
+            expected: "*"
         extract:
-          - name: "jwtToken"
-            jsonPath: "$.token"
-          - name: "userId"
-            jsonPath: "$.user.id"
+          - type: jsonPath
+            name: "jwtToken"
+            path: "$.token"
+          - type: jsonPath
+            name: "userId"
+            path: "$.user.id"
         thinkTime: "1s"
 
       - name: "Get User Data"
@@ -75,9 +77,9 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - jsonPath:
-              path: "$.id"
-              expected: "${userId}"
+          - type: jsonPath
+            path: "$.id"
+            expected: "${userId}"
         thinkTime: "2s"
 
       - name: "List Resources"
@@ -102,8 +104,9 @@ scenarios:
           - type: statusCode
             expected: 201
         extract:
-          - name: "resourceId"
-            jsonPath: "$.id"
+          - type: jsonPath
+            name: "resourceId"
+            path: "$.id"
         thinkTime: "3s"
 
       - name: "Update Resource"
@@ -139,8 +142,9 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "itemId"
-            jsonPath: "$.id"
+          - type: jsonPath
+            name: "itemId"
+            path: "$.id"
         thinkTime: "2s"
 
   # Scenario 3: OAuth 2.0 Token Refresh (10% of traffic)
@@ -156,10 +160,12 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "accessToken"
-            jsonPath: "$.access_token"
-          - name: "refreshToken"
-            jsonPath: "$.refresh_token"
+          - type: jsonPath
+            name: "accessToken"
+            path: "$.access_token"
+          - type: jsonPath
+            name: "refreshToken"
+            path: "$.refresh_token"
         thinkTime: "1s"
 
       - name: "Use Access Token"
@@ -182,8 +188,9 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "newAccessToken"
-            jsonPath: "$.access_token"
+          - type: jsonPath
+            name: "newAccessToken"
+            path: "$.access_token"
         thinkTime: "2s"
 
       - name: "Use Refreshed Token"

@@ -86,8 +86,9 @@ scenarios:
           method: "GET"
           path: "/search?q=laptop"
         extract:
-          - name: "productId"
-            jsonPath: "$.products[0].id"
+          - type: jsonPath
+            name: "productId"
+            path: "$.products[0].id"
         thinkTime: "3s"
 
       - name: "Product Details"
@@ -104,9 +105,9 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 201
-          - jsonPath:
-              path: "$.success"
-              expected: "true"
+          - type: jsonPath
+            path: "$.success"
+            expected: "true"
         thinkTime: "2s"
 
       - name: "View Cart"
@@ -126,10 +127,12 @@ scenarios:
           method: "GET"
           path: "/search?q=laptop"
         extract:
-          - name: "productId"
-            jsonPath: "$.products[0].id"
-          - name: "price"
-            jsonPath: "$.products[0].price"
+          - type: jsonPath
+            name: "productId"
+            path: "$.products[0].id"
+          - type: jsonPath
+            name: "price"
+            path: "$.products[0].price"
         thinkTime: "2s"
 
       - name: "Add to Cart"
@@ -166,9 +169,9 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 201
-          - jsonPath:
-              path: "$.orderId"
-              expected: "*"
+          - type: jsonPath
+            path: "$.orderId"
+            expected: "*"
 
   # Scenario 4: Quick browse (3% of users)
   - name: "Quick Browse"

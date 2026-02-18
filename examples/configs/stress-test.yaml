@@ -77,8 +77,9 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "resourceId"
-            jsonPath: "$.id"
+          - type: jsonPath
+            name: "resourceId"
+            path: "$.id"
 
   # Write operations stress (20% of traffic)
   - name: "Write Operations"
@@ -93,8 +94,9 @@ scenarios:
           - type: statusCode
             expected: 201
         extract:
-          - name: "newResourceId"
-            jsonPath: "$.id"
+          - type: jsonPath
+            name: "newResourceId"
+            path: "$.id"
 
       - name: "Update Resource"
         request:
@@ -115,8 +117,9 @@ scenarios:
           path: "/api/resources"
           body: '{"name": "temp-resource", "temporary": true}'
         extract:
-          - name: "tempId"
-            jsonPath: "$.id"
+          - type: jsonPath
+            name: "tempId"
+            path: "$.id"
 
       - name: "Delete Resource"
         request:

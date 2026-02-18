@@ -57,10 +57,12 @@ scenarios:
           - type: statusCode
             expected: 201
         extract:
-          - name: "userId"
-            jsonPath: "$.userId"
-          - name: "token"
-            jsonPath: "$.token"
+          - type: jsonPath
+            name: "userId"
+            path: "$.userId"
+          - type: jsonPath
+            name: "token"
+            path: "$.token"
         thinkTime: "2s"
 
       - name: "Get User Profile"
@@ -97,8 +99,9 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "productId"
-            jsonPath: "$.products[0].id"
+          - type: jsonPath
+            name: "productId"
+            path: "$.products[0].id"
         thinkTime: "3s"
 
       - name: "Get Product Details"
@@ -111,10 +114,12 @@ scenarios:
           - type: responseTime
             max: "500ms"
         extract:
-          - name: "productName"
-            jsonPath: "$.name"
-          - name: "productPrice"
-            jsonPath: "$.price"
+          - type: jsonPath
+            name: "productName"
+            path: "$.name"
+          - type: jsonPath
+            name: "productPrice"
+            path: "$.price"
         thinkTime: "4s"
 
       - name: "Check Product Reviews"
@@ -139,8 +144,9 @@ scenarios:
           - type: statusCode
             expected: 201
         extract:
-          - name: "orderId"
-            jsonPath: "$.orderId"
+          - type: jsonPath
+            name: "orderId"
+            path: "$.orderId"
         thinkTime: "3s"
 
       - name: "Get Order Status"
@@ -150,9 +156,9 @@ scenarios:
         assertions:
           - type: statusCode
             expected: 200
-          - jsonPath:
-              path: "$.status"
-              expected: "*"
+          - type: jsonPath
+            path: "$.status"
+            expected: "*"
         thinkTime: "2s"
 
       - name: "Get Order History"
@@ -176,8 +182,9 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "stockLevel"
-            jsonPath: "$.quantity"
+          - type: jsonPath
+            name: "stockLevel"
+            path: "$.quantity"
         thinkTime: "2s"
 
       - name: "Reserve Inventory"
@@ -189,8 +196,9 @@ scenarios:
           - type: statusCode
             expected: 200
         extract:
-          - name: "reservationId"
-            jsonPath: "$.reservationId"
+          - type: jsonPath
+            name: "reservationId"
+            path: "$.reservationId"
         thinkTime: "1s"
 
       - name: "Confirm Reservation"
