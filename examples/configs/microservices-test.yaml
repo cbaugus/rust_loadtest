@@ -157,7 +157,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            jsonPath: "$.status"
+            path: "$.status"
             expected: "*"
         thinkTime: "2s"
 

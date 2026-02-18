@@ -106,7 +106,7 @@ scenarios:
           - type: statusCode
             expected: 201
           - type: jsonPath
-            jsonPath: "$.success"
+            path: "$.success"
             expected: "true"
         thinkTime: "2s"
 
@@ -170,7 +170,7 @@ scenarios:
           - type: statusCode
             expected: 201
           - type: jsonPath
-            jsonPath: "$.orderId"
+            path: "$.orderId"
             expected: "*"
 
   # Scenario 4: Quick browse (3% of users)

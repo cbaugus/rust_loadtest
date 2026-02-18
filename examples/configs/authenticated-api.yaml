@@ -57,7 +57,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            jsonPath: "$.token"
+            path: "$.token"
             expected: "*"
         extract:
           - type: jsonPath
@@ -78,7 +78,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            jsonPath: "$.id"
+            path: "$.id"
             expected: "${userId}"
         thinkTime: "2s"
 

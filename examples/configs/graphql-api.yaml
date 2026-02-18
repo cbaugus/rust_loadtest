@@ -56,7 +56,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            jsonPath: "$.data.users"
+            path: "$.data.users"
             expected: "*"
         extract:
           - type: jsonPath
@@ -76,7 +76,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            jsonPath: "$.data.user.id"
+            path: "$.data.user.id"
             expected: "${userId}"
         thinkTime: "3s"
 
@@ -138,7 +138,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            jsonPath: "$.data.createPost.id"
+            path: "$.data.createPost.id"
             expected: "*"
         extract:
           - type: jsonPath
@@ -197,7 +197,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            jsonPath: "$.data.deletePost.success"
+            path: "$.data.deletePost.success"
             expected: "true"
 
   # Scenario 4: Search and Filter (10%)

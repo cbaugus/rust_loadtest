@@ -80,7 +80,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            jsonPath: "$.email"
+            path: "$.email"
             expected: "${email}"
         thinkTime: "3s"
 
@@ -113,7 +113,7 @@ scenarios:
           - type: statusCode
             expected: 200
           - type: jsonPath
-            jsonPath: "$.name"
+            path: "$.name"
             expected: "${product_name}"
         thinkTime: "3s"
 
