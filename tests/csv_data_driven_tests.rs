@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 
-const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
+const BASE_URL: &str = "https://httpbin.org";
 
 fn create_test_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -137,7 +137,7 @@ async fn test_scenario_with_csv_data() {
             name: "Request with CSV data".to_string(),
             request: RequestConfig {
                 method: "POST".to_string(),
-                path: "/status".to_string(),
+                path: "/post".to_string(),
                 body: Some(r#"{"username": "${username}", "email": "${email}"}"#.to_string()),
                 headers: {
                     let mut h = HashMap::new();
@@ -185,7 +185,7 @@ async fn test_multiple_users_different_data() {
             name: "Login with user data".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(), // Using GET to /health as a simple test
+                path: "/get".to_string(), // Simple GET endpoint
                 body: None,
                 headers: HashMap::new(),
             },
@@ -240,7 +240,7 @@ dave,dave012,dave@company.com,manager"#;
                 name: "Health Check".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -252,7 +252,7 @@ dave,dave012,dave@company.com,manager"#;
                 name: "Check Status".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
