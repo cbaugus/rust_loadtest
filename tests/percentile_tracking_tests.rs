@@ -12,7 +12,7 @@ use rust_loadtest::scenario::{RequestConfig, Scenario, ScenarioContext, Step};
 use std::collections::HashMap;
 use std::time::Duration;
 
-const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
+const BASE_URL: &str = "https://httpbin.org";
 
 fn create_test_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -34,8 +34,17 @@ fn test_percentile_tracker_basic() {
     let stats = tracker.stats().expect("Should have stats");
 
     assert_eq!(stats.count, 10);
-    assert_eq!(stats.min, 10_000); // 10ms in microseconds
-    assert_eq!(stats.max, 100_000); // 100ms in microseconds
+    // HdrHistogram has internal precision rounding, so use approximate checks
+    assert!(
+        stats.min >= 9_900 && stats.min <= 10_100,
+        "min {}μs should be around 10000μs",
+        stats.min
+    );
+    assert!(
+        stats.max >= 99_900 && stats.max <= 100_500,
+        "max {}μs should be around 100000μs",
+        stats.max
+    );
 
     // P50 should be around 50ms
     assert!(
@@ -219,7 +228,7 @@ async fn test_scenario_percentile_tracking() {
                 name: "Health Check".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -231,7 +240,7 @@ async fn test_scenario_percentile_tracking() {
                 name: "Status Check".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
