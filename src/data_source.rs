@@ -54,7 +54,7 @@ pub type DataRow = HashMap<String, String>;
 /// ```
 ///
 /// # Example Usage
-/// ```rust
+/// ```rust,no_run
 /// use rust_loadtest::data_source::CsvDataSource;
 ///
 /// let data_source = CsvDataSource::from_file("users.csv").unwrap();

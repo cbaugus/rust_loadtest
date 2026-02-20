@@ -71,10 +71,11 @@ pub struct ScenarioResult {
 /// providing session isolation per virtual user.
 ///
 /// To enable automatic cookie handling:
-/// ```rust
+/// ```rust,no_run
 /// let client = reqwest::Client::builder()
 ///     .cookie_store(true)  // Enable automatic cookie management
-///     .build()?;
+///     .build()
+///     .unwrap();
 /// ```
 ///
 /// Cookies are automatically:

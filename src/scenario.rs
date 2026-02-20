@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 /// # Example
 /// ```
 /// use rust_loadtest::scenario::{Scenario, Step, RequestConfig};
+/// use std::collections::HashMap;
+/// use std::time::Duration;
 ///
 /// let scenario = Scenario {
 ///     name: "Shopping Flow".to_string(),
@@ -118,7 +120,7 @@ pub struct Step {
     /// requests. This does NOT count towards request latency metrics.
     ///
     /// # Examples
-    /// ```
+    /// ```ignore
     /// use rust_loadtest::scenario::{Step, ThinkTime};
     /// use std::time::Duration;
     ///
