@@ -9,8 +9,34 @@ use rust_loadtest::yaml_config::YamlConfig;
 use std::env;
 use std::time::Duration;
 
+/// Clear all env vars that could affect config parsing.
+/// Must be called at the start of every test to prevent leakage
+/// from other tests (execution order is not guaranteed).
+fn clean_env() {
+    for var in [
+        "TARGET_URL",
+        "NUM_CONCURRENT_TASKS",
+        "REQUEST_TIMEOUT",
+        "TEST_DURATION",
+        "SKIP_TLS_VERIFY",
+        "CUSTOM_HEADERS",
+        "LOAD_MODEL_TYPE",
+        "TARGET_RPS",
+        "MIN_RPS",
+        "MAX_RPS",
+        "RAMP_DURATION",
+        "DAILY_MIN_RPS",
+        "DAILY_MID_RPS",
+        "DAILY_MAX_RPS",
+        "DAILY_CYCLE_DURATION",
+    ] {
+        env::remove_var(var);
+    }
+}
+
 #[test]
 fn test_no_env_override_uses_yaml_values() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -42,6 +68,7 @@ scenarios:
 
 #[test]
 fn test_env_overrides_base_url() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -71,6 +98,7 @@ scenarios:
 
 #[test]
 fn test_env_overrides_workers() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -101,6 +129,7 @@ scenarios:
 
 #[test]
 fn test_env_overrides_timeout() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -132,6 +161,7 @@ scenarios:
 
 #[test]
 fn test_env_overrides_test_duration() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -161,6 +191,7 @@ scenarios:
 
 #[test]
 fn test_env_overrides_skip_tls_verify() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -191,6 +222,7 @@ scenarios:
 
 #[test]
 fn test_env_overrides_custom_headers() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -221,6 +253,7 @@ scenarios:
 
 #[test]
 fn test_env_overrides_rps_target() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -256,6 +289,7 @@ scenarios:
 
 #[test]
 fn test_env_overrides_ramp_params() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -303,6 +337,7 @@ scenarios:
 
 #[test]
 fn test_env_overrides_load_model_entirely() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -339,6 +374,7 @@ scenarios:
 
 #[test]
 fn test_multiple_env_overrides_together() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -390,6 +426,7 @@ scenarios:
 
 #[test]
 fn test_partial_env_overrides() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -439,6 +476,7 @@ scenarios:
 
 #[test]
 fn test_env_override_with_yaml_defaults() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -473,6 +511,7 @@ scenarios:
 
 #[test]
 fn test_env_override_precedence_chain() {
+    clean_env();
     // Test full precedence: env > yaml > default
     let yaml = r#"
 version: "1.0"
@@ -508,6 +547,7 @@ scenarios:
 
 #[test]
 fn test_invalid_env_override_falls_back_to_yaml() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -539,6 +579,7 @@ scenarios:
 
 #[test]
 fn test_empty_env_override_falls_back_to_yaml() {
+    clean_env();
     let yaml = r#"
 version: "1.0"
 config:
@@ -569,6 +610,7 @@ scenarios:
 
 #[test]
 fn test_env_override_documentation() {
+    clean_env();
     // This test documents the environment variable mapping
     let mappings = vec![
         ("TARGET_URL", "config.baseUrl"),
