@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 ///
 /// # Example
 /// ```
-/// use rust_loadtest::scenario::{Scenario, Step, RequestConfig};
+/// use rust_loadtest::scenario::{Scenario, Step, RequestConfig, ThinkTime};
 /// use std::collections::HashMap;
 /// use std::time::Duration;
 ///
@@ -29,7 +29,7 @@ use std::time::{Duration, Instant};
 ///             },
 ///             extractions: vec![],
 ///             assertions: vec![],
-///             think_time: Some(Duration::from_secs(2)),
+///             think_time: Some(ThinkTime::Fixed(Duration::from_secs(2))),
 ///         },
 ///     ],
 /// };
