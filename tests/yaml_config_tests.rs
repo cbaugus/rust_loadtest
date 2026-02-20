@@ -349,7 +349,9 @@ scenarios:
         YamlConfigError::Validation(msg) => {
             assert!(
                 msg.contains("version")
-                    && (msg.contains("too new") || msg.contains("2.0") || msg.contains("Unsupported")),
+                    && (msg.contains("too new")
+                        || msg.contains("2.0")
+                        || msg.contains("Unsupported")),
                 "Expected version validation message, got: {}",
                 msg
             );
