@@ -391,7 +391,7 @@ scenarios:
           - type: "statusCode"
             expected: 201
           - type: "responseTime"
-            max: "500ms"
+            max: "1s"
           - type: "bodyContains"
             text: "success"
           - type: "jsonPath"
