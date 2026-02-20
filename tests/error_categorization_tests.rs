@@ -9,7 +9,7 @@ use rust_loadtest::scenario::{Assertion, RequestConfig, Scenario, ScenarioContex
 use std::collections::HashMap;
 use std::time::Duration;
 
-const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
+const BASE_URL: &str = "https://httpbin.org";
 
 fn create_test_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -288,7 +288,7 @@ async fn test_mixed_error_types_in_scenario() {
                 name: "Success".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -300,7 +300,7 @@ async fn test_mixed_error_types_in_scenario() {
                 name: "404 Client Error".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/nonexistent".to_string(),
+                    path: "/status/404".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
