@@ -1,7 +1,6 @@
 //! Integration tests for multi-step scenario execution.
 //!
-//! These tests run against the live mock e-commerce API at
-//! https://ecom.edge.baugus-lab.com to validate scenario execution.
+//! These tests run against httpbin.org to validate scenario execution.
 //!
 //! Run with: cargo test --test scenario_integration_tests
 
@@ -12,7 +11,7 @@ use rust_loadtest::scenario::{
 use std::collections::HashMap;
 use std::time::Duration;
 
-const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
+const BASE_URL: &str = "https://httpbin.org";
 
 /// Create a basic HTTP client for testing
 fn create_test_client() -> reqwest::Client {
@@ -31,7 +30,7 @@ async fn test_health_check_scenario() {
             name: "Check Health".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -59,10 +58,10 @@ async fn test_product_browsing_scenario() {
         weight: 1.0,
         steps: vec![
             Step {
-                name: "List Products".to_string(),
+                name: "List Items".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products?limit=10".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -71,12 +70,10 @@ async fn test_product_browsing_scenario() {
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
-                name: "Get Product Details".to_string(),
+                name: "Get Item Details".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    // Using a known product ID for testing
-                    // In real scenarios, this would be extracted from step 1
-                    path: "/products/prod-1".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -118,7 +115,7 @@ async fn test_variable_substitution() {
             name: "Get Product with Variable".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/products/${product_id}".to_string(),
+                path: "/get?product=${product_id}".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -151,7 +148,7 @@ async fn test_multi_step_with_delays() {
                 name: "Step 1".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -163,7 +160,7 @@ async fn test_multi_step_with_delays() {
                 name: "Step 2".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -175,7 +172,7 @@ async fn test_multi_step_with_delays() {
                 name: "Step 3".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products?limit=1".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -215,31 +212,31 @@ async fn test_scenario_failure_handling() {
                 name: "Valid Request".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
-                assertions: vec![],
+                assertions: vec![Assertion::StatusCode(200)],
                 think_time: None,
             },
             Step {
                 name: "Invalid Request".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/this-endpoint-does-not-exist-404".to_string(),
+                    path: "/status/404".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
-                assertions: vec![],
+                assertions: vec![Assertion::StatusCode(200)],
                 think_time: None,
             },
             Step {
                 name: "Should Not Execute".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -284,7 +281,7 @@ async fn test_timestamp_variable() {
             name: "Request with Timestamp".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: {
                     let mut headers = HashMap::new();
@@ -316,10 +313,10 @@ async fn test_post_request_with_json_body() {
         name: "POST Request Test".to_string(),
         weight: 1.0,
         steps: vec![Step {
-            name: "Register User".to_string(),
+            name: "Post JSON Data".to_string(),
             request: RequestConfig {
                 method: "POST".to_string(),
-                path: "/auth/register".to_string(),
+                path: "/post".to_string(),
                 body: Some(
                     r#"{
                         "email": "loadtest-${timestamp}@example.com",
@@ -346,10 +343,10 @@ async fn test_post_request_with_json_body() {
 
     let result = executor.execute(&scenario, &mut context).await;
 
-    // Registration should work (201 Created or 200 OK)
+    // POST should work (200 OK from httpbin)
     assert!(
         result.steps[0].success,
-        "Registration should succeed, got status: {:?}",
+        "POST should succeed, got status: {:?}",
         result.steps[0].status_code
     );
 }
@@ -364,7 +361,7 @@ async fn test_scenario_context_isolation() {
             name: "Simple Request".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
