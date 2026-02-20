@@ -1,7 +1,7 @@
 //! Integration tests for variable extraction (#27).
 //!
 //! These tests validate JSONPath, Regex, Header, and Cookie extraction
-//! from HTTP responses against the live mock API.
+//! from HTTP responses against httpbin.org.
 
 use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{
@@ -10,7 +10,7 @@ use rust_loadtest::scenario::{
 use std::collections::HashMap;
 use std::time::Duration;
 
-const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
+const BASE_URL: &str = "https://httpbin.org";
 
 fn create_test_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -21,25 +21,26 @@ fn create_test_client() -> reqwest::Client {
 
 #[tokio::test]
 async fn test_jsonpath_extraction_from_products() {
+    // httpbin /json returns {"slideshow": {"author": "...", "title": "...", ...}}
     let scenario = Scenario {
         name: "JSONPath Extraction Test".to_string(),
         weight: 1.0,
         steps: vec![Step {
-            name: "Get Products and Extract ID".to_string(),
+            name: "Get JSON and Extract Fields".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/products?limit=1".to_string(),
+                path: "/json".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
             extractions: vec![
                 VariableExtraction {
-                    name: "product_id".to_string(),
-                    extractor: Extractor::JsonPath("$.products[0].id".to_string()),
+                    name: "author".to_string(),
+                    extractor: Extractor::JsonPath("$.slideshow.author".to_string()),
                 },
                 VariableExtraction {
-                    name: "product_name".to_string(),
-                    extractor: Extractor::JsonPath("$.products[0].name".to_string()),
+                    name: "title".to_string(),
+                    extractor: Extractor::JsonPath("$.slideshow.title".to_string()),
                 },
             ],
             assertions: vec![],
@@ -57,52 +58,51 @@ async fn test_jsonpath_extraction_from_products() {
 
     // Verify variables were extracted
     assert!(
-        context.get_variable("product_id").is_some(),
-        "Should extract product_id"
+        context.get_variable("author").is_some(),
+        "Should extract author"
     );
     assert!(
-        context.get_variable("product_name").is_some(),
-        "Should extract product_name"
+        context.get_variable("title").is_some(),
+        "Should extract title"
     );
 
     println!(
-        "Extracted product_id: {:?}",
-        context.get_variable("product_id")
+        "Extracted author: {:?}",
+        context.get_variable("author")
     );
     println!(
-        "Extracted product_name: {:?}",
-        context.get_variable("product_name")
+        "Extracted title: {:?}",
+        context.get_variable("title")
     );
 }
 
 #[tokio::test]
 async fn test_extraction_and_reuse_in_next_step() {
-    // This is the key test: extract a value and use it in a subsequent request
+    // Extract the origin IP from /get and reuse it as a query param in the next step
     let scenario = Scenario {
         name: "Extract and Reuse".to_string(),
         weight: 1.0,
         steps: vec![
             Step {
-                name: "Get Products List".to_string(),
+                name: "Get Origin IP".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products?limit=5".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![VariableExtraction {
-                    name: "first_product_id".to_string(),
-                    extractor: Extractor::JsonPath("$.products[0].id".to_string()),
+                    name: "origin_ip".to_string(),
+                    extractor: Extractor::JsonPath("$.origin".to_string()),
                 }],
                 assertions: vec![],
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
-                name: "Get Product Details Using Extracted ID".to_string(),
+                name: "Use Extracted Value".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    // Use the extracted product ID in the path
-                    path: "/products/${first_product_id}".to_string(),
+                    path: "/get?origin=${origin_ip}".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -122,11 +122,11 @@ async fn test_extraction_and_reuse_in_next_step() {
     assert!(result.success, "Both steps should succeed");
     assert_eq!(result.steps_completed, 2, "Should complete both steps");
 
-    // Verify product ID was extracted
-    let product_id = context.get_variable("first_product_id");
-    assert!(product_id.is_some(), "Should extract product ID");
+    // Verify origin IP was extracted
+    let origin_ip = context.get_variable("origin_ip");
+    assert!(origin_ip.is_some(), "Should extract origin IP");
 
-    println!("Extracted and reused product_id: {:?}", product_id);
+    println!("Extracted and reused origin_ip: {:?}", origin_ip);
 
     // Both steps should have succeeded
     assert!(result.steps[0].success, "First step should succeed");
@@ -145,7 +145,7 @@ async fn test_header_extraction() {
             name: "Get Response with Headers".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -181,25 +181,26 @@ async fn test_header_extraction() {
 
 #[tokio::test]
 async fn test_multiple_extractions_in_single_step() {
+    // httpbin /json returns {"slideshow": {"author": "...", "date": "...", "title": "...", ...}}
     let scenario = Scenario {
         name: "Multiple Extractions".to_string(),
         weight: 1.0,
         steps: vec![Step {
-            name: "Get Status with Multiple Extractions".to_string(),
+            name: "Get JSON with Multiple Extractions".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status".to_string(),
+                path: "/json".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
             extractions: vec![
                 VariableExtraction {
-                    name: "status".to_string(),
-                    extractor: Extractor::JsonPath("$.status".to_string()),
+                    name: "author".to_string(),
+                    extractor: Extractor::JsonPath("$.slideshow.author".to_string()),
                 },
                 VariableExtraction {
-                    name: "version".to_string(),
-                    extractor: Extractor::JsonPath("$.version".to_string()),
+                    name: "title".to_string(),
+                    extractor: Extractor::JsonPath("$.slideshow.title".to_string()),
                 },
                 VariableExtraction {
                     name: "content_type".to_string(),
@@ -221,12 +222,12 @@ async fn test_multiple_extractions_in_single_step() {
 
     // Verify all extractions worked
     assert!(
-        context.get_variable("status").is_some(),
-        "Should extract status"
+        context.get_variable("author").is_some(),
+        "Should extract author"
     );
     assert!(
-        context.get_variable("version").is_some(),
-        "Should extract version"
+        context.get_variable("title").is_some(),
+        "Should extract title"
     );
     assert!(
         context.get_variable("content_type").is_some(),
@@ -234,64 +235,42 @@ async fn test_multiple_extractions_in_single_step() {
     );
 
     println!("Extracted variables:");
-    println!("  status: {:?}", context.get_variable("status"));
-    println!("  version: {:?}", context.get_variable("version"));
+    println!("  author: {:?}", context.get_variable("author"));
+    println!("  title: {:?}", context.get_variable("title"));
     println!("  content_type: {:?}", context.get_variable("content_type"));
 }
 
 #[tokio::test]
 async fn test_shopping_flow_with_extraction() {
-    // Realistic e-commerce flow using variable extraction
+    // Realistic multi-step flow using variable extraction with httpbin
     let scenario = Scenario {
-        name: "Shopping Flow with Extraction".to_string(),
+        name: "Multi-Step Flow with Extraction".to_string(),
         weight: 1.0,
         steps: vec![
             Step {
-                name: "Browse Products".to_string(),
+                name: "Get JSON Data".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products?limit=3".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![VariableExtraction {
-                    name: "product_id".to_string(),
-                    extractor: Extractor::JsonPath("$.products[0].id".to_string()),
+                    name: "author".to_string(),
+                    extractor: Extractor::JsonPath("$.slideshow.author".to_string()),
                 }],
                 assertions: vec![],
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
-                name: "View Product Details".to_string(),
-                request: RequestConfig {
-                    method: "GET".to_string(),
-                    path: "/products/${product_id}".to_string(),
-                    body: None,
-                    headers: HashMap::new(),
-                },
-                extractions: vec![
-                    VariableExtraction {
-                        name: "price".to_string(),
-                        extractor: Extractor::JsonPath("$.price".to_string()),
-                    },
-                    VariableExtraction {
-                        name: "name".to_string(),
-                        extractor: Extractor::JsonPath("$.name".to_string()),
-                    },
-                ],
-                assertions: vec![],
-                think_time: Some(ThinkTime::Fixed(Duration::from_millis(1000))),
-            },
-            Step {
-                name: "Register User".to_string(),
+                name: "Post Data with Extracted Value".to_string(),
                 request: RequestConfig {
                     method: "POST".to_string(),
-                    path: "/auth/register".to_string(),
+                    path: "/post".to_string(),
                     body: Some(
                         r#"{
-                            "email": "test-${timestamp}@example.com",
-                            "password": "TestPass123!",
-                            "name": "Test User"
+                            "author": "${author}",
+                            "timestamp": "${timestamp}"
                         }"#
                         .to_string(),
                     ),
@@ -302,11 +281,26 @@ async fn test_shopping_flow_with_extraction() {
                     },
                 },
                 extractions: vec![VariableExtraction {
-                    name: "auth_token".to_string(),
-                    extractor: Extractor::JsonPath("$.token".to_string()),
+                    name: "post_url".to_string(),
+                    extractor: Extractor::JsonPath("$.url".to_string()),
                 }],
                 assertions: vec![],
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+            },
+            Step {
+                name: "Final GET".to_string(),
+                request: RequestConfig {
+                    method: "GET".to_string(),
+                    path: "/get".to_string(),
+                    body: None,
+                    headers: HashMap::new(),
+                },
+                extractions: vec![VariableExtraction {
+                    name: "final_origin".to_string(),
+                    extractor: Extractor::JsonPath("$.origin".to_string()),
+                }],
+                assertions: vec![],
+                think_time: None,
             },
         ],
     };
@@ -318,20 +312,18 @@ async fn test_shopping_flow_with_extraction() {
     let result = executor.execute(&scenario, &mut context).await;
 
     // All steps should succeed
-    assert!(result.success, "Shopping flow should succeed");
+    assert!(result.success, "Multi-step flow should succeed");
     assert_eq!(result.steps_completed, 3);
 
-    // Verify all extractions
-    assert!(context.get_variable("product_id").is_some());
-    assert!(context.get_variable("price").is_some());
-    assert!(context.get_variable("name").is_some());
-    assert!(context.get_variable("auth_token").is_some());
+    // Verify extractions
+    assert!(context.get_variable("author").is_some());
+    assert!(context.get_variable("post_url").is_some());
+    assert!(context.get_variable("final_origin").is_some());
 
-    println!("\nShopping Flow Extracted Variables:");
-    println!("  product_id: {:?}", context.get_variable("product_id"));
-    println!("  price: {:?}", context.get_variable("price"));
-    println!("  name: {:?}", context.get_variable("name"));
-    println!("  auth_token: {:?}", context.get_variable("auth_token"));
+    println!("\nMulti-Step Flow Extracted Variables:");
+    println!("  author: {:?}", context.get_variable("author"));
+    println!("  post_url: {:?}", context.get_variable("post_url"));
+    println!("  final_origin: {:?}", context.get_variable("final_origin"));
 }
 
 #[tokio::test]
@@ -345,14 +337,14 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
                 name: "Step with Mixed Extractions".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products?limit=1".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![
                     VariableExtraction {
-                        name: "product_id".to_string(),
-                        extractor: Extractor::JsonPath("$.products[0].id".to_string()),
+                        name: "author".to_string(),
+                        extractor: Extractor::JsonPath("$.slideshow.author".to_string()),
                     },
                     VariableExtraction {
                         name: "nonexistent".to_string(),
@@ -366,7 +358,7 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
                 name: "Next Step".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -390,8 +382,8 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
     );
     assert_eq!(result.steps_completed, 2);
 
-    // product_id should be extracted
-    assert!(context.get_variable("product_id").is_some());
+    // author should be extracted
+    assert!(context.get_variable("author").is_some());
 
     // nonexistent should NOT be in context (extraction failed)
     assert!(context.get_variable("nonexistent").is_none());
