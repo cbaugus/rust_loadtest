@@ -6,6 +6,7 @@
 use rust_loadtest::config::Config;
 use rust_loadtest::load_models::LoadModel;
 use rust_loadtest::yaml_config::YamlConfig;
+use serial_test::serial;
 use std::env;
 use std::time::Duration;
 
@@ -35,6 +36,7 @@ fn clean_env() {
 }
 
 #[test]
+#[serial]
 fn test_no_env_override_uses_yaml_values() {
     clean_env();
     let yaml = r#"
@@ -67,6 +69,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_overrides_base_url() {
     clean_env();
     let yaml = r#"
@@ -97,6 +100,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_overrides_workers() {
     clean_env();
     let yaml = r#"
@@ -128,6 +132,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_overrides_timeout() {
     clean_env();
     let yaml = r#"
@@ -160,6 +165,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_overrides_test_duration() {
     clean_env();
     let yaml = r#"
@@ -190,6 +196,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_overrides_skip_tls_verify() {
     clean_env();
     let yaml = r#"
@@ -221,6 +228,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_overrides_custom_headers() {
     clean_env();
     let yaml = r#"
@@ -252,6 +260,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_overrides_rps_target() {
     clean_env();
     let yaml = r#"
@@ -288,6 +297,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_overrides_ramp_params() {
     clean_env();
     let yaml = r#"
@@ -336,6 +346,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_overrides_load_model_entirely() {
     clean_env();
     let yaml = r#"
@@ -373,6 +384,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_multiple_env_overrides_together() {
     clean_env();
     let yaml = r#"
@@ -425,6 +437,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_partial_env_overrides() {
     clean_env();
     let yaml = r#"
@@ -475,6 +488,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_override_with_yaml_defaults() {
     clean_env();
     let yaml = r#"
@@ -510,6 +524,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_override_precedence_chain() {
     clean_env();
     // Test full precedence: env > yaml > default
@@ -546,6 +561,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_invalid_env_override_falls_back_to_yaml() {
     clean_env();
     let yaml = r#"
@@ -578,6 +594,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_empty_env_override_falls_back_to_yaml() {
     clean_env();
     let yaml = r#"
@@ -609,6 +626,7 @@ scenarios:
 }
 
 #[test]
+#[serial]
 fn test_env_override_documentation() {
     clean_env();
     // This test documents the environment variable mapping

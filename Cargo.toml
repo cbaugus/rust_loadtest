@@ -34,3 +34,4 @@ procfs = "0.16" # For Linux process memory stats (Issue #69)
 [dev-dependencies]
 wiremock = "0.5"
 tempfile = "3.8"
+serial_test = "3"
