@@ -66,14 +66,8 @@ async fn test_jsonpath_extraction_from_products() {
         "Should extract title"
     );
 
-    println!(
-        "Extracted author: {:?}",
-        context.get_variable("author")
-    );
-    println!(
-        "Extracted title: {:?}",
-        context.get_variable("title")
-    );
+    println!("Extracted author: {:?}", context.get_variable("author"));
+    println!("Extracted title: {:?}", context.get_variable("title"));
 }
 
 #[tokio::test]
