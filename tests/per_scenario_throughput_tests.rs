@@ -9,7 +9,7 @@ use rust_loadtest::throughput::{format_throughput_table, ThroughputTracker};
 use std::collections::HashMap;
 use std::time::Duration;
 
-const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
+const BASE_URL: &str = "https://httpbin.org";
 
 fn create_test_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -163,7 +163,7 @@ async fn test_scenario_throughput_tracking() {
             name: "Fast Request".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -205,7 +205,7 @@ async fn test_multiple_scenarios_different_throughput() {
             name: "Health Check".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -223,7 +223,7 @@ async fn test_multiple_scenarios_different_throughput() {
                 name: "First Request".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -232,10 +232,10 @@ async fn test_multiple_scenarios_different_throughput() {
                 think_time: None,
             },
             Step {
-                name: "Second Request".to_string(),
+                name: "Delayed Request".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/delay/1".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
