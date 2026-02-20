@@ -10,7 +10,7 @@ use rust_loadtest::scenario::{RequestConfig, Scenario, ScenarioContext, Step, Th
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-const BASE_URL: &str = "https://ecom.edge.baugus-lab.com";
+const BASE_URL: &str = "https://httpbin.org";
 
 fn create_test_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -30,7 +30,7 @@ async fn test_fixed_think_time() {
                 name: "Step 1".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -42,7 +42,7 @@ async fn test_fixed_think_time() {
                 name: "Step 2".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -99,7 +99,7 @@ async fn test_random_think_time() {
                 name: "Request with Random Delay".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -114,7 +114,7 @@ async fn test_random_think_time() {
                 name: "Next Step".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -172,7 +172,7 @@ async fn test_multiple_think_times() {
                 name: "Step 1".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -184,7 +184,7 @@ async fn test_multiple_think_times() {
                 name: "Step 2".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -196,7 +196,7 @@ async fn test_multiple_think_times() {
                 name: "Step 3".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products?limit=1".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -255,7 +255,7 @@ async fn test_no_think_time() {
                 name: "Fast Step 1".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -267,7 +267,7 @@ async fn test_no_think_time() {
                 name: "Fast Step 2".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -311,7 +311,7 @@ async fn test_realistic_user_behavior() {
                 name: "Land on homepage".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -326,7 +326,7 @@ async fn test_realistic_user_behavior() {
                 name: "Browse products".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products?limit=10".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -341,7 +341,7 @@ async fn test_realistic_user_behavior() {
                 name: "View product details".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/products?limit=1".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
