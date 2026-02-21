@@ -58,6 +58,7 @@ async fn worker_sends_get_requests() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -96,6 +97,7 @@ async fn worker_sends_post_requests() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -130,6 +132,7 @@ async fn worker_sends_json_post_body() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -163,6 +166,7 @@ async fn worker_tracks_200_status_codes() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -200,6 +204,7 @@ async fn worker_tracks_404_status_codes() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -237,6 +242,7 @@ async fn worker_tracks_500_status_codes() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -276,6 +282,7 @@ async fn worker_records_request_duration() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -313,6 +320,7 @@ async fn concurrent_requests_returns_to_zero_after_worker_finishes() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -346,6 +354,7 @@ async fn worker_handles_connection_error_gracefully() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::builder()
@@ -387,6 +396,7 @@ async fn worker_respects_rps_rate_limit() {
         load_model: LoadModel::Rps { target_rps: 5.0 },
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let start = Instant::now();
@@ -425,6 +435,7 @@ async fn worker_stops_after_test_duration() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let start = Instant::now();
@@ -470,6 +481,7 @@ async fn worker_handles_slow_responses() {
         load_model: LoadModel::Concurrent,
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
