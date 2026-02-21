@@ -223,7 +223,9 @@ fn print_config_help() {
     eprintln!("Connection pool configuration:");
     eprintln!("  POOL_MAX_IDLE_PER_HOST  - Max idle connections per host (default: 32)");
     eprintln!("  POOL_IDLE_TIMEOUT_SECS  - Idle connection timeout in seconds (default: 30)");
-    eprintln!("  TCP_NODELAY             - Disable Nagle's algorithm for lower latency (default: true)");
+    eprintln!(
+        "  TCP_NODELAY             - Disable Nagle's algorithm for lower latency (default: true)"
+    );
     eprintln!();
     eprintln!("Logging configuration:");
     eprintln!("  RUST_LOG                - Log level: error, warn, info, debug, trace");
