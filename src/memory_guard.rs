@@ -2,6 +2,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::time::{self, Duration};
 use tracing::{error, info, warn};
 
+use crate::metrics::{
+    MEMORY_CRITICAL_THRESHOLD_EXCEEDED_TOTAL, MEMORY_WARNING_THRESHOLD_EXCEEDED_TOTAL,
+    PERCENTILE_TRACKING_ACTIVE_GAUGE,
+};
 use crate::percentiles::rotate_all_histograms;
 
 /// Global atomic flag for runtime control of percentile tracking.
@@ -214,6 +218,7 @@ pub async fn spawn_memory_guard(config: MemoryGuardConfig) {
                 status.usage_percent
             );
             state.critical_triggered = true;
+            MEMORY_CRITICAL_THRESHOLD_EXCEEDED_TOTAL.inc();
 
             // At critical level, rotate histograms again to free as much memory as possible
             if config.auto_disable_on_warning {
@@ -232,6 +237,7 @@ pub async fn spawn_memory_guard(config: MemoryGuardConfig) {
                 status.usage_percent
             );
             state.warning_triggered = true;
+            MEMORY_WARNING_THRESHOLD_EXCEEDED_TOTAL.inc();
 
             if config.auto_disable_on_warning {
                 info!("Auto-OOM protection triggered - taking defensive actions:");
@@ -240,6 +246,7 @@ pub async fn spawn_memory_guard(config: MemoryGuardConfig) {
 
                 // Disable percentile tracking globally
                 PERCENTILE_TRACKING_ACTIVE.store(false, Ordering::SeqCst);
+                PERCENTILE_TRACKING_ACTIVE_GAUGE.set(0.0);
                 state.percentiles_disabled_at = Some(std::time::Instant::now());
 
                 // Clear existing histogram data
@@ -290,6 +297,7 @@ pub fn is_percentile_tracking_active() -> bool {
 /// Should be called at startup before spawning workers.
 pub fn init_percentile_tracking_flag(enabled: bool) {
     PERCENTILE_TRACKING_ACTIVE.store(enabled, Ordering::SeqCst);
+    PERCENTILE_TRACKING_ACTIVE_GAUGE.set(if enabled { 1.0 } else { 0.0 });
 }
 
 #[cfg(test)]

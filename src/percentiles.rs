@@ -242,6 +242,7 @@ impl MultiLabelPercentileTracker {
                     max_labels = self.max_labels,
                     "Histogram label limit reached, evicting least recently used label"
                 );
+                crate::metrics::HISTOGRAM_LABELS_EVICTED_TOTAL.inc();
             }
             trackers.put(label.to_string(), PercentileTracker::new());
         }

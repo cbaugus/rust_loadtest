@@ -175,6 +175,48 @@ lazy_static::lazy_static! {
             Opts::new("histogram_memory_estimate_bytes", "Estimated memory used by histograms")
                 .namespace(METRIC_NAMESPACE.as_str())
         ).unwrap();
+
+    // === Memory Guard & Percentile Tracking Metrics (Issue #72) ===
+
+    pub static ref PERCENTILE_TRACKING_ACTIVE_GAUGE: Gauge =
+        Gauge::with_opts(
+            Opts::new(
+                "percentile_tracking_active",
+                "1 if percentile tracking is active, 0 if disabled by memory guard",
+            )
+            .namespace(METRIC_NAMESPACE.as_str()),
+        )
+        .unwrap();
+
+    pub static ref MEMORY_WARNING_THRESHOLD_EXCEEDED_TOTAL: IntCounter =
+        IntCounter::with_opts(
+            Opts::new(
+                "memory_warning_threshold_exceeded_total",
+                "Number of times the memory warning threshold has been exceeded",
+            )
+            .namespace(METRIC_NAMESPACE.as_str()),
+        )
+        .unwrap();
+
+    pub static ref MEMORY_CRITICAL_THRESHOLD_EXCEEDED_TOTAL: IntCounter =
+        IntCounter::with_opts(
+            Opts::new(
+                "memory_critical_threshold_exceeded_total",
+                "Number of times the memory critical threshold has been exceeded",
+            )
+            .namespace(METRIC_NAMESPACE.as_str()),
+        )
+        .unwrap();
+
+    pub static ref HISTOGRAM_LABELS_EVICTED_TOTAL: IntCounter =
+        IntCounter::with_opts(
+            Opts::new(
+                "histogram_labels_evicted_total",
+                "Total number of histogram labels evicted due to LRU capacity limit",
+            )
+            .namespace(METRIC_NAMESPACE.as_str()),
+        )
+        .unwrap();
 }
 
 /// Registers all metrics with the default Prometheus registry.
@@ -214,6 +256,15 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     prometheus::default_registry().register(Box::new(PROCESS_MEMORY_VIRTUAL_BYTES.clone()))?;
     prometheus::default_registry().register(Box::new(HISTOGRAM_COUNT.clone()))?;
     prometheus::default_registry().register(Box::new(HISTOGRAM_MEMORY_ESTIMATE_BYTES.clone()))?;
+
+    // Memory guard & percentile tracking metrics
+    prometheus::default_registry()
+        .register(Box::new(PERCENTILE_TRACKING_ACTIVE_GAUGE.clone()))?;
+    prometheus::default_registry()
+        .register(Box::new(MEMORY_WARNING_THRESHOLD_EXCEEDED_TOTAL.clone()))?;
+    prometheus::default_registry()
+        .register(Box::new(MEMORY_CRITICAL_THRESHOLD_EXCEEDED_TOTAL.clone()))?;
+    prometheus::default_registry().register(Box::new(HISTOGRAM_LABELS_EVICTED_TOTAL.clone()))?;
 
     Ok(())
 }
