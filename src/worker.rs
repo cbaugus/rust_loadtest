@@ -341,10 +341,8 @@ pub async fn run_scenario_worker(
             let cycle_ms =
                 (config.num_concurrent_tasks as f64 * 1000.0 / current_target_sps).round() as u64;
             next_fire += Duration::from_millis(cycle_ms);
-        } else {
-            if current_target_sps == 0.0 {
-                next_fire = now + Duration::from_secs(3600);
-            }
+        } else if current_target_sps == 0.0 {
+            next_fire = now + Duration::from_secs(3600);
         }
 
         // Create new cookie-enabled client for this virtual user
