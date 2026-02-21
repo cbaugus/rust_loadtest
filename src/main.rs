@@ -44,7 +44,7 @@ fn init_tracing() {
 }
 
 /// Prints percentile latency statistics.
-fn print_percentile_report(enabled: bool) {
+fn print_percentile_report(enabled: bool, sampling_rate: u8) {
     info!("\n{}", "=".repeat(120));
     info!("PERCENTILE LATENCY REPORT (Issue #33)");
     info!("{}", "=".repeat(120));
@@ -57,6 +57,13 @@ fn print_percentile_report(enabled: bool) {
         info!("END OF PERCENTILE REPORT");
         info!("{}\n", "=".repeat(120));
         return;
+    }
+
+    if sampling_rate < 100 {
+        info!(
+            "\n📊 Percentile sampling active: {}% of requests recorded (PERCENTILE_SAMPLING_RATE={})",
+            sampling_rate, sampling_rate
+        );
     }
 
     // Single request percentiles
@@ -338,6 +345,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             load_model: config.load_model.clone(),
             num_concurrent_tasks: config.num_concurrent_tasks,
             percentile_tracking_enabled: config.percentile_tracking_enabled,
+            percentile_sampling_rate: config.percentile_sampling_rate,
         };
 
         let client_clone = client.clone();
@@ -361,7 +369,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Collecting final metrics");
 
     // Print percentile latency statistics (Issue #33, #66)
-    print_percentile_report(config.percentile_tracking_enabled);
+    print_percentile_report(config.percentile_tracking_enabled, config.percentile_sampling_rate);
 
     // Print per-scenario throughput statistics (Issue #35)
     print_throughput_report();

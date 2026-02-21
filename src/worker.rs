@@ -1,5 +1,23 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use tokio::time::{self, Duration, Instant};
 use tracing::{debug, error, info};
+
+/// Atomic counter for deterministic percentile sampling (Issue #70).
+static SAMPLE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Returns true if this request should be recorded in percentile histograms.
+///
+/// Uses a deterministic counter so every Nth request is sampled (not random),
+/// giving even distribution across all workers without coordination overhead.
+/// `rate` is 1-100: at 100 every request is recorded, at 10 every 10th is.
+fn should_sample(rate: u8) -> bool {
+    if rate >= 100 {
+        return true;
+    }
+    let counter = SAMPLE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    counter % 100 < rate as u64
+}
 
 use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::errors::ErrorCategory;
@@ -27,6 +45,7 @@ pub struct WorkerConfig {
     pub load_model: LoadModel,
     pub num_concurrent_tasks: usize,
     pub percentile_tracking_enabled: bool,
+    pub percentile_sampling_rate: u8,
 }
 
 /// Runs a single worker task that sends HTTP requests according to the load model.
@@ -122,9 +141,12 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         REQUEST_DURATION_SECONDS.observe(request_start_time.elapsed().as_secs_f64());
         CONCURRENT_REQUESTS.dec();
 
-        // Record latency in percentile tracker (Issue #33, #66, #72)
+        // Record latency in percentile tracker (Issue #33, #66, #70, #72)
         // Check both config flag AND runtime flag (can be disabled by memory guard)
-        if config.percentile_tracking_enabled && is_percentile_tracking_active() {
+        if config.percentile_tracking_enabled
+            && is_percentile_tracking_active()
+            && should_sample(config.percentile_sampling_rate)
+        {
             GLOBAL_REQUEST_PERCENTILES.record_ms(actual_latency_ms);
         }
 
@@ -194,6 +216,7 @@ pub struct ScenarioWorkerConfig {
     pub load_model: LoadModel,
     pub num_concurrent_tasks: usize,
     pub percentile_tracking_enabled: bool,
+    pub percentile_sampling_rate: u8,
 }
 
 /// Runs a scenario-based worker task that executes multi-step scenarios according to the load model.
@@ -270,12 +293,15 @@ pub async fn run_scenario_worker(
             "Scenario execution completed"
         );
 
-        // Record scenario latency in percentile tracker (Issue #33, #66, #72)
+        // Record scenario latency in percentile tracker (Issue #33, #66, #70, #72)
         // Check both config flag AND runtime flag (can be disabled by memory guard)
-        if config.percentile_tracking_enabled && is_percentile_tracking_active() {
+        if config.percentile_tracking_enabled
+            && is_percentile_tracking_active()
+            && should_sample(config.percentile_sampling_rate)
+        {
             GLOBAL_SCENARIO_PERCENTILES.record(&config.scenario.name, result.total_time_ms);
 
-            // Record individual step latencies (Issue #33, #66, #72)
+            // Record individual step latencies (Issue #33, #66, #70, #72)
             for step in &result.steps {
                 let label = format!("{}:{}", config.scenario.name, step.step_name);
                 GLOBAL_STEP_PERCENTILES.record(&label, step.response_time_ms);

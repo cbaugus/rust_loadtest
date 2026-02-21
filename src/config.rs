@@ -53,8 +53,9 @@ pub struct Config {
     pub client_key_path: Option<String>,
     pub custom_headers: Option<String>,
 
-    // Memory optimization settings (Issue #66, #68, #67, #72)
+    // Memory optimization settings (Issue #66, #68, #67, #70, #72)
     pub percentile_tracking_enabled: bool,
+    pub percentile_sampling_rate: u8, // 1-100: percentage of requests to record (Issue #70)
     pub max_histogram_labels: usize,
     pub histogram_rotation_interval: Duration, // 0 = disabled
     pub memory_warning_threshold_percent: f64,
@@ -168,8 +169,9 @@ impl Config {
         let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
 
-        // Memory optimization settings (Issue #66, #68, #67, #72)
+        // Memory optimization settings (Issue #66, #68, #67, #70, #72)
         let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
+        let percentile_sampling_rate: u8 = env_parse_or("PERCENTILE_SAMPLING_RATE", 100u8)?;
         let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
 
         // Histogram rotation interval (0 = disabled)
@@ -205,6 +207,7 @@ impl Config {
             client_key_path,
             custom_headers,
             percentile_tracking_enabled,
+            percentile_sampling_rate,
             max_histogram_labels,
             histogram_rotation_interval,
             memory_warning_threshold_percent,
@@ -330,8 +333,9 @@ impl Config {
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
         let custom_headers = env::var("CUSTOM_HEADERS").ok();
 
-        // Memory optimization settings (Issue #66, #68, #67, #72)
+        // Memory optimization settings (Issue #66, #68, #67, #70, #72)
         let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
+        let percentile_sampling_rate: u8 = env_parse_or("PERCENTILE_SAMPLING_RATE", 100u8)?;
         let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
 
         // Histogram rotation interval (0 = disabled)
@@ -367,6 +371,7 @@ impl Config {
             client_key_path,
             custom_headers,
             percentile_tracking_enabled,
+            percentile_sampling_rate,
             max_histogram_labels,
             histogram_rotation_interval,
             memory_warning_threshold_percent,
@@ -537,6 +542,17 @@ impl Config {
             return Err(ConfigError::IncompleteMtls);
         }
 
+        // Validate percentile sampling rate (Issue #70)
+        if self.percentile_sampling_rate == 0 || self.percentile_sampling_rate > 100 {
+            return Err(ConfigError::InvalidValue {
+                var: "PERCENTILE_SAMPLING_RATE".into(),
+                message: format!(
+                    "Must be between 1 and 100 (got {})",
+                    self.percentile_sampling_rate
+                ),
+            });
+        }
+
         Ok(())
     }
 
@@ -557,6 +573,7 @@ impl Config {
             client_key_path: None,
             custom_headers: None,
             percentile_tracking_enabled: true,
+            percentile_sampling_rate: 100,
             max_histogram_labels: 100,
             histogram_rotation_interval: Duration::from_secs(0),
             memory_warning_threshold_percent: 80.0,
@@ -606,6 +623,14 @@ impl Config {
                 max_histogram_labels = self.max_histogram_labels,
                 "Histogram label limit configured (Issue #68)"
             );
+
+            if self.percentile_sampling_rate < 100 {
+                info!(
+                    sampling_rate_percent = self.percentile_sampling_rate,
+                    "Percentile sampling enabled (Issue #70) - recording {}% of requests",
+                    self.percentile_sampling_rate
+                );
+            }
 
             if self.histogram_rotation_interval.as_secs() > 0 {
                 let interval_secs = self.histogram_rotation_interval.as_secs();

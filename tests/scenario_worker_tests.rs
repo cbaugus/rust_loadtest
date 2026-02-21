@@ -19,7 +19,7 @@ async fn test_scenario_worker_respects_duration() {
             name: "Health Check".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -31,12 +31,13 @@ async fn test_scenario_worker_respects_duration() {
 
     let config = ScenarioWorkerConfig {
         task_id: 1,
-        base_url: "https://ecom.edge.baugus-lab.com".to_string(),
+        base_url: "https://httpbin.org".to_string(),
         scenario,
         test_duration: Duration::from_secs(2),
         load_model: LoadModel::Rps { target_rps: 1.0 },
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -64,7 +65,7 @@ async fn test_scenario_worker_constant_load() {
             name: "Quick Request".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/health".to_string(),
+                path: "/get".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -78,12 +79,13 @@ async fn test_scenario_worker_constant_load() {
     // Should execute approximately 6 scenarios
     let config = ScenarioWorkerConfig {
         task_id: 1,
-        base_url: "https://ecom.edge.baugus-lab.com".to_string(),
+        base_url: "https://httpbin.org".to_string(),
         scenario,
         test_duration: Duration::from_secs(3),
         load_model: LoadModel::Rps { target_rps: 2.0 },
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
@@ -105,7 +107,7 @@ async fn test_scenario_worker_with_think_time() {
                 name: "Step 1".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/health".to_string(),
+                    path: "/get".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -117,7 +119,7 @@ async fn test_scenario_worker_with_think_time() {
                 name: "Step 2".to_string(),
                 request: RequestConfig {
                     method: "GET".to_string(),
-                    path: "/status".to_string(),
+                    path: "/json".to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -130,12 +132,13 @@ async fn test_scenario_worker_with_think_time() {
 
     let config = ScenarioWorkerConfig {
         task_id: 1,
-        base_url: "https://ecom.edge.baugus-lab.com".to_string(),
+        base_url: "https://httpbin.org".to_string(),
         scenario,
         test_duration: Duration::from_secs(2),
         load_model: LoadModel::Rps { target_rps: 0.5 }, // 1 scenario every 2 seconds
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
+        percentile_sampling_rate: 100,
     };
 
     let client = reqwest::Client::new();
