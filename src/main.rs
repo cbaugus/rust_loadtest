@@ -321,8 +321,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .cluster
             .nodes
             .iter()
-            .enumerate()
-            .map(|(i, addr)| {
+            .map(|addr| {
                 // Derive node IDs from address strings for stable identity.
                 (node_id_from_str(addr), addr.clone())
             })
