@@ -1,3 +1,8 @@
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 use std::sync::{Arc, Mutex};
 use tokio::time::{self, Duration};
 use tracing::{error, info};
@@ -215,6 +220,11 @@ fn print_config_help() {
     eprintln!("  CUSTOM_HEADERS          - Comma-separated headers (use \\, for literal commas)");
     eprintln!("  METRIC_NAMESPACE        - Prometheus metric namespace (default: rust_loadtest)");
     eprintln!();
+    eprintln!("Connection pool configuration:");
+    eprintln!("  POOL_MAX_IDLE_PER_HOST  - Max idle connections per host (default: 32)");
+    eprintln!("  POOL_IDLE_TIMEOUT_SECS  - Idle connection timeout in seconds (default: 30)");
+    eprintln!("  TCP_NODELAY             - Disable Nagle's algorithm for lower latency (default: true)");
+    eprintln!();
     eprintln!("Logging configuration:");
     eprintln!("  RUST_LOG                - Log level: error, warn, info, debug, trace");
     eprintln!("                            Examples: RUST_LOG=info, RUST_LOG=rust_loadtest=debug");
@@ -323,7 +333,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // Initialize connection pool configuration metrics (Issue #36)
-    let pool_config = PoolConfig::default();
+    let pool_config = PoolConfig::from_env();
     CONNECTION_POOL_MAX_IDLE.set(pool_config.max_idle_per_host as f64);
     CONNECTION_POOL_IDLE_TIMEOUT_SECONDS.set(pool_config.idle_timeout.as_secs() as f64);
     info!(
