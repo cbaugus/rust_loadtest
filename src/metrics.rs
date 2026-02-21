@@ -258,8 +258,7 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     prometheus::default_registry().register(Box::new(HISTOGRAM_MEMORY_ESTIMATE_BYTES.clone()))?;
 
     // Memory guard & percentile tracking metrics
-    prometheus::default_registry()
-        .register(Box::new(PERCENTILE_TRACKING_ACTIVE_GAUGE.clone()))?;
+    prometheus::default_registry().register(Box::new(PERCENTILE_TRACKING_ACTIVE_GAUGE.clone()))?;
     prometheus::default_registry()
         .register(Box::new(MEMORY_WARNING_THRESHOLD_EXCEEDED_TOTAL.clone()))?;
     prometheus::default_registry()
