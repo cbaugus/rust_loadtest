@@ -61,7 +61,8 @@ fn print_percentile_report(enabled: bool, sampling_rate: u8) {
 
     if sampling_rate < 100 {
         info!(
-            "\n📊 Percentile sampling active: {}% of requests recorded (PERCENTILE_SAMPLING_RATE={})",
+            "\n📊 Percentile sampling active: {}% of requests recorded \
+             (PERCENTILE_SAMPLING_RATE={})",
             sampling_rate, sampling_rate
         );
     }
@@ -369,7 +370,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Collecting final metrics");
 
     // Print percentile latency statistics (Issue #33, #66)
-    print_percentile_report(config.percentile_tracking_enabled, config.percentile_sampling_rate);
+    print_percentile_report(
+        config.percentile_tracking_enabled,
+        config.percentile_sampling_rate,
+    );
 
     // Print per-scenario throughput statistics (Issue #35)
     print_throughput_report();
