@@ -75,8 +75,10 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             .load_model
             .calculate_current_rps(elapsed_total_secs, config.test_duration.as_secs_f64());
 
-        // Calculate delay per task to achieve the current_target_rps
-        let delay_ms = if current_target_rps > 0.0 {
+        // Calculate the target cycle time: total budget (request + sleep) per worker iteration.
+        // Actual sleep is computed AFTER the request by subtracting measured latency, so the
+        // full cycle duration matches the target rather than adding sleep on top of request time.
+        let target_cycle_ms = if current_target_rps > 0.0 {
             (config.num_concurrent_tasks as f64 * 1000.0 / current_target_rps).round() as u64
         } else {
             u64::MAX
@@ -153,14 +155,22 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         // Record connection pool statistics (Issue #36)
         GLOBAL_POOL_STATS.record_request(actual_latency_ms);
 
-        // Apply the calculated delay
+        // Apply adjusted delay: sleep for whatever time remains in the target cycle after
+        // the request completed. If the request took longer than the cycle budget, skip
+        // sleeping entirely so we don't fall further behind the target rate.
+        let delay_ms = if target_cycle_ms == u64::MAX {
+            u64::MAX
+        } else {
+            target_cycle_ms.saturating_sub(actual_latency_ms)
+        };
+
         if delay_ms > 0 && delay_ms != u64::MAX {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
         } else if delay_ms == u64::MAX {
             // Sleep for a very long time if RPS is 0
             tokio::time::sleep(Duration::from_secs(3600)).await;
         }
-        // If delay_ms is 0, no sleep, burst as fast as possible.
+        // If delay_ms is 0, request used the full cycle budget — proceed immediately.
     }
 }
 
@@ -255,13 +265,14 @@ pub async fn run_scenario_worker(
             break;
         }
 
-        // Calculate current target RPS (scenarios per second in this case)
+        // Calculate current target SPS (scenarios per second)
         let current_target_sps = config
             .load_model
             .calculate_current_rps(elapsed_total_secs, config.test_duration.as_secs_f64());
 
-        // Calculate delay per task to achieve the current_target_sps
-        let delay_ms = if current_target_sps > 0.0 {
+        // Calculate the target cycle time: total budget (execution + sleep) per worker iteration.
+        // Actual sleep is computed AFTER execution by subtracting measured duration.
+        let target_cycle_ms = if current_target_sps > 0.0 {
             (config.num_concurrent_tasks as f64 * 1000.0 / current_target_sps).round() as u64
         } else {
             u64::MAX
@@ -317,13 +328,20 @@ pub async fn run_scenario_worker(
             std::time::Duration::from_millis(result.total_time_ms),
         );
 
-        // Apply the calculated delay between scenario executions
+        // Apply adjusted delay: sleep for whatever time remains in the target cycle after
+        // the scenario completed. If execution exceeded the cycle budget, skip sleeping.
+        let delay_ms = if target_cycle_ms == u64::MAX {
+            u64::MAX
+        } else {
+            target_cycle_ms.saturating_sub(result.total_time_ms)
+        };
+
         if delay_ms > 0 && delay_ms != u64::MAX {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
         } else if delay_ms == u64::MAX {
             // Sleep for a very long time if SPS is 0
             tokio::time::sleep(Duration::from_secs(3600)).await;
         }
-        // If delay_ms is 0, no sleep, execute scenarios as fast as possible
+        // If delay_ms is 0, execution used the full cycle budget — proceed immediately.
     }
 }
