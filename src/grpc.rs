@@ -5,7 +5,7 @@
 //!
 //! | RPC group        | Status          | Completed in |
 //! |------------------|-----------------|--------------|
-//! | Raft transport   | Stubbed         | Issue #47    |
+//! | Raft transport   | Implemented     | Issue #47    |
 //! | Test coordination| Stubbed         | Issues #48/#76|
 //! | Metrics streaming| Stubbed         | Issue #49    |
 //! | Health check     | Implemented     | Issue #46    |
@@ -22,11 +22,14 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use serde_json;
+
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status, Streaming};
 use tracing::{error, info, warn};
 
 use crate::cluster::ClusterHandle;
+use crate::raft::{RaftNode, TypeConfig};
 
 // ── Generated protobuf / gRPC code ───────────────────────────────────────────
 
@@ -48,49 +51,121 @@ use proto::*;
 
 /// Server-side implementation of the `LoadTestCoordinator` gRPC service.
 ///
-/// Holds a [`ClusterHandle`] to read node state for the `HealthCheck` RPC.
-/// All other RPCs are stubbed with `Status::unimplemented` until the
-/// corresponding issues wire them in.
+/// - `handle`: node state (for `HealthCheck`)
+/// - `raft`: local Raft instance (for Raft transport RPCs, set when cluster enabled)
 #[derive(Clone)]
 pub struct LoadTestCoordinatorService {
     handle: ClusterHandle,
+    raft: Option<Arc<RaftNode>>,
 }
 
 impl LoadTestCoordinatorService {
     pub fn new(handle: ClusterHandle) -> Self {
-        Self { handle }
+        Self { handle, raft: None }
+    }
+
+    pub fn with_raft(handle: ClusterHandle, raft: Arc<RaftNode>) -> Self {
+        Self {
+            handle,
+            raft: Some(raft),
+        }
     }
 }
 
 #[tonic::async_trait]
 impl LoadTestCoordinator for LoadTestCoordinatorService {
-    // ── Raft transport — stubbed until Issue #47 ──────────────────────────
+    // ── Raft transport (Issue #47) ────────────────────────────────────────
+    //
+    // Each RPC deserialises the proto `payload` bytes back into the openraft
+    // request type and forwards it to the local Raft instance.
 
     async fn append_entries(
         &self,
-        _req: Request<AppendEntriesRequest>,
+        req: Request<AppendEntriesRequest>,
     ) -> Result<Response<AppendEntriesResponse>, Status> {
-        Err(Status::unimplemented(
-            "Raft AppendEntries not yet implemented — see Issue #47",
-        ))
+        let raft = self.raft.as_ref().ok_or_else(|| {
+            Status::unavailable("Cluster not enabled — cannot handle Raft AppendEntries")
+        })?;
+
+        let payload = req.into_inner().payload;
+        let raft_req: openraft::raft::AppendEntriesRequest<TypeConfig> =
+            serde_json::from_slice(&payload).map_err(|e| {
+                Status::invalid_argument(format!("failed to decode AppendEntriesRequest: {}", e))
+            })?;
+
+        let resp = raft
+            .raft
+            .append_entries(raft_req)
+            .await
+            .map_err(|e| Status::internal(format!("Raft AppendEntries error: {}", e)))?;
+
+        let payload = serde_json::to_vec(&resp)
+            .map_err(|e| Status::internal(format!("failed to encode response: {}", e)))?;
+
+        Ok(Response::new(AppendEntriesResponse {
+            success: true,
+            payload,
+            ..Default::default()
+        }))
     }
 
     async fn request_vote(
         &self,
-        _req: Request<VoteRequest>,
+        req: Request<VoteRequest>,
     ) -> Result<Response<VoteResponse>, Status> {
-        Err(Status::unimplemented(
-            "Raft RequestVote not yet implemented — see Issue #47",
-        ))
+        let raft = self.raft.as_ref().ok_or_else(|| {
+            Status::unavailable("Cluster not enabled — cannot handle Raft RequestVote")
+        })?;
+
+        let payload = req.into_inner().payload;
+        let raft_req: openraft::raft::VoteRequest<crate::raft::NodeId> =
+            serde_json::from_slice(&payload).map_err(|e| {
+                Status::invalid_argument(format!("failed to decode VoteRequest: {}", e))
+            })?;
+
+        let resp = raft
+            .raft
+            .vote(raft_req)
+            .await
+            .map_err(|e| Status::internal(format!("Raft Vote error: {}", e)))?;
+
+        let payload = serde_json::to_vec(&resp)
+            .map_err(|e| Status::internal(format!("failed to encode response: {}", e)))?;
+
+        Ok(Response::new(VoteResponse {
+            vote_granted: resp.vote_granted,
+            payload,
+            ..Default::default()
+        }))
     }
 
     async fn install_snapshot(
         &self,
-        _req: Request<SnapshotRequest>,
+        req: Request<SnapshotRequest>,
     ) -> Result<Response<SnapshotResponse>, Status> {
-        Err(Status::unimplemented(
-            "Raft InstallSnapshot not yet implemented — see Issue #47",
-        ))
+        let raft = self.raft.as_ref().ok_or_else(|| {
+            Status::unavailable("Cluster not enabled — cannot handle Raft InstallSnapshot")
+        })?;
+
+        let payload = req.into_inner().payload;
+        let raft_req: openraft::raft::InstallSnapshotRequest<TypeConfig> =
+            serde_json::from_slice(&payload).map_err(|e| {
+                Status::invalid_argument(format!("failed to decode InstallSnapshotRequest: {}", e))
+            })?;
+
+        let resp = raft
+            .raft
+            .install_snapshot(raft_req)
+            .await
+            .map_err(|e| Status::internal(format!("Raft InstallSnapshot error: {}", e)))?;
+
+        let payload = serde_json::to_vec(&resp)
+            .map_err(|e| Status::internal(format!("failed to encode response: {}", e)))?;
+
+        Ok(Response::new(SnapshotResponse {
+            payload,
+            ..Default::default()
+        }))
     }
 
     // ── Test coordination — stubbed until Issues #48 / #76 ───────────────
@@ -146,20 +221,23 @@ impl LoadTestCoordinator for LoadTestCoordinatorService {
 
 /// Starts the gRPC server bound to `CLUSTER_BIND_ADDR` (default `0.0.0.0:7000`).
 ///
-/// All RPCs for the `LoadTestCoordinator` service are registered. Raft RPCs
-/// and metrics streaming return `Unimplemented` until the respective issues
-/// wire in real logic.
+/// When `raft` is `Some`, the Raft transport RPCs (`AppendEntries`, `RequestVote`,
+/// `InstallSnapshot`) are handled by the local Raft instance. Without it they
+/// return `Unavailable`.
 ///
 /// Runs indefinitely; the caller should spawn this in a background task.
-pub async fn start_grpc_server(handle: ClusterHandle) {
+pub async fn start_grpc_server(handle: ClusterHandle, raft: Option<Arc<RaftNode>>) {
     let bind_addr = handle.config().bind_addr.clone();
     let addr: SocketAddr = bind_addr
         .parse()
         .unwrap_or_else(|_| ([0, 0, 0, 0], 7000).into());
 
-    let service = LoadTestCoordinatorService::new(handle);
+    let service = match raft {
+        Some(r) => LoadTestCoordinatorService::with_raft(handle, r),
+        None => LoadTestCoordinatorService::new(handle),
+    };
 
-    info!(addr = %addr, "gRPC server starting (Issue #46)");
+    info!(addr = %addr, "gRPC server starting (Issue #46/#47)");
 
     if let Err(e) = Server::builder()
         .add_service(LoadTestCoordinatorServer::new(service))
@@ -345,23 +423,23 @@ mod tests {
     // ── Stubbed RPCs return Unimplemented ─────────────────────────────────
 
     #[tokio::test]
-    async fn raft_append_entries_is_unimplemented() {
+    async fn raft_append_entries_unavailable_without_raft() {
         let svc = LoadTestCoordinatorService::new(standalone_handle());
         let err = svc
             .append_entries(Request::new(AppendEntriesRequest::default()))
             .await
             .unwrap_err();
-        assert_eq!(err.code(), tonic::Code::Unimplemented);
+        assert_eq!(err.code(), tonic::Code::Unavailable);
     }
 
     #[tokio::test]
-    async fn raft_request_vote_is_unimplemented() {
+    async fn raft_request_vote_unavailable_without_raft() {
         let svc = LoadTestCoordinatorService::new(standalone_handle());
         let err = svc
             .request_vote(Request::new(VoteRequest::default()))
             .await
             .unwrap_err();
-        assert_eq!(err.code(), tonic::Code::Unimplemented);
+        assert_eq!(err.code(), tonic::Code::Unavailable);
     }
 
     #[tokio::test]

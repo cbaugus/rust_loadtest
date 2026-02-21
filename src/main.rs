@@ -12,6 +12,7 @@ use rust_loadtest::client::build_client;
 use rust_loadtest::cluster::{start_health_server, ClusterHandle};
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
+use rust_loadtest::consul::start_consul_tagging;
 use rust_loadtest::grpc::{start_grpc_server, PeerClientPool};
 use rust_loadtest::memory_guard::{
     init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig,
@@ -26,6 +27,7 @@ use rust_loadtest::percentiles::{
     format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES,
     GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES,
 };
+use rust_loadtest::raft::{node_id_from_str, start_raft_node};
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
 
@@ -311,13 +313,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             start_health_server(health_handle).await;
         });
 
-        // gRPC server — Raft transport, metrics streaming, coordination (Issue #46)
+        // Consul service registration + tag updates (Issue #47)
+        start_consul_tagging(&cluster_handle);
+
+        // Build peer list: (node_id, addr) from CLUSTER_NODES
+        let peers: Vec<(u64, String)> = config
+            .cluster
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(i, addr)| {
+                // Derive node IDs from address strings for stable identity.
+                (node_id_from_str(addr), addr.clone())
+            })
+            .collect();
+
+        // Raft node — embedded leader election (Issue #47)
+        let raft_node = start_raft_node(cluster_handle.clone(), peers.clone()).await;
+
+        // gRPC server with Raft transport enabled (Issues #46 / #47)
         let grpc_handle = cluster_handle.clone();
+        let grpc_raft = raft_node.clone();
         tokio::spawn(async move {
-            start_grpc_server(grpc_handle).await;
+            start_grpc_server(grpc_handle, Some(grpc_raft)).await;
         });
 
-        // Connect to static peer list; Consul-based peers resolved in Issue #47
+        // Outbound peer connections (PeerClientPool)
         if !config.cluster.nodes.is_empty() {
             let pool = PeerClientPool::new();
             pool.connect_to_peers(config.cluster.nodes.clone());
@@ -326,6 +347,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 "Connecting to cluster peers"
             );
         }
+    } else {
+        // Standalone — gRPC server without Raft (serves health check only)
+        let grpc_handle = cluster_handle.clone();
+        tokio::spawn(async move {
+            start_grpc_server(grpc_handle, None).await;
+        });
     }
 
     // Initialize percentile tracking runtime flag (Issue #72)
