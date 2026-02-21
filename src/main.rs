@@ -9,11 +9,13 @@ use tracing::{error, info};
 use tracing_subscriber::{fmt, EnvFilter};
 
 use rust_loadtest::client::build_client;
+use rust_loadtest::cluster::{start_health_server, ClusterHandle};
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
 use rust_loadtest::memory_guard::{
     init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig,
 };
+use rust_loadtest::metrics::CLUSTER_NODE_INFO;
 use rust_loadtest::metrics::{
     gather_metrics_string, register_metrics, start_metrics_server, update_memory_metrics,
     CONNECTION_POOL_IDLE_TIMEOUT_SECONDS, CONNECTION_POOL_MAX_IDLE,
@@ -228,6 +230,20 @@ fn print_config_help() {
     );
     eprintln!("  REQUEST_TIMEOUT_SECS    - Per-request timeout in seconds (default: 30)");
     eprintln!();
+    eprintln!("Cluster configuration (Issue #45 — disabled by default):");
+    eprintln!("  CLUSTER_ENABLED         - Enable distributed cluster mode (default: false)");
+    eprintln!("  CLUSTER_REGION          - Geographic region label for metrics (e.g. us-central1)");
+    eprintln!("  CLUSTER_NODE_ID         - Stable node identity (default: $HOSTNAME)");
+    eprintln!("  CLUSTER_BIND_ADDR       - Raft + gRPC listen address (default: 0.0.0.0:7000)");
+    eprintln!(
+        "  CLUSTER_HEALTH_ADDR     - Health check HTTP listen address (default: 0.0.0.0:8080)"
+    );
+    eprintln!("  DISCOVERY_MODE          - Peer discovery: static or consul (default: static)");
+    eprintln!("  CLUSTER_NODES           - Comma-separated peer list for static discovery");
+    eprintln!("                            e.g. 10.1.0.5:7000,10.2.0.5:7000,10.3.0.5:7000");
+    eprintln!("  CONSUL_ADDR             - Consul agent address (default: http://127.0.0.1:8500)");
+    eprintln!("  CONSUL_SERVICE_NAME     - Consul service name (default: loadtest-cluster)");
+    eprintln!();
     eprintln!("Logging configuration:");
     eprintln!("  RUST_LOG                - Log level: error, warn, info, debug, trace");
     eprintln!("                            Examples: RUST_LOG=info, RUST_LOG=rust_loadtest=debug");
@@ -276,6 +292,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         metrics_port = metrics_port,
         "Prometheus metrics server started"
     );
+
+    // Initialize cluster node (Issue #45)
+    let cluster_handle = ClusterHandle::new(config.cluster.clone());
+    CLUSTER_NODE_INFO
+        .with_label_values(&[
+            &config.cluster.node_id,
+            &config.cluster.region,
+            cluster_handle.state().as_str(),
+        ])
+        .set(1.0);
+
+    if config.cluster.enabled {
+        let health_handle = cluster_handle.clone();
+        tokio::spawn(async move {
+            start_health_server(health_handle).await;
+        });
+    }
 
     // Initialize percentile tracking runtime flag (Issue #72)
     init_percentile_tracking_flag(config.percentile_tracking_enabled);
@@ -365,6 +398,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             num_concurrent_tasks: config.num_concurrent_tasks,
             percentile_tracking_enabled: config.percentile_tracking_enabled,
             percentile_sampling_rate: config.percentile_sampling_rate,
+            region: config.cluster.region.clone(),
         };
 
         let client_clone = client.clone();

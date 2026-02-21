@@ -4,6 +4,7 @@ use tokio::time::Duration;
 use tracing::{info, warn};
 
 use crate::client::ClientConfig;
+use crate::cluster::ClusterConfig;
 use crate::config_merge::ConfigMerger;
 use crate::load_models::LoadModel;
 use crate::utils::parse_duration_string;
@@ -61,6 +62,9 @@ pub struct Config {
     pub memory_warning_threshold_percent: f64,
     pub memory_critical_threshold_percent: f64,
     pub auto_disable_percentiles_on_warning: bool,
+
+    // Cluster configuration (Issue #45)
+    pub cluster: ClusterConfig,
 }
 
 /// Helper to get a required environment variable.
@@ -213,6 +217,7 @@ impl Config {
             memory_warning_threshold_percent,
             memory_critical_threshold_percent,
             auto_disable_percentiles_on_warning,
+            cluster: ClusterConfig::from_env(),
         };
 
         config.validate()?;
@@ -377,6 +382,7 @@ impl Config {
             memory_warning_threshold_percent,
             memory_critical_threshold_percent,
             auto_disable_percentiles_on_warning,
+            cluster: ClusterConfig::from_env(),
         };
 
         config.validate()?;
@@ -579,6 +585,7 @@ impl Config {
             memory_warning_threshold_percent: 80.0,
             memory_critical_threshold_percent: 90.0,
             auto_disable_percentiles_on_warning: true,
+            cluster: ClusterConfig::for_testing(),
         }
     }
 
@@ -609,8 +616,28 @@ impl Config {
             mtls_enabled = mtls_enabled,
             custom_headers_count = custom_headers_count,
             percentile_tracking = self.percentile_tracking_enabled,
+            cluster_enabled = self.cluster.enabled,
+            region = %self.cluster.region,
+            node_id = %self.cluster.node_id,
             "Starting load test"
         );
+
+        if self.cluster.enabled {
+            info!(
+                node_id = %self.cluster.node_id,
+                region = %self.cluster.region,
+                bind_addr = %self.cluster.bind_addr,
+                health_addr = %self.cluster.health_addr,
+                discovery_mode = %self.cluster.discovery_mode.as_str(),
+                peer_count = self.cluster.nodes.len(),
+                "Cluster mode ENABLED (Issue #45)"
+            );
+        } else {
+            info!(
+                region = %self.cluster.region,
+                "Cluster mode disabled — standalone node (set CLUSTER_ENABLED=true to enable)"
+            );
+        }
 
         if !self.percentile_tracking_enabled {
             warn!(
