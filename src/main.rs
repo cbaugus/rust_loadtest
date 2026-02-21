@@ -12,6 +12,7 @@ use rust_loadtest::client::build_client;
 use rust_loadtest::cluster::{start_health_server, ClusterHandle};
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
+use rust_loadtest::grpc::{start_grpc_server, PeerClientPool};
 use rust_loadtest::memory_guard::{
     init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig,
 };
@@ -304,10 +305,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .set(1.0);
 
     if config.cluster.enabled {
+        // HTTP health endpoint (Consul polling)
         let health_handle = cluster_handle.clone();
         tokio::spawn(async move {
             start_health_server(health_handle).await;
         });
+
+        // gRPC server — Raft transport, metrics streaming, coordination (Issue #46)
+        let grpc_handle = cluster_handle.clone();
+        tokio::spawn(async move {
+            start_grpc_server(grpc_handle).await;
+        });
+
+        // Connect to static peer list; Consul-based peers resolved in Issue #47
+        if !config.cluster.nodes.is_empty() {
+            let pool = PeerClientPool::new();
+            pool.connect_to_peers(config.cluster.nodes.clone());
+            info!(
+                peer_count = config.cluster.nodes.len(),
+                "Connecting to cluster peers"
+            );
+        }
     }
 
     // Initialize percentile tracking runtime flag (Issue #72)
