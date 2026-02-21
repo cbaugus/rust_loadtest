@@ -10,8 +10,12 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifests
+# Copy manifests and build script
 COPY Cargo.toml Cargo.lock ./
+COPY build.rs ./
+
+# Copy proto definitions (required by build.rs to generate gRPC stubs)
+COPY proto ./proto
 
 # Copy source code
 COPY src ./src
