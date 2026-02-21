@@ -22,6 +22,9 @@ pub struct PoolConfig {
 
     /// Disable Nagle's algorithm for lower latency at high RPS
     pub tcp_nodelay: bool,
+
+    /// Per-request timeout — prevents hung connections from accumulating memory
+    pub request_timeout: Duration,
 }
 
 impl Default for PoolConfig {
@@ -31,6 +34,7 @@ impl Default for PoolConfig {
             idle_timeout: Duration::from_secs(30), // Reduced from 90s to free kernel buffers sooner
             tcp_keepalive: Some(Duration::from_secs(60)),
             tcp_nodelay: true, // Disable Nagle for lower latency at high RPS
+            request_timeout: Duration::from_secs(30), // Prevent hung connections accumulating memory
         }
     }
 }
@@ -60,11 +64,17 @@ impl PoolConfig {
             .to_lowercase()
             == "true";
 
+        let request_timeout_secs: u64 = std::env::var("REQUEST_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30);
+
         Self {
             max_idle_per_host,
             idle_timeout: Duration::from_secs(idle_timeout_secs),
             tcp_keepalive: Some(Duration::from_secs(60)),
             tcp_nodelay,
+            request_timeout: Duration::from_secs(request_timeout_secs),
         }
     }
 
@@ -97,7 +107,8 @@ impl PoolConfig {
         let mut builder = builder
             .pool_max_idle_per_host(self.max_idle_per_host)
             .pool_idle_timeout(self.idle_timeout)
-            .tcp_nodelay(self.tcp_nodelay);
+            .tcp_nodelay(self.tcp_nodelay)
+            .timeout(self.request_timeout);
 
         if let Some(keepalive) = self.tcp_keepalive {
             builder = builder.tcp_keepalive(keepalive);
@@ -264,6 +275,7 @@ mod tests {
         assert_eq!(config.idle_timeout, Duration::from_secs(30));
         assert_eq!(config.tcp_keepalive, Some(Duration::from_secs(60)));
         assert!(config.tcp_nodelay);
+        assert_eq!(config.request_timeout, Duration::from_secs(30));
     }
 
     #[test]

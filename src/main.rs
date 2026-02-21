@@ -226,6 +226,7 @@ fn print_config_help() {
     eprintln!(
         "  TCP_NODELAY             - Disable Nagle's algorithm for lower latency (default: true)"
     );
+    eprintln!("  REQUEST_TIMEOUT_SECS    - Per-request timeout in seconds (default: 30)");
     eprintln!();
     eprintln!("Logging configuration:");
     eprintln!("  RUST_LOG                - Log level: error, warn, info, debug, trace");

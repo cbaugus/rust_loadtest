@@ -96,8 +96,9 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         match req.send().await {
             Ok(mut response) => {
                 let status = response.status().as_u16();
-                let status_str = status.to_string();
-                REQUEST_STATUS_CODES.with_label_values(&[&status_str]).inc();
+                // Use static strings to avoid a heap allocation on every request
+                let status_str = status_code_label(status);
+                REQUEST_STATUS_CODES.with_label_values(&[status_str]).inc();
 
                 // Categorize HTTP errors (Issue #34)
                 if let Some(category) = ErrorCategory::from_status_code(status) {
@@ -171,6 +172,37 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             tokio::time::sleep(Duration::from_secs(3600)).await;
         }
         // If delay_ms is 0, request used the full cycle budget — proceed immediately.
+    }
+}
+
+/// Returns a static string label for common HTTP status codes.
+///
+/// Avoids a heap `String` allocation on every request in the hot path.
+/// Uncommon codes fall back to "other" rather than allocating a unique string.
+fn status_code_label(code: u16) -> &'static str {
+    match code {
+        100 => "100",
+        200 => "200",
+        201 => "201",
+        204 => "204",
+        301 => "301",
+        302 => "302",
+        304 => "304",
+        400 => "400",
+        401 => "401",
+        403 => "403",
+        404 => "404",
+        405 => "405",
+        408 => "408",
+        409 => "409",
+        422 => "422",
+        429 => "429",
+        499 => "499",
+        500 => "500",
+        502 => "502",
+        503 => "503",
+        504 => "504",
+        _ => "other",
     }
 }
 

@@ -15,6 +15,7 @@ fn test_pool_config_default() {
     assert_eq!(config.idle_timeout, Duration::from_secs(30));
     assert_eq!(config.tcp_keepalive, Some(Duration::from_secs(60)));
     assert!(config.tcp_nodelay);
+    assert_eq!(config.request_timeout, Duration::from_secs(30));
 
     println!("✅ Pool configuration defaults work");
 }
