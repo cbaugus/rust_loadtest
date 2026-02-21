@@ -4,6 +4,7 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
+use crate::connection_pool::PoolConfig;
 use crate::utils::parse_headers_with_escapes;
 
 /// Configuration for building the HTTP client.
@@ -13,6 +14,7 @@ pub struct ClientConfig {
     pub client_cert_path: Option<String>,
     pub client_key_path: Option<String>,
     pub custom_headers: Option<String>,
+    pub pool_config: Option<PoolConfig>,
 }
 
 /// Result of building the client, includes parsed headers for logging.
@@ -49,6 +51,14 @@ pub fn build_client(
         client_builder = client_builder.default_headers(parsed_headers.clone());
         println!("Successfully configured custom default headers.");
     }
+
+    // Connection Pool Configuration
+    let pool_config = config.pool_config.clone().unwrap_or_default();
+    client_builder = pool_config.apply_to_builder(client_builder);
+    println!(
+        "Connection pool configured: max_idle_per_host={}, idle_timeout={:?}",
+        pool_config.max_idle_per_host, pool_config.idle_timeout
+    );
 
     // Build client with TLS settings
     let client = if config.skip_tls_verify {

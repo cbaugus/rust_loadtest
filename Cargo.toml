@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.12", features = ["json", "rustls-tls-native-roots"], default-features = false } # Using rustls-tls-native-roots
+reqwest = { version = "0.12", features = ["json", "rustls-tls-native-roots", "cookies"], default-features = false } # Using rustls-tls-native-roots with cookie support
 tokio = { version = "1", features = ["full"] } # "full" includes everything you need for async main
 prometheus = "0.13"
 hyper = { version = "0.14", features = ["full"] } # For the HTTP server
@@ -17,9 +17,21 @@ pem = "3.0.0" # For parsing PEM encoded keys/certs
 rustls-pemfile = "2.0.0" # For reading PEM files for rustls
 serde = { version = "1.0", features = ["derive"] } # For deserializing config if needed
 serde_json = "1.0" # For JSON parsing if needed
+serde_json_path = "0.7" # For JSONPath extraction
+serde_yaml = "0.9" # For YAML config file parsing (Issue #37)
+regex = "1.10" # For regex-based extraction
+rand = "0.8" # For random think times
 thiserror = "1.0" # For error handling
 tracing = "0.1" # Structured logging
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] } # Logging subscriber with JSON support
+hdrhistogram = "7.5" # For accurate percentile latency tracking
+csv = "1.3" # For CSV data file parsing
+notify = "6.0" # For file watching (hot-reload)
+schemars = "0.8" # For JSON Schema generation
+lru = "0.12" # For LRU cache to limit histogram labels (Issue #68)
+procfs = "0.16" # For Linux process memory stats (Issue #69)
 
 [dev-dependencies]
 wiremock = "0.5"
+tempfile = "3.8"
+serial_test = "3"

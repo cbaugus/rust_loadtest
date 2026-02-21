@@ -1,0 +1,32 @@
+# Build artifacts
+target/
+**/*.rs.bk
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation (except needed docs)
+*.md
+!README.md
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Temporary files
+*.tmp
+*.log
+
+# Test results
+results/
+
+# CI/CD
+.github/

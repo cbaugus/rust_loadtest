@@ -1,0 +1,130 @@
+# Stress Test Template
+#
+# High-load stress test to find system breaking points.
+# Gradually increases load from low to very high RPS.
+#
+# Purpose:
+#   - Identify maximum system capacity
+#   - Find performance bottlenecks
+#   - Test system behavior under extreme load
+#   - Validate auto-scaling configurations
+#
+# Usage:
+#   rust-loadtest --config stress-test.yaml
+#
+# Warning:
+#   This will generate significant load. Use only on test environments
+#   or production systems designed to handle high traffic.
+#
+# Customize:
+#   - Adjust max RPS based on your system capacity
+#   - Modify ramp duration for gradual or rapid stress
+#   - Change workers based on your load test infrastructure
+
+version: "1.0"
+
+metadata:
+  name: "Stress Test"
+  description: "High-load stress test to find system limits"
+  author: "Performance Team"
+  tags: ["stress", "high-load", "capacity-planning"]
+
+config:
+  baseUrl: "https://api.example.com"
+  timeout: "60s"
+
+  # High number of workers for stress testing
+  workers: 200
+
+  # Longer duration to observe system behavior under sustained load
+  duration: "1h"
+
+  skipTlsVerify: false
+
+load:
+  # Ramp load model - gradually increase pressure
+  model: "ramp"
+
+  # Start with light load (10 RPS)
+  min: 10
+
+  # Ramp up to very high load (1000 RPS)
+  max: 1000
+
+  # Ramp duration: 15 minutes to reach max load
+  rampDuration: "15m"
+
+scenarios:
+  # Primary endpoint stress test (70% of traffic)
+  - name: "Read Heavy Operations"
+    weight: 70
+    steps:
+      - name: "List Resources"
+        request:
+          method: "GET"
+          path: "/api/resources"
+        assertions:
+          - type: statusCode
+            expected: 200
+          - type: responseTime
+            max: "2s"
+
+      - name: "Get Resource Details"
+        request:
+          method: "GET"
+          path: "/api/resources/123"
+        assertions:
+          - type: statusCode
+            expected: 200
+        extract:
+          - type: jsonPath
+            name: "resourceId"
+            jsonPath: "$.id"
+
+  # Write operations stress (20% of traffic)
+  - name: "Write Operations"
+    weight: 20
+    steps:
+      - name: "Create Resource"
+        request:
+          method: "POST"
+          path: "/api/resources"
+          body: '{"name": "test-resource", "type": "stress-test"}'
+        assertions:
+          - type: statusCode
+            expected: 201
+        extract:
+          - type: jsonPath
+            name: "newResourceId"
+            jsonPath: "$.id"
+
+      - name: "Update Resource"
+        request:
+          method: "PUT"
+          path: "/api/resources/${newResourceId}"
+          body: '{"name": "updated-resource"}'
+        assertions:
+          - type: statusCode
+            expected: 200
+
+  # Delete operations (10% of traffic)
+  - name: "Delete Operations"
+    weight: 10
+    steps:
+      - name: "Create Temporary Resource"
+        request:
+          method: "POST"
+          path: "/api/resources"
+          body: '{"name": "temp-resource", "temporary": true}'
+        extract:
+          - type: jsonPath
+            name: "tempId"
+            jsonPath: "$.id"
+
+      - name: "Delete Resource"
+        request:
+          method: "DELETE"
+          path: "/api/resources/${tempId}"
+        assertions:
+          - type: statusCode
+            expected: 204

@@ -1,0 +1,323 @@
+# Docker Compose Examples for Load Testing
+#
+# This file provides example configurations for different load test scenarios
+# with appropriate memory limits and settings.
+#
+# Usage:
+#   docker-compose -f docker-compose.loadtest-examples.yml up <service-name>
+#
+# Monitor with:
+#   docker stats --no-stream
+
+version: '3.8'
+
+services:
+  # ==============================================================================
+  # SMALL LOAD TEST - 512MB Memory
+  # ==============================================================================
+  # Quick validation test - fits in minimal memory
+  loadtest-small:
+    image: cbaugus/rust_loadtest:dev
+    container_name: loadtest-small
+    mem_limit: 512m
+    memswap_limit: 512m
+    environment:
+      # Target configuration
+      TARGET_URL: "https://ecom.edge.baugus-lab.com/health"
+      REQUEST_TYPE: "GET"
+
+      # Small load configuration
+      NUM_CONCURRENT_TASKS: 10
+      TEST_DURATION: "5m"
+      LOAD_MODEL_TYPE: "Rps"
+      TARGET_RPS: 500
+
+      # Logging
+      RUST_LOG: "info"
+      LOG_FORMAT: "default"
+
+      # Metrics
+      METRIC_NAMESPACE: "loadtest_small"
+    ports:
+      - "9090:9090"  # Prometheus metrics
+    networks:
+      - loadtest
+
+  # ==============================================================================
+  # MEDIUM LOAD TEST - 2GB Memory
+  # ==============================================================================
+  # Standard test for most scenarios
+  loadtest-medium:
+    image: cbaugus/rust_loadtest:dev
+    container_name: loadtest-medium
+    mem_limit: 2g
+    memswap_limit: 2g
+    environment:
+      # Target configuration
+      TARGET_URL: "https://ecom.edge.baugus-lab.com/products"
+      REQUEST_TYPE: "GET"
+
+      # Medium load configuration
+      NUM_CONCURRENT_TASKS: 100
+      TEST_DURATION: "30m"
+      LOAD_MODEL_TYPE: "RampRps"
+      MIN_RPS: 500
+      MAX_RPS: 5000
+      RAMP_DURATION: "15m"
+
+      # Logging
+      RUST_LOG: "info"
+      LOG_FORMAT: "json"
+
+      # Metrics
+      METRIC_NAMESPACE: "loadtest_medium"
+    ports:
+      - "9091:9090"  # Prometheus metrics
+    networks:
+      - loadtest
+
+  # ==============================================================================
+  # HIGH LOAD TEST - 4GB Memory
+  # ==============================================================================
+  # Higher concurrency test - requires monitoring
+  loadtest-high:
+    image: cbaugus/rust_loadtest:dev
+    container_name: loadtest-high
+    mem_limit: 4g
+    memswap_limit: 4g
+    environment:
+      # Target configuration
+      TARGET_URL: "https://ecom.edge.baugus-lab.com/products"
+      REQUEST_TYPE: "GET"
+
+      # High load configuration (safe for 4GB)
+      NUM_CONCURRENT_TASKS: 500
+      TEST_DURATION: "1h"
+      LOAD_MODEL_TYPE: "Rps"
+      TARGET_RPS: 10000
+
+      # Logging
+      RUST_LOG: "info"
+      LOG_FORMAT: "json"
+
+      # Metrics
+      METRIC_NAMESPACE: "loadtest_high"
+    ports:
+      - "9092:9090"  # Prometheus metrics
+    networks:
+      - loadtest
+
+  # ==============================================================================
+  # MAXIMUM LOAD TEST - 8GB Memory
+  # ==============================================================================
+  # Stress test configuration - maximum supported load
+  loadtest-maximum:
+    image: cbaugus/rust_loadtest:dev
+    container_name: loadtest-maximum
+    mem_limit: 8g
+    memswap_limit: 8g
+    environment:
+      # Target configuration
+      TARGET_URL: "https://ecom.edge.baugus-lab.com/products"
+      REQUEST_TYPE: "GET"
+
+      # Maximum load configuration
+      NUM_CONCURRENT_TASKS: 1000
+      TEST_DURATION: "2h"
+      LOAD_MODEL_TYPE: "RampRps"
+      MIN_RPS: 5000
+      MAX_RPS: 25000
+      RAMP_DURATION: "30m"
+
+      # Logging
+      RUST_LOG: "warn"  # Less verbose for high load
+      LOG_FORMAT: "json"
+
+      # Metrics
+      METRIC_NAMESPACE: "loadtest_maximum"
+    ports:
+      - "9093:9090"  # Prometheus metrics
+    networks:
+      - loadtest
+
+  # ==============================================================================
+  # DAILY TRAFFIC PATTERN - 4GB Memory
+  # ==============================================================================
+  # Simulates realistic daily traffic patterns
+  loadtest-daily-pattern:
+    image: cbaugus/rust_loadtest:dev
+    container_name: loadtest-daily
+    mem_limit: 4g
+    memswap_limit: 4g
+    environment:
+      # Target configuration
+      TARGET_URL: "https://ecom.edge.baugus-lab.com/products"
+      REQUEST_TYPE: "GET"
+
+      # Daily traffic pattern (1 hour = 1 simulated day)
+      NUM_CONCURRENT_TASKS: 200
+      TEST_DURATION: "4h"  # 4 simulated days
+      LOAD_MODEL_TYPE: "DailyTraffic"
+      DAILY_MIN_RPS: 100    # Night traffic
+      DAILY_MID_RPS: 500    # Afternoon traffic
+      DAILY_MAX_RPS: 1500   # Peak traffic
+      DAILY_CYCLE_DURATION: "1h"
+
+      # Logging
+      RUST_LOG: "info"
+      LOG_FORMAT: "json"
+
+      # Metrics
+      METRIC_NAMESPACE: "loadtest_daily"
+    ports:
+      - "9094:9090"  # Prometheus metrics
+    networks:
+      - loadtest
+
+  # ==============================================================================
+  # SOAK TEST - 4GB Memory
+  # ==============================================================================
+  # Long duration test to identify memory leaks
+  loadtest-soak:
+    image: cbaugus/rust_loadtest:dev
+    container_name: loadtest-soak
+    mem_limit: 4g
+    memswap_limit: 4g
+    environment:
+      # Target configuration
+      TARGET_URL: "https://ecom.edge.baugus-lab.com/health"
+      REQUEST_TYPE: "GET"
+
+      # Soak test configuration (steady load for long duration)
+      NUM_CONCURRENT_TASKS: 50
+      TEST_DURATION: "24h"  # Long duration to detect leaks
+      LOAD_MODEL_TYPE: "Rps"
+      TARGET_RPS: 1000  # Moderate but sustained
+
+      # Logging
+      RUST_LOG: "warn"  # Minimal logging for long tests
+      LOG_FORMAT: "json"
+
+      # Metrics
+      METRIC_NAMESPACE: "loadtest_soak"
+    ports:
+      - "9095:9090"  # Prometheus metrics
+    networks:
+      - loadtest
+
+  # ==============================================================================
+  # POST REQUEST TEST - 2GB Memory
+  # ==============================================================================
+  # Example with JSON payload
+  loadtest-post-json:
+    image: cbaugus/rust_loadtest:dev
+    container_name: loadtest-post
+    mem_limit: 2g
+    memswap_limit: 2g
+    environment:
+      # Target configuration
+      TARGET_URL: "https://ecom.edge.baugus-lab.com/auth/register"
+      REQUEST_TYPE: "POST"
+      SEND_JSON: "true"
+      JSON_PAYLOAD: '{"email":"loadtest@example.com","password":"Test123!","name":"Load Test User"}'
+
+      # Load configuration
+      NUM_CONCURRENT_TASKS: 50
+      TEST_DURATION: "10m"
+      LOAD_MODEL_TYPE: "Rps"
+      TARGET_RPS: 100
+
+      # Logging
+      RUST_LOG: "info"
+      LOG_FORMAT: "json"
+
+      # Metrics
+      METRIC_NAMESPACE: "loadtest_post"
+    ports:
+      - "9096:9090"  # Prometheus metrics
+    networks:
+      - loadtest
+
+  # ==============================================================================
+  # MONITORING STACK (Optional)
+  # ==============================================================================
+  # Prometheus for scraping metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9099:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+    networks:
+      - loadtest
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - loadtest
+
+networks:
+  loadtest:
+    driver: bridge
+
+volumes:
+  grafana-data:
+
+# ==============================================================================
+# USAGE EXAMPLES
+# ==============================================================================
+#
+# Run a small test:
+#   docker-compose -f docker-compose.loadtest-examples.yml up loadtest-small
+#
+# Run medium test in background:
+#   docker-compose -f docker-compose.loadtest-examples.yml up -d loadtest-medium
+#
+# Monitor memory usage:
+#   docker stats --no-stream
+#
+# View logs:
+#   docker logs -f loadtest-medium
+#
+# Access metrics:
+#   curl http://localhost:9091/metrics
+#
+# Stop test:
+#   docker-compose -f docker-compose.loadtest-examples.yml down
+#
+# Run with monitoring stack:
+#   docker-compose -f docker-compose.loadtest-examples.yml up -d loadtest-medium prometheus grafana
+#   # Grafana: http://localhost:3000 (admin/admin)
+#   # Prometheus: http://localhost:9099
+#
+# ==============================================================================
+# MEMORY RECOMMENDATIONS
+# ==============================================================================
+#
+# See MEMORY_OPTIMIZATION.md for detailed analysis
+#
+# Configuration          Memory    Concurrent Tasks    Target RPS    Duration
+# ─────────────────────────────────────────────────────────────────────────────
+# loadtest-small         512MB     10                  500           5m
+# loadtest-medium        2GB       100                 5,000         30m
+# loadtest-high          4GB       500                 10,000        1h
+# loadtest-maximum       8GB       1,000               25,000        2h
+# loadtest-daily-pattern 4GB       200                 100-1,500     4h
+# loadtest-soak          4GB       50                  1,000         24h
+# loadtest-post-json     2GB       50                  100           10m
+#
+# Always start with smaller configurations and scale up gradually!

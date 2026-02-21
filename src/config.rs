@@ -4,8 +4,10 @@ use tokio::time::Duration;
 use tracing::{info, warn};
 
 use crate::client::ClientConfig;
+use crate::config_merge::ConfigMerger;
 use crate::load_models::LoadModel;
 use crate::utils::parse_duration_string;
+use crate::yaml_config::{YamlConfig, YamlConfigError};
 
 /// Configuration errors with descriptive messages.
 #[derive(Error, Debug)]
@@ -30,6 +32,9 @@ pub enum ConfigError {
 
     #[error("Parse error: {0}")]
     ParseError(String),
+
+    #[error("YAML config error: {0}")]
+    YamlConfig(#[from] YamlConfigError),
 }
 
 /// Main configuration for the load test.
@@ -47,6 +52,15 @@ pub struct Config {
     pub client_cert_path: Option<String>,
     pub client_key_path: Option<String>,
     pub custom_headers: Option<String>,
+
+    // Memory optimization settings (Issue #66, #68, #67, #70, #72)
+    pub percentile_tracking_enabled: bool,
+    pub percentile_sampling_rate: u8, // 1-100: percentage of requests to record (Issue #70)
+    pub max_histogram_labels: usize,
+    pub histogram_rotation_interval: Duration, // 0 = disabled
+    pub memory_warning_threshold_percent: f64,
+    pub memory_critical_threshold_percent: f64,
+    pub auto_disable_percentiles_on_warning: bool,
 }
 
 /// Helper to get a required environment variable.
@@ -77,11 +91,215 @@ fn env_bool(name: &str, default: bool) -> bool {
 }
 
 impl Config {
+    /// Loads configuration from a YAML file with environment variable overrides.
+    ///
+    /// Environment variables can override YAML values according to precedence:
+    /// env vars > YAML file > defaults
+    ///
+    /// Environment variable mapping:
+    /// - `NUM_CONCURRENT_TASKS` overrides `config.workers`
+    /// - `REQUEST_TIMEOUT` overrides `config.timeout`
+    /// - `SKIP_TLS_VERIFY` overrides `config.skipTlsVerify`
+    /// - `TARGET_URL` overrides `config.baseUrl`
+    /// - `TEST_DURATION` overrides `config.duration`
+    /// - `LOAD_MODEL_TYPE` overrides `load.model`
+    /// - `TARGET_RPS` overrides `load.target` (for RPS model)
+    /// - `MIN_RPS`, `MAX_RPS`, `RAMP_DURATION` override ramp model params
+    /// - `CUSTOM_HEADERS` overrides `config.customHeaders`
+    pub fn from_yaml_with_env_overrides(yaml_config: &YamlConfig) -> Result<Self, ConfigError> {
+        // Apply environment variable overrides to YAML config
+
+        // Base URL: env var TARGET_URL overrides YAML config.baseUrl
+        let target_url = ConfigMerger::merge_string(
+            Some(yaml_config.config.base_url.clone()),
+            "TARGET_URL",
+            yaml_config.config.base_url.clone(),
+        );
+
+        // Workers: env var NUM_CONCURRENT_TASKS overrides YAML config.workers
+        let num_concurrent_tasks =
+            ConfigMerger::merge_workers(Some(yaml_config.config.workers), "NUM_CONCURRENT_TASKS");
+
+        // Timeout: env var REQUEST_TIMEOUT overrides YAML config.timeout
+        let _timeout_duration = ConfigMerger::merge_timeout(
+            Some(yaml_config.config.timeout.to_std_duration()?),
+            "REQUEST_TIMEOUT",
+        );
+
+        // Test duration: env var TEST_DURATION overrides YAML config.duration
+        let test_duration = ConfigMerger::merge_timeout(
+            Some(yaml_config.config.duration.to_std_duration()?),
+            "TEST_DURATION",
+        );
+
+        // Skip TLS verify: env var SKIP_TLS_VERIFY overrides YAML config.skipTlsVerify
+        let skip_tls_verify = ConfigMerger::merge_skip_tls_verify(
+            Some(yaml_config.config.skip_tls_verify),
+            "SKIP_TLS_VERIFY",
+        );
+
+        // Custom headers: env var CUSTOM_HEADERS overrides YAML config.customHeaders
+        let custom_headers = ConfigMerger::merge_optional_string(
+            yaml_config.config.custom_headers.clone(),
+            "CUSTOM_HEADERS",
+        );
+
+        // Load model: env vars can override YAML load model entirely
+        let load_model = Self::parse_load_model_from_yaml_with_env_override(&yaml_config.load)?;
+
+        // Request type: env var REQUEST_TYPE (default GET if not in YAML)
+        let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "GET".to_string());
+
+        // Send JSON: env var SEND_JSON
+        let send_json = env_bool("SEND_JSON", false);
+
+        let json_payload = if send_json {
+            Some(
+                env_required("JSON_PAYLOAD").map_err(|_| ConfigError::MissingLoadModelParams {
+                    model: "SEND_JSON=true".into(),
+                    required: "JSON_PAYLOAD".into(),
+                })?,
+            )
+        } else {
+            None
+        };
+
+        // Optional fields from env vars only (not in YAML yet)
+        let resolve_target_addr = env::var("RESOLVE_TARGET_ADDR").ok();
+        let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
+        let client_key_path = env::var("CLIENT_KEY_PATH").ok();
+
+        // Memory optimization settings (Issue #66, #68, #67, #70, #72)
+        let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
+        let percentile_sampling_rate: u8 = env_parse_or("PERCENTILE_SAMPLING_RATE", 100u8)?;
+        let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
+
+        // Histogram rotation interval (0 = disabled)
+        let histogram_rotation_interval =
+            if let Ok(interval_str) = env::var("HISTOGRAM_ROTATION_INTERVAL") {
+                parse_duration_string(&interval_str).map_err(|e| ConfigError::InvalidDuration {
+                    var: "HISTOGRAM_ROTATION_INTERVAL".into(),
+                    message: e,
+                })?
+            } else {
+                Duration::from_secs(0) // Disabled by default
+            };
+
+        // Auto-OOM protection settings (Issue #72)
+        let memory_warning_threshold_percent: f64 =
+            env_parse_or("MEMORY_WARNING_THRESHOLD_PERCENT", 80.0)?;
+        let memory_critical_threshold_percent: f64 =
+            env_parse_or("MEMORY_CRITICAL_THRESHOLD_PERCENT", 90.0)?;
+        let auto_disable_percentiles_on_warning =
+            env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
+
+        let config = Config {
+            target_url,
+            request_type,
+            send_json,
+            json_payload,
+            num_concurrent_tasks,
+            test_duration,
+            load_model,
+            skip_tls_verify,
+            resolve_target_addr,
+            client_cert_path,
+            client_key_path,
+            custom_headers,
+            percentile_tracking_enabled,
+            percentile_sampling_rate,
+            max_histogram_labels,
+            histogram_rotation_interval,
+            memory_warning_threshold_percent,
+            memory_critical_threshold_percent,
+            auto_disable_percentiles_on_warning,
+        };
+
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Parse load model from YAML with environment variable overrides.
+    fn parse_load_model_from_yaml_with_env_override(
+        yaml_load: &crate::yaml_config::YamlLoadModel,
+    ) -> Result<LoadModel, ConfigError> {
+        // Check if LOAD_MODEL_TYPE env var is set - if so, use env-based parsing
+        if let Ok(_model_type) = env::var("LOAD_MODEL_TYPE") {
+            return Self::parse_load_model("2h"); // Use env-based parsing
+        }
+
+        // Otherwise, convert YAML load model to LoadModel
+        let base_load_model = yaml_load.to_load_model()?;
+
+        // Apply environment variable overrides to specific load model parameters
+        match base_load_model {
+            LoadModel::Rps { target_rps } => {
+                // TARGET_RPS can override YAML target
+                let final_rps =
+                    ConfigMerger::merge_rps(Some(target_rps), "TARGET_RPS").unwrap_or(target_rps);
+                Ok(LoadModel::Rps {
+                    target_rps: final_rps,
+                })
+            }
+            LoadModel::RampRps {
+                min_rps,
+                max_rps,
+                ramp_duration,
+            } => {
+                // MIN_RPS, MAX_RPS, RAMP_DURATION can override YAML values
+                let final_min =
+                    ConfigMerger::merge_rps(Some(min_rps), "MIN_RPS").unwrap_or(min_rps);
+                let final_max =
+                    ConfigMerger::merge_rps(Some(max_rps), "MAX_RPS").unwrap_or(max_rps);
+                let final_duration =
+                    ConfigMerger::merge_timeout(Some(ramp_duration), "RAMP_DURATION");
+                Ok(LoadModel::RampRps {
+                    min_rps: final_min,
+                    max_rps: final_max,
+                    ramp_duration: final_duration,
+                })
+            }
+            LoadModel::DailyTraffic {
+                min_rps,
+                mid_rps,
+                max_rps,
+                cycle_duration,
+                morning_ramp_ratio,
+                peak_sustain_ratio,
+                mid_decline_ratio,
+                mid_sustain_ratio,
+                evening_decline_ratio,
+            } => {
+                // DAILY_MIN_RPS, DAILY_MID_RPS, DAILY_MAX_RPS can override YAML
+                let final_min =
+                    ConfigMerger::merge_rps(Some(min_rps), "DAILY_MIN_RPS").unwrap_or(min_rps);
+                let final_mid =
+                    ConfigMerger::merge_rps(Some(mid_rps), "DAILY_MID_RPS").unwrap_or(mid_rps);
+                let final_max =
+                    ConfigMerger::merge_rps(Some(max_rps), "DAILY_MAX_RPS").unwrap_or(max_rps);
+                let final_cycle =
+                    ConfigMerger::merge_timeout(Some(cycle_duration), "DAILY_CYCLE_DURATION");
+                Ok(LoadModel::DailyTraffic {
+                    min_rps: final_min,
+                    mid_rps: final_mid,
+                    max_rps: final_max,
+                    cycle_duration: final_cycle,
+                    morning_ramp_ratio,
+                    peak_sustain_ratio,
+                    mid_decline_ratio,
+                    mid_sustain_ratio,
+                    evening_decline_ratio,
+                })
+            }
+            LoadModel::Concurrent => Ok(LoadModel::Concurrent),
+        }
+    }
+
     /// Loads configuration from environment variables.
     pub fn from_env() -> Result<Self, ConfigError> {
         let target_url = env_required("TARGET_URL")?;
 
-        let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "POST".to_string());
+        let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "GET".to_string());
 
         let send_json = env_bool("SEND_JSON", false);
 
@@ -115,6 +333,30 @@ impl Config {
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
         let custom_headers = env::var("CUSTOM_HEADERS").ok();
 
+        // Memory optimization settings (Issue #66, #68, #67, #70, #72)
+        let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
+        let percentile_sampling_rate: u8 = env_parse_or("PERCENTILE_SAMPLING_RATE", 100u8)?;
+        let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
+
+        // Histogram rotation interval (0 = disabled)
+        let histogram_rotation_interval =
+            if let Ok(interval_str) = env::var("HISTOGRAM_ROTATION_INTERVAL") {
+                parse_duration_string(&interval_str).map_err(|e| ConfigError::InvalidDuration {
+                    var: "HISTOGRAM_ROTATION_INTERVAL".into(),
+                    message: e,
+                })?
+            } else {
+                Duration::from_secs(0) // Disabled by default
+            };
+
+        // Auto-OOM protection settings (Issue #72)
+        let memory_warning_threshold_percent: f64 =
+            env_parse_or("MEMORY_WARNING_THRESHOLD_PERCENT", 80.0)?;
+        let memory_critical_threshold_percent: f64 =
+            env_parse_or("MEMORY_CRITICAL_THRESHOLD_PERCENT", 90.0)?;
+        let auto_disable_percentiles_on_warning =
+            env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
+
         let config = Config {
             target_url,
             request_type,
@@ -128,6 +370,13 @@ impl Config {
             client_cert_path,
             client_key_path,
             custom_headers,
+            percentile_tracking_enabled,
+            percentile_sampling_rate,
+            max_histogram_labels,
+            histogram_rotation_interval,
+            memory_warning_threshold_percent,
+            memory_critical_threshold_percent,
+            auto_disable_percentiles_on_warning,
         };
 
         config.validate()?;
@@ -293,6 +542,17 @@ impl Config {
             return Err(ConfigError::IncompleteMtls);
         }
 
+        // Validate percentile sampling rate (Issue #70)
+        if self.percentile_sampling_rate == 0 || self.percentile_sampling_rate > 100 {
+            return Err(ConfigError::InvalidValue {
+                var: "PERCENTILE_SAMPLING_RATE".into(),
+                message: format!(
+                    "Must be between 1 and 100 (got {})",
+                    self.percentile_sampling_rate
+                ),
+            });
+        }
+
         Ok(())
     }
 
@@ -312,6 +572,13 @@ impl Config {
             client_cert_path: None,
             client_key_path: None,
             custom_headers: None,
+            percentile_tracking_enabled: true,
+            percentile_sampling_rate: 100,
+            max_histogram_labels: 100,
+            histogram_rotation_interval: Duration::from_secs(0),
+            memory_warning_threshold_percent: 80.0,
+            memory_critical_threshold_percent: 90.0,
+            auto_disable_percentiles_on_warning: true,
         }
     }
 
@@ -323,6 +590,7 @@ impl Config {
             client_cert_path: self.client_cert_path.clone(),
             client_key_path: self.client_key_path.clone(),
             custom_headers: self.custom_headers.clone(),
+            pool_config: None, // Use default pool configuration
         }
     }
 
@@ -340,8 +608,46 @@ impl Config {
             skip_tls_verify = self.skip_tls_verify,
             mtls_enabled = mtls_enabled,
             custom_headers_count = custom_headers_count,
+            percentile_tracking = self.percentile_tracking_enabled,
             "Starting load test"
         );
+
+        if !self.percentile_tracking_enabled {
+            warn!(
+                "Percentile tracking is DISABLED - no latency percentiles will be collected. \
+                 This reduces memory usage for high-load tests. \
+                 Set PERCENTILE_TRACKING_ENABLED=true to enable."
+            );
+        } else {
+            info!(
+                max_histogram_labels = self.max_histogram_labels,
+                "Histogram label limit configured (Issue #68)"
+            );
+
+            if self.percentile_sampling_rate < 100 {
+                info!(
+                    sampling_rate_percent = self.percentile_sampling_rate,
+                    "Percentile sampling enabled (Issue #70) - recording {}% of requests",
+                    self.percentile_sampling_rate
+                );
+            }
+
+            if self.histogram_rotation_interval.as_secs() > 0 {
+                let interval_secs = self.histogram_rotation_interval.as_secs();
+                let interval_str = if interval_secs >= 3600 {
+                    format!("{}h", interval_secs / 3600)
+                } else if interval_secs >= 60 {
+                    format!("{}m", interval_secs / 60)
+                } else {
+                    format!("{}s", interval_secs)
+                };
+                info!(
+                    rotation_interval_secs = interval_secs,
+                    "Histogram rotation enabled (Issue #67) - histograms will reset every {}",
+                    interval_str
+                );
+            }
+        }
 
         if !parsed_headers.is_empty() {
             for (name, value) in parsed_headers.iter() {
@@ -351,6 +657,22 @@ impl Config {
                     "Custom header configured"
                 );
             }
+        }
+
+        // Auto-OOM protection status (Issue #72)
+        if self.auto_disable_percentiles_on_warning {
+            info!(
+                memory_warning_threshold = self.memory_warning_threshold_percent,
+                memory_critical_threshold = self.memory_critical_threshold_percent,
+                "Auto-OOM protection ENABLED (Issue #72) - will automatically disable percentiles if memory exceeds {}%",
+                self.memory_warning_threshold_percent
+            );
+        } else {
+            info!(
+                memory_warning_threshold = self.memory_warning_threshold_percent,
+                memory_critical_threshold = self.memory_critical_threshold_percent,
+                "Auto-OOM protection monitoring only (Issue #72) - will log warnings but NOT take automatic actions"
+            );
         }
     }
 }
@@ -407,7 +729,7 @@ mod tests {
 
         let config = Config::from_env().unwrap();
         assert_eq!(config.target_url, "https://example.com");
-        assert_eq!(config.request_type, "POST");
+        assert_eq!(config.request_type, "GET");
         assert!(!config.send_json);
         assert!(config.json_payload.is_none());
         assert_eq!(config.num_concurrent_tasks, 10);

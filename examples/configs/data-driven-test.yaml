@@ -1,0 +1,126 @@
+# Data-Driven Load Test Template
+#
+# Load test using external data files (CSV or JSON) for test data.
+# Perfect for testing with realistic user data or large datasets.
+#
+# Features:
+#   - Load test data from CSV/JSON files
+#   - Sequential, random, or cycle through data
+#   - Realistic user credentials and profiles
+#   - Parameterized requests using data variables
+#
+# Usage:
+#   1. Create data file (users.csv or users.json)
+#   2. rust-loadtest --config data-driven-test.yaml
+#
+# Data file examples:
+#   CSV: username,email,user_id
+#        john.doe,john@example.com,123
+#        jane.smith,jane@example.com,456
+#
+#   JSON: [{"username": "john.doe", "email": "john@example.com", "user_id": 123}]
+#
+# Customize:
+#   - Change data file path and format
+#   - Adjust iteration strategy (sequential, random, cycle)
+#   - Modify requests to use data variables
+
+version: "1.0"
+
+metadata:
+  name: "Data-Driven Load Test"
+  description: "Load test using external CSV/JSON data files"
+  author: "QA Team"
+  tags: ["data-driven", "csv", "json", "realistic-data"]
+
+config:
+  baseUrl: "https://api.example.com"
+  timeout: "30s"
+  workers: 20
+  duration: "15m"
+
+load:
+  model: "rps"
+  target: 50
+
+scenarios:
+  # Scenario using CSV data file
+  - name: "User Login with CSV Data"
+    weight: 50
+
+    # Load data from CSV file
+    dataFile:
+      path: "./examples/data/users.csv"
+      format: "csv"
+      strategy: "random"  # Options: sequential, random, cycle
+
+    steps:
+      - name: "User Login"
+        request:
+          method: "POST"
+          path: "/auth/login"
+          # Use variables from CSV: ${username}, ${email}, ${user_id}
+          body: '{"username": "${username}", "password": "test123"}'
+        assertions:
+          - type: statusCode
+            expected: 200
+        extract:
+          - type: jsonPath
+            name: "authToken"
+            jsonPath: "$.token"
+        thinkTime: "2s"
+
+      - name: "Get User Profile"
+        request:
+          method: "GET"
+          path: "/users/${user_id}"
+          headers:
+            Authorization: "Bearer ${authToken}"
+        assertions:
+          - type: statusCode
+            expected: 200
+          - type: jsonPath
+            path: "$.email"
+            expected: "${email}"
+        thinkTime: "3s"
+
+  # Scenario using JSON data file
+  - name: "Product Search with JSON Data"
+    weight: 50
+
+    # Load data from JSON file
+    dataFile:
+      path: "./examples/data/products.json"
+      format: "json"
+      strategy: "cycle"  # Cycle through all products
+
+    steps:
+      - name: "Search Product"
+        request:
+          method: "GET"
+          # Use variables from JSON: ${product_name}, ${category}, ${sku}
+          path: "/search?q=${product_name}&category=${category}"
+        assertions:
+          - type: statusCode
+            expected: 200
+        thinkTime: "2s"
+
+      - name: "Get Product Details"
+        request:
+          method: "GET"
+          path: "/products/${sku}"
+        assertions:
+          - type: statusCode
+            expected: 200
+          - type: jsonPath
+            path: "$.name"
+            expected: "${product_name}"
+        thinkTime: "3s"
+
+      - name: "Check Inventory"
+        request:
+          method: "GET"
+          path: "/inventory/${sku}"
+        assertions:
+          - type: statusCode
+            expected: 200

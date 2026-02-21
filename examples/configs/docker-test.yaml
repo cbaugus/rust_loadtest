@@ -1,0 +1,81 @@
+# Docker Test Configuration
+#
+# This configuration is designed to work with the docker-compose setup.
+# It tests the httpbin service running in the test-api container.
+#
+# Usage:
+#   docker-compose up
+#
+# Or to run manually:
+#   docker-compose run loadtest rust-loadtest --config /app/configs/docker-test.yaml
+
+version: "1.0"
+
+metadata:
+  name: "Docker Test"
+  description: "Quick test using docker-compose test API"
+  tags: ["docker", "test", "demo"]
+
+config:
+  # Uses httpbin service in docker-compose
+  baseUrl: "http://test-api"
+  timeout: "30s"
+  workers: 5
+  duration: "30s"
+
+load:
+  model: "rps"
+  target: 10
+
+scenarios:
+  - name: "HTTPBin Status Check"
+    weight: 40
+    steps:
+      - name: "Get Status 200"
+        request:
+          method: "GET"
+          path: "/status/200"
+        assertions:
+          - type: statusCode
+            expected: 200
+        thinkTime: "1s"
+
+  - name: "HTTPBin GET Request"
+    weight: 30
+    steps:
+      - name: "Get Request"
+        request:
+          method: "GET"
+          path: "/get"
+        assertions:
+          - type: statusCode
+            expected: 200
+        extract:
+          - type: jsonPath
+            name: "userAgent"
+            jsonPath: "$.headers.User-Agent"
+        thinkTime: "1s"
+
+  - name: "HTTPBin POST Request"
+    weight: 20
+    steps:
+      - name: "Post Data"
+        request:
+          method: "POST"
+          path: "/post"
+          body: '{"test": "data", "timestamp": "2024-01-01"}'
+        assertions:
+          - type: statusCode
+            expected: 200
+        thinkTime: "1s"
+
+  - name: "HTTPBin Delay Test"
+    weight: 10
+    steps:
+      - name: "Delayed Response"
+        request:
+          method: "GET"
+          path: "/delay/1"
+        assertions:
+          - type: statusCode
+            expected: 200

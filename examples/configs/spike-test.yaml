@@ -1,0 +1,149 @@
+# Spike Test Template
+#
+# Sudden traffic spike test to validate system resilience under rapid load changes.
+# Simulates scenarios like flash sales, viral content, or traffic surges.
+#
+# Purpose:
+#   - Test auto-scaling response time
+#   - Validate circuit breakers and rate limiting
+#   - Check system recovery after spike
+#   - Identify memory leaks under burst load
+#   - Test queue and cache behavior
+#
+# Usage:
+#   rust-loadtest --config spike-test.yaml
+#
+# Pattern:
+#   - Start with normal load
+#   - Sudden spike to very high load
+#   - Return to normal load
+#   - Observe system recovery
+#
+# Warning:
+#   Spikes can cause temporary service disruption. Use on test environments
+#   or during maintenance windows.
+#
+# Customize:
+#   - Adjust spike magnitude based on normal traffic
+#   - Modify spike duration
+#   - Add custom health check endpoints
+
+version: "1.0"
+
+metadata:
+  name: "Spike Test"
+  description: "Sudden traffic spike test for system resilience"
+  author: "Reliability Team"
+  tags: ["spike", "resilience", "auto-scaling", "burst-load"]
+
+config:
+  baseUrl: "https://api.example.com"
+  timeout: "60s"
+  workers: 150
+  duration: "30m"
+
+load:
+  # Concurrent model for sudden spike behavior
+  # Note: In a real spike test, you'd want to manually control
+  # the number of active workers over time
+  model: "concurrent"
+
+scenarios:
+  # Primary API endpoint (80% of spike traffic)
+  - name: "High-Traffic Endpoint"
+    weight: 80
+    steps:
+      - name: "Get Popular Resource"
+        request:
+          method: "GET"
+          path: "/api/popular/resource"
+        assertions:
+          - type: statusCode
+            expected: 200
+          - type: responseTime
+            max: "3s"  # Allow more time during spike
+        thinkTime:
+          min: "100ms"
+          max: "500ms"  # Shorter think time = more aggressive spike
+
+      - name: "Get Related Resources"
+        request:
+          method: "GET"
+          path: "/api/related?id=123"
+        assertions:
+          - type: statusCode
+            expected: 200
+
+  # Write operations during spike (15%)
+  - name: "Spike Write Operations"
+    weight: 15
+    steps:
+      - name: "Create Event"
+        request:
+          method: "POST"
+          path: "/api/events"
+          body: '{"type": "user_action", "timestamp": "2024-01-01T00:00:00Z"}'
+        assertions:
+          # Accept 429 (rate limited) or 503 (service unavailable) during spike
+          - type: statusCode
+            expected: 201
+          # Note: In real tests, you'd track these error rates
+        thinkTime:
+          min: "50ms"
+          max: "200ms"
+
+  # Health checks (5%)
+  - name: "System Health Check"
+    weight: 5
+    steps:
+      - name: "Check API Health"
+        request:
+          method: "GET"
+          path: "/health"
+        assertions:
+          - type: statusCode
+            expected: 200
+        thinkTime: "1s"
+
+      - name: "Check Database Health"
+        request:
+          method: "GET"
+          path: "/health/database"
+        assertions:
+          - type: statusCode
+            expected: 200
+
+# Spike Test Execution Plan:
+#
+# Phase 1: Normal Load (0-5 min)
+#   - Workers: 20
+#   - RPS: 50
+#   - Purpose: Establish baseline
+#
+# Phase 2: Spike (5-10 min)
+#   - Workers: 150
+#   - RPS: 500+
+#   - Purpose: Sudden load increase
+#
+# Phase 3: Recovery (10-20 min)
+#   - Workers: 20
+#   - RPS: 50
+#   - Purpose: System recovery observation
+#
+# Phase 4: Validation (20-30 min)
+#   - Workers: 20
+#   - RPS: 50
+#   - Purpose: Verify stable operation
+#
+# To implement this pattern:
+#   1. Start test with low workers
+#   2. Manually adjust workers during execution (or use hot-reload)
+#   3. Monitor system metrics (CPU, memory, response times)
+#   4. Track error rates and recovery time
+#
+# Expected Behavior:
+#   - Response times increase during spike
+#   - Rate limiting may activate
+#   - Auto-scaling should trigger
+#   - System should recover within 2-5 minutes
+#   - No persistent errors after recovery
