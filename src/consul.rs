@@ -69,7 +69,7 @@ impl ConsulClient {
         let port = self
             .health_addr
             .split(':')
-            .last()
+            .next_back()
             .unwrap_or("8080")
             .parse::<u16>()
             .unwrap_or(8080);
@@ -173,7 +173,7 @@ pub fn start_consul_tagging(handle: &crate::cluster::ClusterHandle) -> Option<Co
     let port: u16 = cfg
         .bind_addr
         .split(':')
-        .last()
+        .next_back()
         .unwrap_or("7000")
         .parse()
         .unwrap_or(7000);

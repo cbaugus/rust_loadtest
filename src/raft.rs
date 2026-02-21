@@ -189,7 +189,7 @@ impl RaftSnapshotBuilder<TypeConfig> for MemSnapshotBuilder {
 
         Ok(Snapshot {
             meta: SnapshotMeta {
-                last_log_id: self.last_applied.clone(),
+                last_log_id: self.last_applied,
                 last_membership: self.last_membership.clone(),
                 snapshot_id: snap_id,
             },
@@ -213,24 +213,20 @@ impl RaftStorage<TypeConfig> for MemStorage {
     // ── Vote ──────────────────────────────────────────────────────────────────
 
     async fn save_vote(&mut self, vote: &Vote<NodeId>) -> Result<(), StorageError<NodeId>> {
-        self.vote = Some(vote.clone());
+        self.vote = Some(*vote);
         Ok(())
     }
 
     async fn read_vote(&mut self) -> Result<Option<Vote<NodeId>>, StorageError<NodeId>> {
-        Ok(self.vote.clone())
+        Ok(self.vote)
     }
 
     // ── Log ───────────────────────────────────────────────────────────────────
 
     async fn get_log_state(&mut self) -> Result<LogState<TypeConfig>, StorageError<NodeId>> {
-        let last = self
-            .log
-            .values()
-            .next_back()
-            .map(|e| e.get_log_id().clone());
+        let last = self.log.values().next_back().map(|e| *e.get_log_id());
         Ok(LogState {
-            last_purged_log_id: self.last_purged.clone(),
+            last_purged_log_id: self.last_purged,
             last_log_id: last,
         })
     }
@@ -244,7 +240,7 @@ impl RaftStorage<TypeConfig> for MemStorage {
     }
 
     async fn read_committed(&mut self) -> Result<Option<LogId<NodeId>>, StorageError<NodeId>> {
-        Ok(self.committed.clone())
+        Ok(self.committed)
     }
 
     async fn get_log_reader(&mut self) -> Self::LogReader {
@@ -286,7 +282,7 @@ impl RaftStorage<TypeConfig> for MemStorage {
         &mut self,
     ) -> Result<(Option<LogId<NodeId>>, StoredMembership<NodeId, BasicNode>), StorageError<NodeId>>
     {
-        Ok((self.last_applied.clone(), self.last_membership.clone()))
+        Ok((self.last_applied, self.last_membership.clone()))
     }
 
     /// Apply committed entries to state machine (v1 method name, takes a slice).
@@ -297,7 +293,7 @@ impl RaftStorage<TypeConfig> for MemStorage {
         let mut responses = Vec::new();
 
         for entry in entries {
-            self.last_applied = Some(entry.get_log_id().clone());
+            self.last_applied = Some(*entry.get_log_id());
 
             match &entry.payload {
                 openraft::EntryPayload::Blank => {
@@ -324,7 +320,7 @@ impl RaftStorage<TypeConfig> for MemStorage {
                 },
                 openraft::EntryPayload::Membership(m) => {
                     self.last_membership =
-                        StoredMembership::new(Some(entry.get_log_id().clone()), m.clone());
+                        StoredMembership::new(Some(*entry.get_log_id()), m.clone());
                     responses.push(LoadTestResponse {
                         ok: true,
                         message: "membership change applied".to_string(),
@@ -338,7 +334,7 @@ impl RaftStorage<TypeConfig> for MemStorage {
 
     async fn get_snapshot_builder(&mut self) -> Self::SnapshotBuilder {
         MemSnapshotBuilder {
-            last_applied: self.last_applied.clone(),
+            last_applied: self.last_applied,
             last_membership: self.last_membership.clone(),
             current_config: self.current_config.clone(),
         }
@@ -363,7 +359,7 @@ impl RaftStorage<TypeConfig> for MemStorage {
             current_config: None,
         });
 
-        self.last_applied = meta.last_log_id.clone();
+        self.last_applied = meta.last_log_id;
         self.last_membership = meta.last_membership.clone();
         self.current_config = data.current_config;
         Ok(())
@@ -383,7 +379,6 @@ impl RaftStorage<TypeConfig> for MemStorage {
 /// Serialises openraft request types as JSON and transports them via the proto
 /// `payload: bytes` field of the `LoadTestCoordinator` service (Issue #46).
 pub struct GrpcNetwork {
-    target_node_id: NodeId,
     target_addr: String,
     client: Option<LoadTestCoordinatorClient<Channel>>,
 }
@@ -512,9 +507,8 @@ pub struct GrpcNetworkFactory;
 impl RaftNetworkFactory<TypeConfig> for GrpcNetworkFactory {
     type Network = GrpcNetwork;
 
-    async fn new_client(&mut self, target: NodeId, node: &BasicNode) -> Self::Network {
+    async fn new_client(&mut self, _target: NodeId, node: &BasicNode) -> Self::Network {
         GrpcNetwork {
-            target_node_id: target,
             target_addr: node.addr.clone(),
             client: None,
         }
