@@ -14,6 +14,7 @@ pub mod data_source;
 pub mod errors;
 pub mod executor;
 pub mod extractor;
+pub mod grpc;
 pub mod load_models;
 pub mod memory_guard;
 pub mod metrics;
