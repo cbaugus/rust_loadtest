@@ -288,8 +288,7 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     prometheus::default_registry().register(Box::new(HISTOGRAM_LABELS_EVICTED_TOTAL.clone()))?;
 
     // Test configuration metrics
-    prometheus::default_registry()
-        .register(Box::new(PERCENTILE_SAMPLING_RATE_PERCENT.clone()))?;
+    prometheus::default_registry().register(Box::new(PERCENTILE_SAMPLING_RATE_PERCENT.clone()))?;
     prometheus::default_registry().register(Box::new(WORKERS_CONFIGURED_TOTAL.clone()))?;
 
     Ok(())
