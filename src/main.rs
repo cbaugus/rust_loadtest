@@ -180,7 +180,7 @@ fn print_config_help() {
     );
     eprintln!();
     eprintln!("Optional environment variables:");
-    eprintln!("  REQUEST_TYPE            - HTTP method: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS (default: POST)");
+    eprintln!("  REQUEST_TYPE            - HTTP method: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS (default: GET)");
     eprintln!("  SEND_JSON               - Send JSON payload: true or false (default: false)");
     eprintln!(
         "  JSON_PAYLOAD            - JSON body for POST/PUT/PATCH requests (required if SEND_JSON=true)"

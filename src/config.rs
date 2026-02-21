@@ -147,8 +147,8 @@ impl Config {
         // Load model: env vars can override YAML load model entirely
         let load_model = Self::parse_load_model_from_yaml_with_env_override(&yaml_config.load)?;
 
-        // Request type: env var REQUEST_TYPE (default POST if not in YAML)
-        let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "POST".to_string());
+        // Request type: env var REQUEST_TYPE (default GET if not in YAML)
+        let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "GET".to_string());
 
         // Send JSON: env var SEND_JSON
         let send_json = env_bool("SEND_JSON", false);
@@ -299,7 +299,7 @@ impl Config {
     pub fn from_env() -> Result<Self, ConfigError> {
         let target_url = env_required("TARGET_URL")?;
 
-        let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "POST".to_string());
+        let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "GET".to_string());
 
         let send_json = env_bool("SEND_JSON", false);
 
@@ -729,7 +729,7 @@ mod tests {
 
         let config = Config::from_env().unwrap();
         assert_eq!(config.target_url, "https://example.com");
-        assert_eq!(config.request_type, "POST");
+        assert_eq!(config.request_type, "GET");
         assert!(!config.send_json);
         assert!(config.json_payload.is_none());
         assert_eq!(config.num_concurrent_tasks, 10);
