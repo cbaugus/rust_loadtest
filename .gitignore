@@ -16,3 +16,6 @@ Thumbs.db
 # Business documents (keep local only)
 PRODUCT_DESIGN.md
 BUSINESS_PLAN.md
+
+# Nomad job specs (local infrastructure, not part of the public repo)
+nomad/
