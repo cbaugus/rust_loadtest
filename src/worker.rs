@@ -57,8 +57,34 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         "Worker starting"
     );
 
+    // Stagger worker start times evenly across one target cycle.
+    // Without staggering all N workers fire simultaneously at t=0, creating burst
+    // waves that repeat every cycle — distorting RPS measurements and overloading
+    // the target. Spreading start times gives a smooth, continuous request rate.
+    let initial_rps = config
+        .load_model
+        .calculate_current_rps(0.0, config.test_duration.as_secs_f64());
+    let initial_stagger = if initial_rps > 0.0 && initial_rps.is_finite() {
+        let cycle_ms = (config.num_concurrent_tasks as f64 * 1000.0 / initial_rps).round() as u64;
+        let stagger_ms = (config.task_id as u64 * cycle_ms) / config.num_concurrent_tasks as u64;
+        Duration::from_millis(stagger_ms)
+    } else {
+        Duration::ZERO
+    };
+
+    // next_fire is the absolute time at which the worker should fire its next request.
+    // Using absolute time (sleep_until) instead of relative sleep (sleep(remaining_ms))
+    // eliminates integer truncation error and self-corrects for timer overshoot.
+    let mut next_fire = time::Instant::now() + initial_stagger;
+
     loop {
-        let elapsed_total_secs = Instant::now().duration_since(start_time).as_secs_f64();
+        // Wait until the next scheduled fire time.
+        // If the previous request ran long and next_fire is already in the past,
+        // sleep_until returns immediately — the worker naturally catches up.
+        time::sleep_until(next_fire).await;
+
+        let now = time::Instant::now();
+        let elapsed_total_secs = now.duration_since(start_time).as_secs_f64();
 
         // Check if the total test duration has passed
         if elapsed_total_secs >= config.test_duration.as_secs_f64() {
@@ -70,17 +96,25 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             break;
         }
 
-        // Calculate current target RPS
+        // Advance next_fire by one cycle based on the CURRENT target RPS.
+        // Doing this before the request means next_fire drifts forward by exactly
+        // one cycle period regardless of how long the request actually takes.
         let current_target_rps = config
             .load_model
             .calculate_current_rps(elapsed_total_secs, config.test_duration.as_secs_f64());
 
-        // Calculate delay per task to achieve the current_target_rps
-        let delay_ms = if current_target_rps > 0.0 {
-            (config.num_concurrent_tasks as f64 * 1000.0 / current_target_rps).round() as u64
+        if current_target_rps > 0.0 && current_target_rps.is_finite() {
+            let cycle_ms =
+                (config.num_concurrent_tasks as f64 * 1000.0 / current_target_rps).round() as u64;
+            next_fire += Duration::from_millis(cycle_ms);
         } else {
-            u64::MAX
-        };
+            // Concurrent model (f64::MAX) or 0 RPS: don't advance — sleep_until fires
+            // immediately next iteration (Concurrent) or we set a long pause (0 RPS).
+            if current_target_rps == 0.0 {
+                next_fire = now + Duration::from_secs(3600);
+            }
+            // For Concurrent (f64::MAX), next_fire stays in the past → fires immediately.
+        }
 
         // Track metrics
         CONCURRENT_REQUESTS.inc();
@@ -94,8 +128,9 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         match req.send().await {
             Ok(mut response) => {
                 let status = response.status().as_u16();
-                let status_str = status.to_string();
-                REQUEST_STATUS_CODES.with_label_values(&[&status_str]).inc();
+                // Use static strings to avoid a heap allocation on every request
+                let status_str = status_code_label(status);
+                REQUEST_STATUS_CODES.with_label_values(&[status_str]).inc();
 
                 // Categorize HTTP errors (Issue #34)
                 if let Some(category) = ErrorCategory::from_status_code(status) {
@@ -153,14 +188,39 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         // Record connection pool statistics (Issue #36)
         GLOBAL_POOL_STATS.record_request(actual_latency_ms);
 
-        // Apply the calculated delay
-        if delay_ms > 0 && delay_ms != u64::MAX {
-            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-        } else if delay_ms == u64::MAX {
-            // Sleep for a very long time if RPS is 0
-            tokio::time::sleep(Duration::from_secs(3600)).await;
-        }
-        // If delay_ms is 0, no sleep, burst as fast as possible.
+        // No explicit sleep here — sleep_until(next_fire) at the top of the next
+        // iteration handles all timing with sub-millisecond precision.
+    }
+}
+
+/// Returns a static string label for common HTTP status codes.
+///
+/// Avoids a heap `String` allocation on every request in the hot path.
+/// Uncommon codes fall back to "other" rather than allocating a unique string.
+fn status_code_label(code: u16) -> &'static str {
+    match code {
+        100 => "100",
+        200 => "200",
+        201 => "201",
+        204 => "204",
+        301 => "301",
+        302 => "302",
+        304 => "304",
+        400 => "400",
+        401 => "401",
+        403 => "403",
+        404 => "404",
+        405 => "405",
+        408 => "408",
+        409 => "409",
+        422 => "422",
+        429 => "429",
+        499 => "499",
+        500 => "500",
+        502 => "502",
+        503 => "503",
+        504 => "504",
+        _ => "other",
     }
 }
 
@@ -241,8 +301,25 @@ pub async fn run_scenario_worker(
         "Scenario worker starting"
     );
 
+    // Stagger worker start times evenly across one target cycle (same rationale as run_worker).
+    let initial_sps = config
+        .load_model
+        .calculate_current_rps(0.0, config.test_duration.as_secs_f64());
+    let initial_stagger = if initial_sps > 0.0 && initial_sps.is_finite() {
+        let cycle_ms = (config.num_concurrent_tasks as f64 * 1000.0 / initial_sps).round() as u64;
+        let stagger_ms = (config.task_id as u64 * cycle_ms) / config.num_concurrent_tasks as u64;
+        Duration::from_millis(stagger_ms)
+    } else {
+        Duration::ZERO
+    };
+
+    let mut next_fire = time::Instant::now() + initial_stagger;
+
     loop {
-        let elapsed_total_secs = Instant::now().duration_since(start_time).as_secs_f64();
+        time::sleep_until(next_fire).await;
+
+        let now = time::Instant::now();
+        let elapsed_total_secs = now.duration_since(start_time).as_secs_f64();
 
         // Check if the total test duration has passed
         if elapsed_total_secs >= config.test_duration.as_secs_f64() {
@@ -255,17 +332,18 @@ pub async fn run_scenario_worker(
             break;
         }
 
-        // Calculate current target RPS (scenarios per second in this case)
+        // Advance next_fire by one cycle based on current target SPS.
         let current_target_sps = config
             .load_model
             .calculate_current_rps(elapsed_total_secs, config.test_duration.as_secs_f64());
 
-        // Calculate delay per task to achieve the current_target_sps
-        let delay_ms = if current_target_sps > 0.0 {
-            (config.num_concurrent_tasks as f64 * 1000.0 / current_target_sps).round() as u64
-        } else {
-            u64::MAX
-        };
+        if current_target_sps > 0.0 && current_target_sps.is_finite() {
+            let cycle_ms =
+                (config.num_concurrent_tasks as f64 * 1000.0 / current_target_sps).round() as u64;
+            next_fire += Duration::from_millis(cycle_ms);
+        } else if current_target_sps == 0.0 {
+            next_fire = now + Duration::from_secs(3600);
+        }
 
         // Create new cookie-enabled client for this virtual user
         // This ensures cookie isolation between scenario executions
@@ -317,13 +395,6 @@ pub async fn run_scenario_worker(
             std::time::Duration::from_millis(result.total_time_ms),
         );
 
-        // Apply the calculated delay between scenario executions
-        if delay_ms > 0 && delay_ms != u64::MAX {
-            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-        } else if delay_ms == u64::MAX {
-            // Sleep for a very long time if SPS is 0
-            tokio::time::sleep(Duration::from_secs(3600)).await;
-        }
-        // If delay_ms is 0, no sleep, execute scenarios as fast as possible
+        // No explicit sleep — sleep_until(next_fire) at the top handles timing.
     }
 }

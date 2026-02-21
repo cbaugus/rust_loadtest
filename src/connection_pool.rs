@@ -19,14 +19,22 @@ pub struct PoolConfig {
 
     /// TCP keepalive duration
     pub tcp_keepalive: Option<Duration>,
+
+    /// Disable Nagle's algorithm for lower latency at high RPS
+    pub tcp_nodelay: bool,
+
+    /// Per-request timeout — prevents hung connections from accumulating memory
+    pub request_timeout: Duration,
 }
 
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
             max_idle_per_host: 32,
-            idle_timeout: Duration::from_secs(90),
+            idle_timeout: Duration::from_secs(30), // Reduced from 90s to free kernel buffers sooner
             tcp_keepalive: Some(Duration::from_secs(60)),
+            tcp_nodelay: true, // Disable Nagle for lower latency at high RPS
+            request_timeout: Duration::from_secs(30), // Prevent hung connections accumulating memory
         }
     }
 }
@@ -35,6 +43,39 @@ impl PoolConfig {
     /// Create a new pool configuration.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Load pool configuration from environment variables with defaults.
+    ///
+    /// Reads: `POOL_MAX_IDLE_PER_HOST`, `POOL_IDLE_TIMEOUT_SECS`, `TCP_NODELAY`
+    pub fn from_env() -> Self {
+        let max_idle_per_host: usize = std::env::var("POOL_MAX_IDLE_PER_HOST")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(32);
+
+        let idle_timeout_secs: u64 = std::env::var("POOL_IDLE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30);
+
+        let tcp_nodelay: bool = std::env::var("TCP_NODELAY")
+            .unwrap_or_else(|_| "true".to_string())
+            .to_lowercase()
+            == "true";
+
+        let request_timeout_secs: u64 = std::env::var("REQUEST_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30);
+
+        Self {
+            max_idle_per_host,
+            idle_timeout: Duration::from_secs(idle_timeout_secs),
+            tcp_keepalive: Some(Duration::from_secs(60)),
+            tcp_nodelay,
+            request_timeout: Duration::from_secs(request_timeout_secs),
+        }
     }
 
     /// Set maximum idle connections per host.
@@ -55,11 +96,19 @@ impl PoolConfig {
         self
     }
 
+    /// Set TCP no-delay (disables Nagle's algorithm).
+    pub fn with_tcp_nodelay(mut self, nodelay: bool) -> Self {
+        self.tcp_nodelay = nodelay;
+        self
+    }
+
     /// Apply this configuration to a reqwest ClientBuilder.
     pub fn apply_to_builder(&self, builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
         let mut builder = builder
             .pool_max_idle_per_host(self.max_idle_per_host)
-            .pool_idle_timeout(self.idle_timeout);
+            .pool_idle_timeout(self.idle_timeout)
+            .tcp_nodelay(self.tcp_nodelay)
+            .timeout(self.request_timeout);
 
         if let Some(keepalive) = self.tcp_keepalive {
             builder = builder.tcp_keepalive(keepalive);
@@ -223,8 +272,10 @@ mod tests {
     fn test_pool_config_defaults() {
         let config = PoolConfig::default();
         assert_eq!(config.max_idle_per_host, 32);
-        assert_eq!(config.idle_timeout, Duration::from_secs(90));
+        assert_eq!(config.idle_timeout, Duration::from_secs(30));
         assert_eq!(config.tcp_keepalive, Some(Duration::from_secs(60)));
+        assert!(config.tcp_nodelay);
+        assert_eq!(config.request_timeout, Duration::from_secs(30));
     }
 
     #[test]

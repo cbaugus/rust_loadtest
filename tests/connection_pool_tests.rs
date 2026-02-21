@@ -12,8 +12,10 @@ fn test_pool_config_default() {
     let config = PoolConfig::default();
 
     assert_eq!(config.max_idle_per_host, 32);
-    assert_eq!(config.idle_timeout, Duration::from_secs(90));
+    assert_eq!(config.idle_timeout, Duration::from_secs(30));
     assert_eq!(config.tcp_keepalive, Some(Duration::from_secs(60)));
+    assert!(config.tcp_nodelay);
+    assert_eq!(config.request_timeout, Duration::from_secs(30));
 
     println!("✅ Pool configuration defaults work");
 }
