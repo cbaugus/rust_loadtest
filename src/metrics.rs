@@ -217,6 +217,28 @@ lazy_static::lazy_static! {
             .namespace(METRIC_NAMESPACE.as_str()),
         )
         .unwrap();
+
+    // === Test Configuration Metrics ===
+
+    pub static ref PERCENTILE_SAMPLING_RATE_PERCENT: Gauge =
+        Gauge::with_opts(
+            Opts::new(
+                "percentile_sampling_rate_percent",
+                "Configured percentile sampling rate (1-100 percent of requests recorded)",
+            )
+            .namespace(METRIC_NAMESPACE.as_str()),
+        )
+        .unwrap();
+
+    pub static ref WORKERS_CONFIGURED_TOTAL: Gauge =
+        Gauge::with_opts(
+            Opts::new(
+                "workers_configured_total",
+                "Number of concurrent worker tasks configured",
+            )
+            .namespace(METRIC_NAMESPACE.as_str()),
+        )
+        .unwrap();
 }
 
 /// Registers all metrics with the default Prometheus registry.
@@ -264,6 +286,11 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     prometheus::default_registry()
         .register(Box::new(MEMORY_CRITICAL_THRESHOLD_EXCEEDED_TOTAL.clone()))?;
     prometheus::default_registry().register(Box::new(HISTOGRAM_LABELS_EVICTED_TOTAL.clone()))?;
+
+    // Test configuration metrics
+    prometheus::default_registry()
+        .register(Box::new(PERCENTILE_SAMPLING_RATE_PERCENT.clone()))?;
+    prometheus::default_registry().register(Box::new(WORKERS_CONFIGURED_TOTAL.clone()))?;
 
     Ok(())
 }

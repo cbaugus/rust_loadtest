@@ -12,6 +12,7 @@ use rust_loadtest::memory_guard::{
 use rust_loadtest::metrics::{
     gather_metrics_string, register_metrics, start_metrics_server, update_memory_metrics,
     CONNECTION_POOL_IDLE_TIMEOUT_SECONDS, CONNECTION_POOL_MAX_IDLE,
+    PERCENTILE_SAMPLING_RATE_PERCENT, WORKERS_CONFIGURED_TOTAL,
 };
 use rust_loadtest::percentiles::{
     format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES,
@@ -330,6 +331,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         idle_timeout_secs = pool_config.idle_timeout.as_secs(),
         "Connection pool configuration initialized"
     );
+
+    // Initialize test configuration metrics
+    WORKERS_CONFIGURED_TOTAL.set(config.num_concurrent_tasks as f64);
+    PERCENTILE_SAMPLING_RATE_PERCENT.set(config.percentile_sampling_rate as f64);
 
     // Main loop to run for a duration
     let start_time = time::Instant::now();
