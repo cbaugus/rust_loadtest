@@ -2,6 +2,7 @@
 
 pub mod assertions;
 pub mod client;
+pub mod cluster;
 pub mod config;
 pub mod config_docs_generator;
 pub mod config_hot_reload;

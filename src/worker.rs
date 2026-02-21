@@ -46,6 +46,10 @@ pub struct WorkerConfig {
     pub num_concurrent_tasks: usize,
     pub percentile_tracking_enabled: bool,
     pub percentile_sampling_rate: u8,
+    /// Region label attached to all metrics emitted by this worker (Issue #45).
+    /// In standalone mode this is "local"; in cluster mode it is the node's
+    /// geographic region (e.g. "us-central1").
+    pub region: String,
 }
 
 /// Runs a single worker task that sends HTTP requests according to the load model.
@@ -117,8 +121,10 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         }
 
         // Track metrics
-        CONCURRENT_REQUESTS.inc();
-        REQUEST_TOTAL.inc();
+        CONCURRENT_REQUESTS
+            .with_label_values(&[&config.region])
+            .inc();
+        REQUEST_TOTAL.with_label_values(&[&config.region]).inc();
 
         let request_start_time = time::Instant::now();
 
@@ -130,12 +136,14 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
                 let status = response.status().as_u16();
                 // Use static strings to avoid a heap allocation on every request
                 let status_str = status_code_label(status);
-                REQUEST_STATUS_CODES.with_label_values(&[status_str]).inc();
+                REQUEST_STATUS_CODES
+                    .with_label_values(&[status_str, &config.region])
+                    .inc();
 
                 // Categorize HTTP errors (Issue #34)
                 if let Some(category) = ErrorCategory::from_status_code(status) {
                     REQUEST_ERRORS_BY_CATEGORY
-                        .with_label_values(&[category.label()])
+                        .with_label_values(&[category.label(), &config.region])
                         .inc();
                 }
 
@@ -150,16 +158,19 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
                     task_id = config.task_id,
                     url = %config.url,
                     status_code = status,
+                    region = %config.region,
                     "Request completed"
                 );
             }
             Err(e) => {
-                REQUEST_STATUS_CODES.with_label_values(&["error"]).inc();
+                REQUEST_STATUS_CODES
+                    .with_label_values(&["error", &config.region])
+                    .inc();
 
                 // Categorize request error (Issue #34)
                 let error_category = ErrorCategory::from_reqwest_error(&e);
                 REQUEST_ERRORS_BY_CATEGORY
-                    .with_label_values(&[error_category.label()])
+                    .with_label_values(&[error_category.label(), &config.region])
                     .inc();
 
                 error!(
@@ -167,14 +178,19 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
                     url = %config.url,
                     error = %e,
                     error_category = %error_category.label(),
+                    region = %config.region,
                     "Request failed"
                 );
             }
         }
 
         let actual_latency_ms = request_start_time.elapsed().as_millis() as u64;
-        REQUEST_DURATION_SECONDS.observe(request_start_time.elapsed().as_secs_f64());
-        CONCURRENT_REQUESTS.dec();
+        REQUEST_DURATION_SECONDS
+            .with_label_values(&[&config.region])
+            .observe(request_start_time.elapsed().as_secs_f64());
+        CONCURRENT_REQUESTS
+            .with_label_values(&[&config.region])
+            .dec();
 
         // Record latency in percentile tracker (Issue #33, #66, #70, #72)
         // Check both config flag AND runtime flag (can be disabled by memory guard)
@@ -277,6 +293,8 @@ pub struct ScenarioWorkerConfig {
     pub num_concurrent_tasks: usize,
     pub percentile_tracking_enabled: bool,
     pub percentile_sampling_rate: u8,
+    /// Region label attached to all metrics emitted by this worker (Issue #45).
+    pub region: String,
 }
 
 /// Runs a scenario-based worker task that executes multi-step scenarios according to the load model.
