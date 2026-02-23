@@ -440,10 +440,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         let uri = format!("http://{}", addr);
                                         match tonic::transport::Endpoint::from_shared(uri)
                                             .map_err(|e| e.to_string())
-                                            .and_then(|ep| {
-                                                // synchronous conversion — connect is async
-                                                Ok(ep)
-                                            }) {
+                                        {
                                             Ok(ep) => match ep.connect().await {
                                                 Ok(ch) => {
                                                     let mut client =
