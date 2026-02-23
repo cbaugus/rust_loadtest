@@ -7,16 +7,21 @@ on:
     branches: [dev]
   workflow_dispatch:
 
+# Cancel any in-progress run for the same branch/PR on new push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: docker.io
   IMAGE_NAME: cbaugus/rust_loadtest
 
 jobs:
-  # Lint job - runs first to catch formatting/style issues early
+  # Lint job - runs in parallel with test to catch formatting/style issues early
   lint:
     name: Lint (rustfmt & clippy)
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Prevent runaway linting
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -50,12 +55,11 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-  # Test job - runs after lint passes with strict timeouts
+  # Test job - runs in parallel with lint
   test:
     name: Test Suite
     runs-on: ubuntu-latest
-    needs: lint
-    timeout-minutes: 15  # ⚠️ CRITICAL: Prevent tests from running forever
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -82,24 +86,19 @@ jobs:
             ${{ runner.os }}-cargo-build-test-
 
       - name: Run unit tests
-        run: |
-          # Run tests with timeout per test to catch hanging tests
-          # --test-threads=1 runs tests serially to avoid conflicts with global state
-          cargo test --lib --all-features --verbose -- --test-threads=1
+        run: cargo test --lib --all-features --verbose -- --test-threads=1
         timeout-minutes: 10
 
       - name: Run integration tests
-        run: |
-          # Integration tests may take longer, but still need timeout
-          cargo test --test '*' --all-features --verbose -- --test-threads=1
+        run: cargo test --test '*' --all-features --verbose -- --test-threads=1
         timeout-minutes: 10
 
-  # Build job - builds Docker image after tests pass
+  # Build job - only runs after BOTH lint and test pass
   build-docker:
     name: Build Docker Image
     runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'push'  # Only build on push, not PR
+    needs: [lint, test]
+    if: github.event_name == 'push'
     timeout-minutes: 20
     steps:
       - name: Checkout repository
@@ -120,9 +119,7 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            # Tag with dev for dev branch
             type=raw,value=dev
-            # Add SHA for traceability
             type=sha,prefix=dev-
 
       - name: Build and push Docker image
