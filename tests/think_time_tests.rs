@@ -103,10 +103,7 @@ async fn test_fixed_think_time() {
 
     println!("\nFixed Think Time Test:");
     println!("  Total duration: {}ms", total_ms);
-    println!(
-        "  Step 1 latency: {}ms (excludes think time)",
-        step1_ms
-    );
+    println!("  Step 1 latency: {}ms (excludes think time)", step1_ms);
     println!("  Step 2 latency: {}ms", step2_ms);
     println!("  Think time overhead: {}ms", think_overhead_ms);
     println!("  ✅ Think time does NOT count towards request latency");
