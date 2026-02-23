@@ -10,7 +10,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use rust_loadtest::client::build_client;
 use rust_loadtest::cluster::DiscoveryMode;
-use rust_loadtest::cluster::{start_health_server, ClusterHandle};
+use rust_loadtest::cluster::{start_health_server, ClusterHandle, NodeMetricsSnapshot};
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
 use rust_loadtest::consul::{resolve_consul_peers_with_retry, start_consul_tagging};
@@ -22,7 +22,8 @@ use rust_loadtest::metrics::CLUSTER_NODE_INFO;
 use rust_loadtest::metrics::{
     gather_metrics_string, register_metrics, start_metrics_server, update_memory_metrics,
     CONNECTION_POOL_IDLE_TIMEOUT_SECONDS, CONNECTION_POOL_MAX_IDLE,
-    PERCENTILE_SAMPLING_RATE_PERCENT, WORKERS_CONFIGURED_TOTAL,
+    PERCENTILE_SAMPLING_RATE_PERCENT, PROCESS_MEMORY_RSS_BYTES, REQUEST_ERRORS_BY_CATEGORY,
+    REQUEST_TOTAL, WORKERS_CONFIGURED_TOTAL,
 };
 use rust_loadtest::percentiles::{
     format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES,
@@ -414,6 +415,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     });
     info!("Memory monitoring started (updates every 10s)");
+
+    // Spawn health-endpoint metrics updater — refreshes per-node RPS, error
+    // rate, worker count, memory and CPU once per second so the loadtest-control
+    // web app can display live stats without scraping Prometheus.
+    {
+        use rust_loadtest::errors::ErrorCategory;
+        let metrics_handle = cluster_handle.clone();
+        let region = config.cluster.region.clone();
+        tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_secs(1));
+            let mut prev_requests: u64 = 0;
+            let mut prev_errors: u64 = 0;
+            // CPU tracking (Linux only) — tracks utime+stime jiffies
+            #[cfg(target_os = "linux")]
+            let mut prev_cpu_ticks: Option<u64> = None;
+
+            loop {
+                interval.tick().await;
+
+                // ── Request counter (monotonic) ──────────────────────────
+                let curr_requests = REQUEST_TOTAL.with_label_values(&[&region]).get();
+
+                // ── Error counter: sum all known categories ───────────────
+                let curr_errors: u64 = ErrorCategory::all()
+                    .iter()
+                    .map(|cat| {
+                        REQUEST_ERRORS_BY_CATEGORY
+                            .with_label_values(&[cat.label(), &region])
+                            .get()
+                    })
+                    .sum();
+
+                let delta_req = curr_requests.saturating_sub(prev_requests);
+                let delta_err = curr_errors.saturating_sub(prev_errors);
+                let rps = delta_req as f64;
+                let error_rate_pct = if delta_req > 0 {
+                    (delta_err as f64 / delta_req as f64) * 100.0
+                } else {
+                    0.0
+                };
+
+                // ── Workers & memory ─────────────────────────────────────
+                let workers = WORKERS_CONFIGURED_TOTAL.get() as u32;
+                let memory_mb = PROCESS_MEMORY_RSS_BYTES.get() / (1024.0 * 1024.0);
+
+                // ── CPU % (Linux only via procfs) ────────────────────────
+                // Reports percentage of one CPU core consumed by this process
+                // in the last second (100 = fully saturating one core).
+                // Computed from utime+stime delta in jiffies (CLK_TCK=100).
+                #[cfg(target_os = "linux")]
+                let cpu_pct = {
+                    use procfs::process::Process;
+                    let mut pct = 0.0_f64;
+                    if let Ok(me) = Process::myself() {
+                        if let Ok(stat) = me.stat() {
+                            let proc_ticks = stat.utime + stat.stime;
+                            if let Some(prev) = prev_cpu_ticks {
+                                // delta ticks / CLK_TCK (100) * 100 = pct of one core
+                                pct = proc_ticks.saturating_sub(prev) as f64;
+                            }
+                            prev_cpu_ticks = Some(proc_ticks);
+                        }
+                    }
+                    pct
+                };
+                #[cfg(not(target_os = "linux"))]
+                let cpu_pct = 0.0_f64;
+
+                metrics_handle.update_metrics(NodeMetricsSnapshot {
+                    rps,
+                    error_rate_pct,
+                    workers,
+                    memory_mb,
+                    cpu_pct,
+                });
+
+                prev_requests = curr_requests;
+                prev_errors = curr_errors;
+            }
+        });
+    }
 
     // Spawn histogram rotation task if enabled (Issue #67)
     if config.histogram_rotation_interval.as_secs() > 0 {

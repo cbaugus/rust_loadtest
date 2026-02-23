@@ -28,7 +28,7 @@
 //! | leader     | Elected Raft leader / test coordinator          |
 
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
@@ -247,6 +247,26 @@ impl NodeState {
     }
 }
 
+// ── Per-node runtime metrics ──────────────────────────────────────────────────
+
+/// Live runtime metrics for this node, updated every second by a background task.
+///
+/// Exposed via `/health/cluster` so the loadtest-control web app can display
+/// per-node stats without scraping Prometheus.
+#[derive(Clone, Debug, Default, serde::Serialize)]
+pub struct NodeMetricsSnapshot {
+    /// Requests per second (1-second rolling delta of the request counter).
+    pub rps: f64,
+    /// Error rate as a percentage of requests in the last second (0–100).
+    pub error_rate_pct: f64,
+    /// Number of concurrent worker tasks configured.
+    pub workers: u32,
+    /// Resident set size in megabytes.
+    pub memory_mb: f64,
+    /// CPU usage percentage (0–100). Computed from /proc on Linux; 0 elsewhere.
+    pub cpu_pct: f64,
+}
+
 // ── Cluster handle ────────────────────────────────────────────────────────────
 
 /// Shared cluster state handle — cheap to clone, safe to share across tasks.
@@ -258,6 +278,7 @@ impl NodeState {
 pub struct ClusterHandle {
     state: Arc<Mutex<NodeState>>,
     config: ClusterConfig,
+    metrics: Arc<RwLock<NodeMetricsSnapshot>>,
 }
 
 impl ClusterHandle {
@@ -272,6 +293,7 @@ impl ClusterHandle {
         Self {
             state: Arc::new(Mutex::new(initial_state)),
             config,
+            metrics: Arc::new(RwLock::new(NodeMetricsSnapshot::default())),
         }
     }
 
@@ -309,6 +331,18 @@ impl ClusterHandle {
     pub fn region(&self) -> &str {
         &self.config.region
     }
+
+    /// Returns the latest per-node runtime metrics snapshot.
+    pub fn metrics_snapshot(&self) -> NodeMetricsSnapshot {
+        self.metrics.read().unwrap().clone()
+    }
+
+    /// Replaces the per-node runtime metrics snapshot.
+    ///
+    /// Called every second by the background metrics updater task in `main.rs`.
+    pub fn update_metrics(&self, snapshot: NodeMetricsSnapshot) {
+        *self.metrics.write().unwrap() = snapshot;
+    }
 }
 
 // ── Health server ─────────────────────────────────────────────────────────────
@@ -333,6 +367,17 @@ struct HealthResponse {
     cluster_ready: bool,
     /// Number of known peers (populated by Raft in Issue #47; 0 until then).
     peers: usize,
+    // ── Per-node runtime metrics (updated every second) ───────────────────
+    /// Requests per second on this node.
+    rps: f64,
+    /// Error rate as a percentage of total requests (0–100).
+    error_rate_pct: f64,
+    /// Number of configured concurrent worker tasks.
+    workers: u32,
+    /// Resident set size in megabytes.
+    memory_mb: f64,
+    /// CPU usage percentage (0–100); 0 on non-Linux.
+    cpu_pct: f64,
 }
 
 async fn health_handler(
@@ -347,6 +392,7 @@ async fn health_handler(
     }
 
     let state = handle.state();
+    let m = handle.metrics_snapshot();
     let response = HealthResponse {
         state: state.as_str().to_string(),
         node_id: handle.config().node_id.clone(),
@@ -354,6 +400,11 @@ async fn health_handler(
         cluster_enabled: handle.config().enabled,
         cluster_ready: state.cluster_ready(),
         peers: 0, // will be populated in Issue #47
+        rps: m.rps,
+        error_rate_pct: m.error_rate_pct,
+        workers: m.workers,
+        memory_mb: m.memory_mb,
+        cpu_pct: m.cpu_pct,
     };
 
     let body = serde_json::to_string(&response).unwrap_or_else(|_| "{}".to_string());
