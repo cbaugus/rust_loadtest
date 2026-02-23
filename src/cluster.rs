@@ -263,6 +263,8 @@ pub struct NodeMetricsSnapshot {
     pub workers: u32,
     /// Resident set size in megabytes.
     pub memory_mb: f64,
+    /// Total memory available to this process (cgroup limit or system RAM), in MB.
+    pub total_memory_mb: f64,
     /// CPU usage percentage (0–100). Computed from /proc on Linux; 0 elsewhere.
     pub cpu_pct: f64,
 }
@@ -376,6 +378,8 @@ struct HealthResponse {
     workers: u32,
     /// Resident set size in megabytes.
     memory_mb: f64,
+    /// Total memory available (cgroup limit or system RAM) in megabytes.
+    total_memory_mb: f64,
     /// CPU usage percentage (0–100); 0 on non-Linux.
     cpu_pct: f64,
 }
@@ -404,6 +408,7 @@ async fn health_handler(
         error_rate_pct: m.error_rate_pct,
         workers: m.workers,
         memory_mb: m.memory_mb,
+        total_memory_mb: m.total_memory_mb,
         cpu_pct: m.cpu_pct,
     };
 

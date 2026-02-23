@@ -483,6 +483,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let workers = WORKERS_CONFIGURED_TOTAL.get() as u32;
                 let memory_mb = PROCESS_MEMORY_RSS_BYTES.get() / (1024.0 * 1024.0);
 
+                // ── Total memory limit (cgroup → system fallback) ─────────
+                // Mirror the logic in memory_guard::detect_memory_limit so the
+                // health endpoint can expose memory_used% without a Prometheus query.
+                let total_memory_mb: f64 = {
+                    // cgroup v2
+                    let v2 = std::fs::read_to_string("/sys/fs/cgroup/memory.max")
+                        .ok()
+                        .and_then(|s| {
+                            let t = s.trim();
+                            if t == "max" {
+                                None
+                            } else {
+                                t.parse::<u64>().ok()
+                            }
+                        });
+                    // cgroup v1
+                    let v1 = std::fs::read_to_string("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u64>().ok())
+                        .filter(|&b| b < u64::MAX / 2); // ignore sentinel "unlimited" values
+
+                    #[cfg(target_os = "linux")]
+                    let system = {
+                        use procfs::Meminfo;
+                        Meminfo::new().ok().map(|m| m.mem_total)
+                    };
+                    #[cfg(not(target_os = "linux"))]
+                    let system: Option<u64> = None;
+
+                    v2.or(v1)
+                        .or(system)
+                        .map(|bytes| bytes as f64 / (1024.0 * 1024.0))
+                        .unwrap_or(0.0)
+                };
+
                 // ── CPU % (Linux only via procfs) ────────────────────────
                 // Reports percentage of one CPU core consumed by this process
                 // in the last second (100 = fully saturating one core).
@@ -511,6 +546,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     error_rate_pct,
                     workers,
                     memory_mb,
+                    total_memory_mb,
                     cpu_pct,
                 });
 
