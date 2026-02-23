@@ -4,16 +4,19 @@ use mimalloc::MiMalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 use std::sync::{Arc, Mutex};
+use tokio::sync::{mpsc, watch};
 use tokio::time::{self, Duration};
 use tracing::{error, info};
 use tracing_subscriber::{fmt, EnvFilter};
 
 use rust_loadtest::client::build_client;
 use rust_loadtest::cluster::DiscoveryMode;
-use rust_loadtest::cluster::{start_health_server, ClusterHandle, NodeMetricsSnapshot};
+use rust_loadtest::cluster::{start_health_server, ClusterHandle, ConfigSubmission, NodeMetricsSnapshot};
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
 use rust_loadtest::consul::{resolve_consul_peers_with_retry, start_consul_tagging};
+use rust_loadtest::grpc::proto::load_test_coordinator_client::LoadTestCoordinatorClient;
+use rust_loadtest::grpc::proto::TestConfig as ProtoTestConfig;
 use rust_loadtest::grpc::{start_grpc_server, PeerClientPool};
 use rust_loadtest::memory_guard::{
     init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig,
@@ -32,6 +35,7 @@ use rust_loadtest::percentiles::{
 use rust_loadtest::raft::{node_id_from_str, start_raft_node};
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
+use rust_loadtest::yaml_config::YamlConfig;
 
 /// Initializes the tracing subscriber for structured logging.
 fn init_tracing() {
@@ -255,6 +259,16 @@ fn print_config_help() {
     eprintln!("  LOG_FORMAT              - Output format: json or default (human-readable)");
 }
 
+/// Worker pool managed by the config-watcher task (Issue #79).
+///
+/// Holds the stop-signal sender and the JoinHandles of config-watcher-spawned
+/// workers (not the initial startup workers — those hold a clone of the same
+/// `stop_tx` so they still receive the stop signal).
+struct WorkerPool {
+    stop_tx: watch::Sender<bool>,
+    handles: Vec<tokio::task::JoinHandle<()>>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Initialize tracing subscriber
@@ -308,11 +322,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ])
         .set(1.0);
 
+    // Stop-signal channel: shared by all workers.  The config-watcher task
+    // (cluster mode) sends `true` to drain workers before reconfiguration.
+    // In standalone mode the signal is never sent; workers self-terminate
+    // via the duration check.  (Issue #79)
+    let (worker_stop_tx, worker_stop_rx) = watch::channel(false);
+
+    // Worker pool managed by the config-watcher (cluster mode only).
+    // Initially empty — the startup workers hold stop_rx clones but are not
+    // tracked here; the stop signal propagates to them regardless.
+    let worker_pool = Arc::new(tokio::sync::Mutex::new(WorkerPool {
+        stop_tx: worker_stop_tx,
+        handles: Vec::new(),
+    }));
+
     if config.cluster.enabled {
-        // HTTP health endpoint (Consul polling)
+        // Config-submission channel: health server → main handler task.
+        // Created first so it can be passed to the health server.
+        let (config_sub_tx, mut config_sub_rx) = mpsc::unbounded_channel::<ConfigSubmission>();
+
+        // HTTP health + config-submission endpoint (Issues #45, #79)
         let health_handle = cluster_handle.clone();
+        let sub_tx_for_health = config_sub_tx.clone();
         tokio::spawn(async move {
-            start_health_server(health_handle).await;
+            start_health_server(health_handle, Some(sub_tx_for_health)).await;
         });
 
         // Consul service registration + tag updates (Issue #47).
@@ -376,6 +409,193 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tokio::spawn(async move {
             start_grpc_server(grpc_handle, Some(grpc_raft)).await;
         });
+
+        // ── Config-submission handler (Issue #79) ─────────────────────────
+        // Receives ConfigSubmission from the HTTP POST /cluster/config handler.
+        // On leader: commits directly via raft_node.set_config().
+        // On follower: proxies to the current leader's DistributeConfig gRPC.
+        {
+            let raft_for_sub = raft_node.clone();
+            let peers_for_sub = peers.clone();
+            tokio::spawn(async move {
+                while let Some(sub) = config_sub_rx.recv().await {
+                    let result: Result<(), String> = if raft_for_sub.is_leader() {
+                        raft_for_sub
+                            .set_config(sub.yaml, sub.version)
+                            .await
+                            .map_err(|e| e.to_string())
+                    } else {
+                        // Find the current leader and proxy via gRPC.
+                        let leader_id =
+                            raft_for_sub.raft.metrics().borrow().current_leader;
+                        match leader_id {
+                            Some(lid) if lid != raft_for_sub.node_id => {
+                                let addr = peers_for_sub
+                                    .iter()
+                                    .find(|(id, _)| *id == lid)
+                                    .map(|(_, a)| a.clone());
+                                match addr {
+                                    Some(addr) => {
+                                        let uri = format!("http://{}", addr);
+                                        match tonic::transport::Endpoint::from_shared(uri)
+                                            .map_err(|e| e.to_string())
+                                            .and_then(|ep| {
+                                                // synchronous conversion — connect is async
+                                                Ok(ep)
+                                            }) {
+                                            Ok(ep) => match ep.connect().await {
+                                                Ok(ch) => {
+                                                    let mut client =
+                                                        LoadTestCoordinatorClient::new(ch);
+                                                    client
+                                                        .distribute_config(ProtoTestConfig {
+                                                            yaml_content: sub.yaml,
+                                                            config_version: sub.version,
+                                                            start_at_unix_ms: 0,
+                                                        })
+                                                        .await
+                                                        .map(|_| ())
+                                                        .map_err(|e| e.to_string())
+                                                }
+                                                Err(e) => Err(format!(
+                                                    "gRPC connect to leader failed: {}",
+                                                    e
+                                                )),
+                                            },
+                                            Err(e) => Err(e),
+                                        }
+                                    }
+                                    None => Err(format!(
+                                        "leader node {} not found in peer list",
+                                        lid
+                                    )),
+                                }
+                            }
+                            _ => Err(
+                                "no leader elected yet — retry in a few seconds".to_string()
+                            ),
+                        }
+                    };
+                    let _ = sub.respond.send(result);
+                }
+            });
+        }
+
+        // ── Config-watcher / worker-pool reconfiguration (Issue #79) ──────
+        // Subscribes to the Raft watch channel (fixed in Issue #78).
+        // When a new config is committed:
+        //   1. Signals workers to stop (they exit cleanly between requests).
+        //   2. Waits 5 s for in-flight requests to finish.
+        //   3. Aborts any still-running workers.
+        //   4. Parses the new YAML and spawns a fresh worker pool.
+        {
+            let pool_for_watcher = worker_pool.clone();
+            let raft_for_watcher = raft_node.clone();
+            let client_for_watcher = client.clone();
+            let region_for_watcher = config.cluster.region.clone();
+            tokio::spawn(async move {
+                let mut config_rx = raft_for_watcher.config_receiver();
+                loop {
+                    if config_rx.changed().await.is_err() {
+                        break;
+                    }
+                    let yaml = match config_rx.borrow().clone() {
+                        Some(y) => y,
+                        None => continue,
+                    };
+
+                    // Parse YAML → Config (env-var overrides still apply).
+                    let new_cfg = match serde_yaml::from_str::<YamlConfig>(&yaml) {
+                        Ok(yaml_cfg) => {
+                            match Config::from_yaml_with_env_overrides(&yaml_cfg) {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    error!(error = %e, "Raft config YAML failed Config validation");
+                                    continue;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!(error = %e, "Failed to parse Raft config YAML");
+                            continue;
+                        }
+                    };
+
+                    info!(
+                        workers = new_cfg.num_concurrent_tasks,
+                        url = %new_cfg.target_url,
+                        load_model = ?new_cfg.load_model,
+                        "Raft config committed — draining worker pool (Issue #79)"
+                    );
+
+                    // Signal graceful stop (workers exit after current request).
+                    {
+                        let state = pool_for_watcher.lock().await;
+                        let _ = state.stop_tx.send(true);
+                    }
+                    // 5 s grace period for in-flight requests to complete.
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    // Abort any handles still running past the grace window.
+                    let stale: Vec<_> = pool_for_watcher
+                        .lock()
+                        .await
+                        .handles
+                        .drain(..)
+                        .collect();
+                    for h in stale {
+                        h.abort();
+                    }
+
+                    // Rebuild HTTP client in case TLS/pool config changed.
+                    let new_client =
+                        match rust_loadtest::client::build_client(&new_cfg.to_client_config()) {
+                            Ok(r) => r.client,
+                            Err(e) => {
+                                error!(
+                                    error = %e,
+                                    "Failed to build HTTP client for new config — reusing existing"
+                                );
+                                client_for_watcher.clone()
+                            }
+                        };
+
+                    let (new_stop_tx, new_stop_rx) = watch::channel(false);
+                    let new_start = time::Instant::now();
+                    let new_handles: Vec<_> = (0..new_cfg.num_concurrent_tasks)
+                        .map(|i| {
+                            let wc = WorkerConfig {
+                                task_id: i,
+                                url: new_cfg.target_url.clone(),
+                                request_type: new_cfg.request_type.clone(),
+                                send_json: new_cfg.send_json,
+                                json_payload: new_cfg.json_payload.clone(),
+                                test_duration: new_cfg.test_duration,
+                                load_model: new_cfg.load_model.clone(),
+                                num_concurrent_tasks: new_cfg.num_concurrent_tasks,
+                                percentile_tracking_enabled: new_cfg.percentile_tracking_enabled,
+                                percentile_sampling_rate: new_cfg.percentile_sampling_rate,
+                                region: region_for_watcher.clone(),
+                                stop_rx: new_stop_rx.clone(),
+                            };
+                            tokio::spawn(run_worker(new_client.clone(), wc, new_start))
+                        })
+                        .collect();
+
+                    {
+                        let mut state = pool_for_watcher.lock().await;
+                        state.stop_tx = new_stop_tx;
+                        state.handles = new_handles;
+                    }
+
+                    WORKERS_CONFIGURED_TOTAL.set(new_cfg.num_concurrent_tasks as f64);
+                    info!(
+                        workers = new_cfg.num_concurrent_tasks,
+                        url = %new_cfg.target_url,
+                        "Worker pool reconfigured from Raft config (Issue #79)"
+                    );
+                }
+            });
+        }
 
         // Outbound peer connections (PeerClientPool)
         if !config.cluster.nodes.is_empty() {
@@ -610,6 +830,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             percentile_tracking_enabled: config.percentile_tracking_enabled,
             percentile_sampling_rate: config.percentile_sampling_rate,
             region: config.cluster.region.clone(),
+            // Graceful-stop signal (Issue #79). In cluster mode the
+            // config-watcher fires this before replacing the worker pool.
+            // In standalone mode it is never fired; workers self-terminate
+            // via the test-duration check.
+            stop_rx: worker_stop_rx.clone(),
         };
 
         let client_clone = client.clone();

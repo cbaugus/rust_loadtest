@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use tokio::sync::watch;
 use tokio::time::{self, Duration, Instant};
 use tracing::{debug, error, info};
 
@@ -50,6 +51,10 @@ pub struct WorkerConfig {
     /// In standalone mode this is "local"; in cluster mode it is the node's
     /// geographic region (e.g. "us-central1").
     pub region: String,
+    /// Graceful-stop signal (Issue #79).  When the sender fires `true` the
+    /// worker finishes its current request and exits at the top of the next
+    /// loop iteration so no in-flight request is aborted.
+    pub stop_rx: watch::Receiver<bool>,
 }
 
 /// Runs a single worker task that sends HTTP requests according to the load model.
@@ -86,6 +91,13 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         // If the previous request ran long and next_fire is already in the past,
         // sleep_until returns immediately — the worker naturally catches up.
         time::sleep_until(next_fire).await;
+
+        // Graceful-stop check (Issue #79): exit between requests so no
+        // in-flight request is aborted mid-flight.
+        if *config.stop_rx.borrow() {
+            info!(task_id = config.task_id, "Worker received stop signal, exiting cleanly");
+            break;
+        }
 
         let now = time::Instant::now();
         let elapsed_total_secs = now.duration_since(start_time).as_secs_f64();

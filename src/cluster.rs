@@ -31,7 +31,8 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, RwLock};
 
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, Server};
+use hyper::{Body, Method, Request, Response, Server};
+use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
 // ── Discovery mode ────────────────────────────────────────────────────────────
@@ -347,6 +348,19 @@ impl ClusterHandle {
     }
 }
 
+// ── Config submission ─────────────────────────────────────────────────────────
+
+/// A config-change request received via `POST /cluster/config` (Issue #79).
+///
+/// The HTTP handler sends this on a channel and waits on `respond` for the
+/// result.  `main.rs` receives it, forwards to the Raft leader (directly or
+/// via gRPC proxy), and sends back `Ok(())` or an error string.
+pub struct ConfigSubmission {
+    pub yaml: String,
+    pub version: String,
+    pub respond: oneshot::Sender<Result<(), String>>,
+}
+
 // ── Health server ─────────────────────────────────────────────────────────────
 
 /// JSON body returned by `GET /health/cluster`.
@@ -387,47 +401,130 @@ struct HealthResponse {
 async fn health_handler(
     req: Request<Body>,
     handle: ClusterHandle,
+    config_tx: Option<mpsc::UnboundedSender<ConfigSubmission>>,
 ) -> Result<Response<Body>, hyper::Error> {
-    if req.uri().path() != "/health/cluster" {
-        return Ok(Response::builder()
+    match (req.method(), req.uri().path()) {
+        // ── GET /health/cluster ──────────────────────────────────────────────
+        (&Method::GET, "/health/cluster") => {
+            let state = handle.state();
+            let m = handle.metrics_snapshot();
+            let response = HealthResponse {
+                state: state.as_str().to_string(),
+                node_id: handle.config().node_id.clone(),
+                region: handle.region().to_string(),
+                cluster_enabled: handle.config().enabled,
+                cluster_ready: state.cluster_ready(),
+                peers: 0, // will be populated in Issue #47
+                rps: m.rps,
+                error_rate_pct: m.error_rate_pct,
+                workers: m.workers,
+                memory_mb: m.memory_mb,
+                total_memory_mb: m.total_memory_mb,
+                cpu_pct: m.cpu_pct,
+            };
+            let body = serde_json::to_string(&response).unwrap_or_else(|_| "{}".to_string());
+            Ok(Response::builder()
+                .status(200)
+                .header("Content-Type", "application/json")
+                .body(Body::from(body))
+                .unwrap())
+        }
+
+        // ── POST /cluster/config — submit a new test config (Issue #79) ──────
+        (&Method::POST, "/cluster/config") => {
+            let tx = match config_tx {
+                Some(t) => t,
+                None => {
+                    return Ok(Response::builder()
+                        .status(503)
+                        .body(Body::from(
+                            r#"{"ok":false,"error":"cluster mode not enabled"}"#,
+                        ))
+                        .unwrap())
+                }
+            };
+
+            let version = req
+                .headers()
+                .get("x-config-version")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("auto")
+                .to_string();
+
+            let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
+            let yaml = match String::from_utf8(body_bytes.to_vec()) {
+                Ok(s) => s,
+                Err(_) => {
+                    return Ok(Response::builder()
+                        .status(400)
+                        .body(Body::from(
+                            r#"{"ok":false,"error":"request body must be valid UTF-8"}"#,
+                        ))
+                        .unwrap())
+                }
+            };
+
+            let (respond_tx, respond_rx) = oneshot::channel();
+            if tx
+                .send(ConfigSubmission {
+                    yaml,
+                    version,
+                    respond: respond_tx,
+                })
+                .is_err()
+            {
+                return Ok(Response::builder()
+                    .status(503)
+                    .body(Body::from(
+                        r#"{"ok":false,"error":"config submission handler not running"}"#,
+                    ))
+                    .unwrap());
+            }
+
+            match respond_rx.await {
+                Ok(Ok(())) => Ok(Response::builder()
+                    .status(200)
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(r#"{"ok":true}"#))
+                    .unwrap()),
+                Ok(Err(e)) => Ok(Response::builder()
+                    .status(503)
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"ok":false,"error":"{}"}}"#,
+                        e.replace('"', "'")
+                    )))
+                    .unwrap()),
+                Err(_) => Ok(Response::builder()
+                    .status(500)
+                    .body(Body::from(
+                        r#"{"ok":false,"error":"config handler dropped response channel"}"#,
+                    ))
+                    .unwrap()),
+            }
+        }
+
+        // ── Everything else → 404 ────────────────────────────────────────────
+        _ => Ok(Response::builder()
             .status(404)
             .body(Body::from("not found"))
-            .unwrap());
+            .unwrap()),
     }
-
-    let state = handle.state();
-    let m = handle.metrics_snapshot();
-    let response = HealthResponse {
-        state: state.as_str().to_string(),
-        node_id: handle.config().node_id.clone(),
-        region: handle.region().to_string(),
-        cluster_enabled: handle.config().enabled,
-        cluster_ready: state.cluster_ready(),
-        peers: 0, // will be populated in Issue #47
-        rps: m.rps,
-        error_rate_pct: m.error_rate_pct,
-        workers: m.workers,
-        memory_mb: m.memory_mb,
-        total_memory_mb: m.total_memory_mb,
-        cpu_pct: m.cpu_pct,
-    };
-
-    let body = serde_json::to_string(&response).unwrap_or_else(|_| "{}".to_string());
-    Ok(Response::builder()
-        .status(200)
-        .header("Content-Type", "application/json")
-        .body(Body::from(body))
-        .unwrap())
 }
 
-/// Starts the cluster health check HTTP server.
+/// Starts the cluster health check HTTP server (Issue #79).
 ///
-/// Serves `GET /health/cluster` returning JSON with the node's current Raft
-/// state. Consul polls this endpoint to classify the node and update its
-/// DNS tags (`forming`, `follower`, `leader`).
+/// Serves:
+/// - `GET  /health/cluster`   — JSON node state (Consul polling)
+/// - `POST /cluster/config`   — Accept a new YAML test config and forward it
+///                              to the Raft leader via `config_tx`.
 ///
+/// `config_tx` is `Some` in cluster mode and `None` in standalone mode.
 /// All other paths return 404.
-pub async fn start_health_server(handle: ClusterHandle) {
+pub async fn start_health_server(
+    handle: ClusterHandle,
+    config_tx: Option<mpsc::UnboundedSender<ConfigSubmission>>,
+) {
     let addr: SocketAddr = handle
         .config()
         .health_addr
@@ -436,10 +533,12 @@ pub async fn start_health_server(handle: ClusterHandle) {
 
     let make_svc = make_service_fn(move |_conn| {
         let handle_clone = handle.clone();
+        let tx_clone = config_tx.clone();
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req| {
                 let handle_inner = handle_clone.clone();
-                async move { health_handler(req, handle_inner).await }
+                let tx_inner = tx_clone.clone();
+                async move { health_handler(req, handle_inner, tx_inner).await }
             }))
         }
     });
@@ -447,7 +546,7 @@ pub async fn start_health_server(handle: ClusterHandle) {
     let server = Server::bind(&addr).serve(make_svc);
     info!(
         addr = %addr,
-        "Cluster health endpoint started — GET /health/cluster"
+        "Cluster health endpoint started — GET /health/cluster, POST /cluster/config"
     );
 
     if let Err(e) = server.await {

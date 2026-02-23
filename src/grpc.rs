@@ -168,12 +168,29 @@ impl LoadTestCoordinator for LoadTestCoordinatorService {
         }))
     }
 
-    // ── Test coordination — stubbed until Issues #48 / #76 ───────────────
+    // ── Test coordination (Issue #79) ────────────────────────────────────
+    //
+    // DistributeConfig is the entry point for committing a new test config.
+    // On the leader it calls client_write; openraft returns ForwardToLeader
+    // if this node is not the leader, which we surface as an Internal error
+    // so the caller (main.rs submission handler or a follower proxy) can
+    // re-route to the correct peer.
 
-    async fn distribute_config(&self, _req: Request<TestConfig>) -> Result<Response<Ack>, Status> {
-        Err(Status::unimplemented(
-            "Config distribution not yet implemented — see Issue #76",
-        ))
+    async fn distribute_config(&self, req: Request<TestConfig>) -> Result<Response<Ack>, Status> {
+        let raft = self.raft.as_ref().ok_or_else(|| {
+            Status::unavailable("Cluster not enabled — cannot handle DistributeConfig")
+        })?;
+
+        let inner = req.into_inner();
+        raft.set_config(inner.yaml_content, inner.config_version)
+            .await
+            .map(|_| {
+                Response::new(Ack {
+                    ok: true,
+                    message: "config committed to Raft log".to_string(),
+                })
+            })
+            .map_err(|e| Status::internal(format!("Raft error: {}", e)))
     }
 
     async fn start_test(&self, _req: Request<StartRequest>) -> Result<Response<Ack>, Status> {
@@ -420,7 +437,7 @@ mod tests {
         assert!(resp.cluster_ready);
     }
 
-    // ── Stubbed RPCs return Unimplemented ─────────────────────────────────
+    // ── RPCs return Unavailable without a raft node ───────────────────────
 
     #[tokio::test]
     async fn raft_append_entries_unavailable_without_raft() {
@@ -443,14 +460,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn coordination_rpcs_are_unimplemented() {
+    async fn distribute_config_unavailable_without_raft() {
+        // distribute_config is now implemented (Issue #79) and requires a
+        // Raft node — without one it returns Unavailable, not Unimplemented.
         let svc = LoadTestCoordinatorService::new(standalone_handle());
-
         let err = svc
             .distribute_config(Request::new(TestConfig::default()))
             .await
             .unwrap_err();
-        assert_eq!(err.code(), tonic::Code::Unimplemented);
+        assert_eq!(err.code(), tonic::Code::Unavailable);
+    }
+
+    #[tokio::test]
+    async fn coordination_stubs_are_unimplemented() {
+        let svc = LoadTestCoordinatorService::new(standalone_handle());
 
         let err = svc
             .start_test(Request::new(StartRequest::default()))
