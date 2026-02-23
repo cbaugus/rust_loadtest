@@ -53,13 +53,25 @@ async fn test_fixed_think_time() {
         ],
     };
 
-    let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
-    let mut context = ScenarioContext::new();
-
-    let start = Instant::now();
-    let result = executor.execute(&scenario, &mut context).await;
-    let total_duration = start.elapsed();
+    // Retry up to 3 times to tolerate transient httpbin.org failures in CI.
+    let (result, total_duration) = {
+        let mut last_result = None;
+        let mut last_duration = Duration::default();
+        for attempt in 1..=3 {
+            let client = create_test_client();
+            let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+            let mut context = ScenarioContext::new();
+            let start = Instant::now();
+            let r = executor.execute(&scenario, &mut context).await;
+            last_duration = start.elapsed();
+            if r.success {
+                last_result = Some(r);
+                break;
+            }
+            eprintln!("Attempt {attempt}/3 failed — retrying");
+        }
+        (last_result.expect("All 3 attempts failed"), last_duration)
+    };
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps_completed, 2);
