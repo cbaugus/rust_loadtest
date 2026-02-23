@@ -343,14 +343,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             config.cluster.nodes.clone()
         };
 
-        let peers: Vec<(u64, String)> = peer_addrs
-            .into_iter()
-            .map(|addr| (node_id_from_str(&addr), addr))
-            .collect();
+        // Deduplicate: both the Nomad service block and the ConsulClient can
+        // register the same service, producing duplicate addresses in the catalog.
+        // Use a BTreeMap keyed by node ID so each physical node appears once.
+        use std::collections::BTreeMap;
+        let peers: Vec<(u64, String)> = {
+            let mut seen: BTreeMap<u64, String> = BTreeMap::new();
+            for addr in peer_addrs {
+                let id = node_id_from_str(&addr);
+                seen.entry(id).or_insert(addr);
+            }
+            seen.into_iter().collect()
+        };
 
         info!(
             mode = config.cluster.discovery_mode.as_str(),
             peers = peers.len(),
+            self_addr = config
+                .cluster
+                .self_addr
+                .as_deref()
+                .unwrap_or("(not set — using hostname)"),
             "Peer list resolved for Raft initialization"
         );
 
