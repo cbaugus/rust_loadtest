@@ -717,8 +717,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
                     #[cfg(target_os = "linux")]
                     let system = {
-                        use procfs::Meminfo;
-                        Meminfo::new().ok().map(|m| m.mem_total)
+                        use procfs::{Current, Meminfo};
+                        Meminfo::current().ok().map(|m| m.mem_total)
                     };
                     #[cfg(not(target_os = "linux"))]
                     let system: Option<u64> = None;
