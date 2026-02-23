@@ -375,7 +375,6 @@ async fn test_body_matches_regex_assertion() {
 }
 
 #[tokio::test]
-
 async fn test_header_exists_assertion_pass() {
     let scenario = Scenario {
         name: "Header Exists - Pass".to_string(),
@@ -394,11 +393,22 @@ async fn test_header_exists_assertion_pass() {
         }],
     };
 
-    let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
-    let mut context = ScenarioContext::new();
-
-    let result = executor.execute(&scenario, &mut context).await;
+    // Retry up to 3 times to tolerate transient httpbin.org failures in CI.
+    let result = {
+        let mut last = None;
+        for attempt in 1..=3 {
+            let client = create_test_client();
+            let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+            let mut context = ScenarioContext::new();
+            let r = executor.execute(&scenario, &mut context).await;
+            if r.success {
+                last = Some(r);
+                break;
+            }
+            eprintln!("Attempt {attempt}/3 failed — retrying");
+        }
+        last.expect("All 3 attempts failed")
+    };
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps[0].assertions_passed, 1);
