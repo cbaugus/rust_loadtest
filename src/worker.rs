@@ -95,7 +95,10 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         // Graceful-stop check (Issue #79): exit between requests so no
         // in-flight request is aborted mid-flight.
         if *config.stop_rx.borrow() {
-            info!(task_id = config.task_id, "Worker received stop signal, exiting cleanly");
+            info!(
+                task_id = config.task_id,
+                "Worker received stop signal, exiting cleanly"
+            );
             break;
         }
 

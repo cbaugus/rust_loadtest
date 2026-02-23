@@ -11,7 +11,9 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use rust_loadtest::client::build_client;
 use rust_loadtest::cluster::DiscoveryMode;
-use rust_loadtest::cluster::{start_health_server, ClusterHandle, ConfigSubmission, NodeMetricsSnapshot};
+use rust_loadtest::cluster::{
+    start_health_server, ClusterHandle, ConfigSubmission, NodeMetricsSnapshot,
+};
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
 use rust_loadtest::consul::{resolve_consul_peers_with_retry, start_consul_tagging};
@@ -426,8 +428,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                             .map_err(|e| e.to_string())
                     } else {
                         // Find the current leader and proxy via gRPC.
-                        let leader_id =
-                            raft_for_sub.raft.metrics().borrow().current_leader;
+                        let leader_id = raft_for_sub.raft.metrics().borrow().current_leader;
                         match leader_id {
                             Some(lid) if lid != raft_for_sub.node_id => {
                                 let addr = peers_for_sub
@@ -465,15 +466,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                             Err(e) => Err(e),
                                         }
                                     }
-                                    None => Err(format!(
-                                        "leader node {} not found in peer list",
-                                        lid
-                                    )),
+                                    None => {
+                                        Err(format!("leader node {} not found in peer list", lid))
+                                    }
                                 }
                             }
-                            _ => Err(
-                                "no leader elected yet — retry in a few seconds".to_string()
-                            ),
+                            _ => Err("no leader elected yet — retry in a few seconds".to_string()),
                         }
                     };
                     let _ = sub.respond.send(result);
@@ -506,15 +504,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
                     // Parse YAML → Config (env-var overrides still apply).
                     let new_cfg = match serde_yaml::from_str::<YamlConfig>(&yaml) {
-                        Ok(yaml_cfg) => {
-                            match Config::from_yaml_with_env_overrides(&yaml_cfg) {
-                                Ok(c) => c,
-                                Err(e) => {
-                                    error!(error = %e, "Raft config YAML failed Config validation");
-                                    continue;
-                                }
+                        Ok(yaml_cfg) => match Config::from_yaml_with_env_overrides(&yaml_cfg) {
+                            Ok(c) => c,
+                            Err(e) => {
+                                error!(error = %e, "Raft config YAML failed Config validation");
+                                continue;
                             }
-                        }
+                        },
                         Err(e) => {
                             error!(error = %e, "Failed to parse Raft config YAML");
                             continue;
@@ -536,12 +532,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     // 5 s grace period for in-flight requests to complete.
                     tokio::time::sleep(Duration::from_secs(5)).await;
                     // Abort any handles still running past the grace window.
-                    let stale: Vec<_> = pool_for_watcher
-                        .lock()
-                        .await
-                        .handles
-                        .drain(..)
-                        .collect();
+                    let stale: Vec<_> = pool_for_watcher.lock().await.handles.drain(..).collect();
                     for h in stale {
                         h.abort();
                     }
