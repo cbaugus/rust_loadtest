@@ -517,7 +517,7 @@ async fn health_handler(
 /// Serves:
 /// - `GET  /health/cluster`   — JSON node state (Consul polling)
 /// - `POST /cluster/config`   — Accept a new YAML test config and forward it
-///                              to the Raft leader via `config_tx`.
+///   to the Raft leader via `config_tx`.
 ///
 /// `config_tx` is `Some` in cluster mode and `None` in standalone mode.
 /// All other paths return 404.
