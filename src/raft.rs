@@ -582,9 +582,11 @@ pub async fn start_raft_node(handle: ClusterHandle, peers: Vec<(NodeId, String)>
     let config = Arc::new(
         openraft::Config {
             cluster_name: handle.config().consul_service_name.clone(),
-            heartbeat_interval: 250,
-            election_timeout_min: 750,
-            election_timeout_max: 1500,
+            // Generous timeouts so Raft survives CPU/memory pressure from the
+            // load test workers sharing the same Tokio runtime.
+            heartbeat_interval: 500,
+            election_timeout_min: 5_000,
+            election_timeout_max: 10_000,
             ..Default::default()
         }
         .validate()

@@ -417,17 +417,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Memory guard not started - percentile tracking disabled via config");
     }
 
-    // Spawn memory monitoring task (Issue #69)
+    // Spawn memory monitoring task (Issue #69).
+    // Also calls mi_collect() every 30s to return mimalloc arena pages to the
+    // OS — without this, mimalloc retains freed pages as allocator caches which
+    // shows up as ever-growing RSS under sustained high-throughput load.
     tokio::spawn(async move {
         let mut interval = time::interval(Duration::from_secs(10));
+        let mut collect_ticks: u32 = 0;
         loop {
             interval.tick().await;
             if let Err(e) = update_memory_metrics() {
                 error!(error = %e, "Failed to update memory metrics");
             }
+            collect_ticks += 1;
+            if collect_ticks % 3 == 0 {
+                // Every 30s: ask mimalloc to return cached pages to the OS.
+                // mi_collect(true) collects all arenas, not just the calling thread.
+                unsafe { libmimalloc_sys::mi_collect(true) };
+            }
         }
     });
-    info!("Memory monitoring started (updates every 10s)");
+    info!("Memory monitoring started (updates every 10s, mi_collect every 30s)");
 
     // Spawn health-endpoint metrics updater — refreshes per-node RPS, error
     // rate, worker count, memory and CPU once per second so the loadtest-control
