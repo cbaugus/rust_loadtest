@@ -292,7 +292,7 @@ pub async fn resolve_consul_peers_with_retry(
         if peers.len() >= min_peers {
             info!(
                 count = peers.len(),
-                min   = min_peers,
+                min = min_peers,
                 "Consul peer discovery complete"
             );
             return peers;
@@ -302,8 +302,8 @@ pub async fn resolve_consul_peers_with_retry(
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             warn!(
-                found   = peers.len(),
-                needed  = min_peers,
+                found = peers.len(),
+                needed = min_peers,
                 attempt = attempt,
                 "Consul peer discovery timed out — proceeding with what we have"
             );
@@ -311,8 +311,8 @@ pub async fn resolve_consul_peers_with_retry(
         }
 
         info!(
-            found   = peers.len(),
-            needed  = min_peers,
+            found = peers.len(),
+            needed = min_peers,
             attempt = attempt,
             remaining_secs = remaining.as_secs(),
             "Waiting for peers to register in Consul…"
@@ -363,14 +363,16 @@ mod tests {
             "ServiceID": "loadtest-cluster-node-1",
             "ServiceTags": ["forming"]
         }]);
-        let entries: Vec<CatalogEntry> =
-            serde_json::from_value(json_with_service_addr).unwrap();
+        let entries: Vec<CatalogEntry> = serde_json::from_value(json_with_service_addr).unwrap();
         let host = if entries[0].service_address.is_empty() {
             &entries[0].address
         } else {
             &entries[0].service_address
         };
-        assert_eq!(format!("{}:{}", host, entries[0].service_port), "10.0.1.5:7000");
+        assert_eq!(
+            format!("{}:{}", host, entries[0].service_port),
+            "10.0.1.5:7000"
+        );
 
         // ServiceAddress empty — should fall back to Address.
         let json_no_service_addr = serde_json::json!([{
@@ -382,14 +384,16 @@ mod tests {
             "ServiceID": "loadtest-cluster-node-2",
             "ServiceTags": ["forming"]
         }]);
-        let entries2: Vec<CatalogEntry> =
-            serde_json::from_value(json_no_service_addr).unwrap();
+        let entries2: Vec<CatalogEntry> = serde_json::from_value(json_no_service_addr).unwrap();
         let host2 = if entries2[0].service_address.is_empty() {
             &entries2[0].address
         } else {
             &entries2[0].service_address
         };
-        assert_eq!(format!("{}:{}", host2, entries2[0].service_port), "10.0.1.6:7000");
+        assert_eq!(
+            format!("{}:{}", host2, entries2[0].service_port),
+            "10.0.1.6:7000"
+        );
     }
 
     /// Verify that CLUSTER_SELF_ADDR drives this_node_id in the same way as
