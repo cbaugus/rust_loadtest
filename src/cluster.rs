@@ -102,6 +102,25 @@ pub struct ClusterConfig {
 
     /// Consul service name this node registers as.
     pub consul_service_name: String,
+
+    /// This node's own address as it will appear in the peer list — either
+    /// from `CLUSTER_NODES` (static) or the Consul catalog (Consul mode).
+    ///
+    /// **Must be set** when `CLUSTER_ENABLED=true` so Raft can derive a node
+    /// ID that is consistent with the peer list.  In Nomad, set this to
+    /// `{{ env "attr.unique.network.ip-address" }}:7000` in the job template.
+    ///
+    /// Falls back to `node_id` (HOSTNAME) if not provided, which causes the
+    /// node ID mismatch bug (#80) when peers are identified by IP:port.
+    pub self_addr: Option<String>,
+
+    /// Minimum number of *other* peers that must be visible before Raft
+    /// initialization is attempted (Consul discovery only).
+    ///
+    /// Set `CLUSTER_MIN_PEERS` to one less than the total cluster size.
+    /// Example: 3-node cluster → `CLUSTER_MIN_PEERS=2`.
+    /// Defaults to `1` (waits for at least one peer besides self).
+    pub min_peers: usize,
 }
 
 impl ClusterConfig {
@@ -146,6 +165,13 @@ impl ClusterConfig {
         let consul_service_name =
             std::env::var("CONSUL_SERVICE_NAME").unwrap_or_else(|_| "loadtest-cluster".to_string());
 
+        let self_addr = std::env::var("CLUSTER_SELF_ADDR").ok();
+
+        let min_peers = std::env::var("CLUSTER_MIN_PEERS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(1);
+
         Self {
             enabled,
             node_id,
@@ -156,6 +182,8 @@ impl ClusterConfig {
             nodes,
             consul_addr,
             consul_service_name,
+            self_addr,
+            min_peers,
         }
     }
 
@@ -172,6 +200,8 @@ impl ClusterConfig {
             nodes: vec![],
             consul_addr: "http://127.0.0.1:8500".to_string(),
             consul_service_name: "loadtest-cluster".to_string(),
+            self_addr: None,
+            min_peers: 1,
         }
     }
 }

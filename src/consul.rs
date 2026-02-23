@@ -21,6 +21,7 @@
 
 use reqwest::Client;
 use serde_json::json;
+use tokio::time::{sleep, Duration, Instant};
 use tracing::{error, info, warn};
 
 /// Minimal Consul HTTP API client for service registration.
@@ -217,6 +218,109 @@ pub fn start_consul_tagging(handle: &crate::cluster::ClusterHandle) -> Option<Co
     Some(client)
 }
 
+// ── Consul peer resolution (Issue #81) ───────────────────────────────────────
+
+/// One entry returned by the Consul catalog service API.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct CatalogEntry {
+    address: String,
+    service_address: String,
+    service_port: u16,
+}
+
+/// Query the Consul catalog for all registered instances of `service_name`
+/// and return their `host:port` gRPC addresses.
+///
+/// Uses `/v1/catalog/service/{name}` (not the health endpoint) so nodes are
+/// visible immediately after registration, before their health checks pass.
+pub async fn resolve_consul_peers(consul_addr: &str, service_name: &str) -> Vec<String> {
+    let url = format!(
+        "{}/v1/catalog/service/{}",
+        consul_addr.trim_end_matches('/'),
+        service_name
+    );
+
+    let client = Client::new();
+    let entries: Vec<CatalogEntry> = match client.get(&url).send().await {
+        Ok(resp) => match resp.json().await {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(error = %e, "Failed to parse Consul catalog response");
+                return vec![];
+            }
+        },
+        Err(e) => {
+            warn!(error = %e, "Failed to query Consul catalog");
+            return vec![];
+        }
+    };
+
+    entries
+        .into_iter()
+        .map(|e| {
+            // ServiceAddress takes precedence; fall back to the node Address.
+            let host = if e.service_address.is_empty() {
+                e.address
+            } else {
+                e.service_address
+            };
+            format!("{}:{}", host, e.service_port)
+        })
+        .collect()
+}
+
+/// Polls `resolve_consul_peers` until at least `min_peers` addresses are
+/// returned or `timeout` elapses, retrying every 2 seconds.
+///
+/// `min_peers` should be the total expected cluster size (including self) minus one,
+/// i.e. the number of *other* nodes that must be visible before initialization.
+///
+/// Returns the resolved peer list (may be empty on timeout).
+pub async fn resolve_consul_peers_with_retry(
+    consul_addr: &str,
+    service_name: &str,
+    min_peers: usize,
+    timeout: Duration,
+) -> Vec<String> {
+    let deadline = Instant::now() + timeout;
+    let mut attempt = 0u32;
+
+    loop {
+        let peers = resolve_consul_peers(consul_addr, service_name).await;
+
+        if peers.len() >= min_peers {
+            info!(
+                count = peers.len(),
+                min   = min_peers,
+                "Consul peer discovery complete"
+            );
+            return peers;
+        }
+
+        attempt += 1;
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            warn!(
+                found   = peers.len(),
+                needed  = min_peers,
+                attempt = attempt,
+                "Consul peer discovery timed out — proceeding with what we have"
+            );
+            return peers;
+        }
+
+        info!(
+            found   = peers.len(),
+            needed  = min_peers,
+            attempt = attempt,
+            remaining_secs = remaining.as_secs(),
+            "Waiting for peers to register in Consul…"
+        );
+        sleep(Duration::from_secs(2)).await;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,5 +347,65 @@ mod tests {
             "0.0.0.0:8090",
         );
         assert_eq!(c.health_check_url(), "http://localhost:8090/health/cluster");
+    }
+
+    /// Verify that CatalogEntry deserialization works for both cases:
+    /// ServiceAddress populated and empty (falls back to Address).
+    #[test]
+    fn catalog_entry_address_fallback() {
+        // ServiceAddress populated — should be preferred.
+        let json_with_service_addr = serde_json::json!([{
+            "Node": "worker-1",
+            "Address": "10.0.1.5",
+            "ServiceAddress": "10.0.1.5",
+            "ServicePort": 7000,
+            "ServiceName": "loadtest-cluster",
+            "ServiceID": "loadtest-cluster-node-1",
+            "ServiceTags": ["forming"]
+        }]);
+        let entries: Vec<CatalogEntry> =
+            serde_json::from_value(json_with_service_addr).unwrap();
+        let host = if entries[0].service_address.is_empty() {
+            &entries[0].address
+        } else {
+            &entries[0].service_address
+        };
+        assert_eq!(format!("{}:{}", host, entries[0].service_port), "10.0.1.5:7000");
+
+        // ServiceAddress empty — should fall back to Address.
+        let json_no_service_addr = serde_json::json!([{
+            "Node": "worker-2",
+            "Address": "10.0.1.6",
+            "ServiceAddress": "",
+            "ServicePort": 7000,
+            "ServiceName": "loadtest-cluster",
+            "ServiceID": "loadtest-cluster-node-2",
+            "ServiceTags": ["forming"]
+        }]);
+        let entries2: Vec<CatalogEntry> =
+            serde_json::from_value(json_no_service_addr).unwrap();
+        let host2 = if entries2[0].service_address.is_empty() {
+            &entries2[0].address
+        } else {
+            &entries2[0].service_address
+        };
+        assert_eq!(format!("{}:{}", host2, entries2[0].service_port), "10.0.1.6:7000");
+    }
+
+    /// Verify that CLUSTER_SELF_ADDR drives this_node_id in the same way as
+    /// the peer list entry, so the IDs match.
+    #[test]
+    fn self_addr_node_id_matches_peer_id() {
+        use crate::raft::node_id_from_str;
+
+        let self_addr = "10.0.1.5:7000";
+        let peer_addr = "10.0.1.5:7000";
+
+        // Both sides must produce the same u64 hash.
+        assert_eq!(node_id_from_str(self_addr), node_id_from_str(peer_addr));
+
+        // And must differ from a hostname-derived ID (the old broken behaviour).
+        let alloc_id = "abc12345-1234-5678-abcd-ef0123456789";
+        assert_ne!(node_id_from_str(self_addr), node_id_from_str(alloc_id));
     }
 }

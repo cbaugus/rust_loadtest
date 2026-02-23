@@ -1385,6 +1385,123 @@
       ],
       "title": "Request Duration Distribution (Histogram Buckets)",
       "type": "bargauge"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 80 },
+      "id": 25,
+      "options": {
+        "legend": { "calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by(region, node_id) (rate(rust_loadtest_requests_total[1m]))",
+          "legendFormat": "{{region}} / {{node_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Requests Per Second by Node / Region",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": {} },
+        "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 88 },
+      "id": 26,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "exemplars": { "color": "rgba(255,0,255,0.7)" },
+        "filterValues": { "le": 1e-9 },
+        "legend": { "show": true },
+        "rowsFrame": { "layout": "auto" },
+        "tooltip": { "mode": "multi", "yHistogram": false },
+        "yAxis": { "axisPlacement": "left", "reverse": false, "unit": "s" }
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "expr": "sum(rate(rust_loadtest_request_duration_seconds_bucket[1m])) by (le)",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Request Duration Heatmap",
+      "type": "heatmap"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 98 },
+      "id": 27,
+      "options": {
+        "legend": { "calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by(region, le) (rate(rust_loadtest_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p50 {{region}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by(region, le) (rate(rust_loadtest_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p95 {{region}}",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by(region, le) (rate(rust_loadtest_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p99 {{region}}",
+          "refId": "C"
+        }
+      ],
+      "title": "Latency Percentiles by Region",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -1402,6 +1519,6 @@
   "timezone": "",
   "title": "Rust LoadTest - Performance Dashboard",
   "uid": "rust-loadtest-dashboard",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }

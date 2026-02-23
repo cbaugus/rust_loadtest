@@ -12,7 +12,8 @@ use rust_loadtest::client::build_client;
 use rust_loadtest::cluster::{start_health_server, ClusterHandle};
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
-use rust_loadtest::consul::start_consul_tagging;
+use rust_loadtest::cluster::DiscoveryMode;
+use rust_loadtest::consul::{resolve_consul_peers_with_retry, start_consul_tagging};
 use rust_loadtest::grpc::{start_grpc_server, PeerClientPool};
 use rust_loadtest::memory_guard::{
     init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig,
@@ -313,19 +314,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             start_health_server(health_handle).await;
         });
 
-        // Consul service registration + tag updates (Issue #47)
+        // Consul service registration + tag updates (Issue #47).
+        // Register *before* resolving peers so this node is visible to others.
         start_consul_tagging(&cluster_handle);
 
-        // Build peer list: (node_id, addr) from CLUSTER_NODES
-        let peers: Vec<(u64, String)> = config
-            .cluster
-            .nodes
-            .iter()
-            .map(|addr| {
-                // Derive node IDs from address strings for stable identity.
-                (node_id_from_str(addr), addr.clone())
-            })
+        // Build the peer list used for Raft initialization (Issues #80 / #81).
+        //
+        // Static:  addresses come directly from CLUSTER_NODES.
+        // Consul:  query the Consul catalog and wait until min_peers others
+        //          have registered (with a 60-second timeout).
+        //
+        // In both cases peer IDs are derived from the address strings, which
+        // must match the ID this node derives from CLUSTER_SELF_ADDR.
+        let peer_addrs: Vec<String> =
+            if config.cluster.discovery_mode == DiscoveryMode::Consul {
+                // min_peers = CLUSTER_MIN_PEERS (default 1).
+                // For a 3-node cluster set CLUSTER_MIN_PEERS=2 so we wait for
+                // all three to register before electing a leader.
+                let min = config.cluster.min_peers + 1; // include self
+                resolve_consul_peers_with_retry(
+                    &config.cluster.consul_addr,
+                    &config.cluster.consul_service_name,
+                    min,
+                    tokio::time::Duration::from_secs(60),
+                )
+                .await
+            } else {
+                config.cluster.nodes.clone()
+            };
+
+        let peers: Vec<(u64, String)> = peer_addrs
+            .into_iter()
+            .map(|addr| (node_id_from_str(&addr), addr))
             .collect();
+
+        info!(
+            mode  = config.cluster.discovery_mode.as_str(),
+            peers = peers.len(),
+            "Peer list resolved for Raft initialization"
+        );
 
         // Raft node — embedded leader election (Issue #47)
         let raft_node = start_raft_node(cluster_handle.clone(), peers.clone()).await;

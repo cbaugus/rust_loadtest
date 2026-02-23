@@ -566,7 +566,18 @@ impl RaftNode {
 /// Spawns a background task watching `Raft::metrics()` to keep `ClusterHandle`
 /// in sync with Raft state (`Forming → Follower → Leader`).
 pub async fn start_raft_node(handle: ClusterHandle, peers: Vec<(NodeId, String)>) -> Arc<RaftNode> {
-    let this_node_id = node_id_from_str(&handle.config().node_id);
+    // Derive this node's ID from CLUSTER_SELF_ADDR when set (Issue #80).
+    // CLUSTER_SELF_ADDR must be the address string that appears in the peer list
+    // (either CLUSTER_NODES for static, or the Consul-resolved address for Consul mode)
+    // so that `this_node_id` matches one of the peer IDs and Raft can initialize.
+    // Falls back to CLUSTER_NODE_ID / HOSTNAME, but that causes a mismatch when
+    // peers are identified by IP:port strings.
+    let this_node_id = handle
+        .config()
+        .self_addr
+        .as_deref()
+        .map(node_id_from_str)
+        .unwrap_or_else(|| node_id_from_str(&handle.config().node_id));
 
     let config = Arc::new(
         openraft::Config {
