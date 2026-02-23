@@ -41,7 +41,7 @@ use openraft::{
     StoredMembership, TokioRuntime, Vote,
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use tokio::sync::watch;
 use tonic::transport::{Channel, Endpoint};
 use tracing::info;
 
@@ -108,11 +108,18 @@ pub struct MemStorage {
     last_membership: StoredMembership<NodeId, BasicNode>,
     pub current_config: Option<String>,
     snapshot: Option<Snapshot<TypeConfig>>,
+    /// Notifies `RaftNode` (and `main.rs`) whenever a `SetConfig` entry is
+    /// applied or a snapshot is installed.  The `Receiver` half is held by
+    /// `RaftNode::config_rx` so reads always reflect the live state machine.
+    config_tx: watch::Sender<Option<String>>,
 }
 
 impl MemStorage {
-    pub fn new() -> Self {
-        Self {
+    /// Create a new empty storage, returning the storage and a `Receiver` that
+    /// fires on every committed config change.
+    pub fn new() -> (Self, watch::Receiver<Option<String>>) {
+        let (config_tx, config_rx) = watch::channel(None);
+        let storage = Self {
             vote: None,
             log: BTreeMap::new(),
             committed: None,
@@ -121,13 +128,9 @@ impl MemStorage {
             last_membership: StoredMembership::default(),
             current_config: None,
             snapshot: None,
-        }
-    }
-}
-
-impl Default for MemStorage {
-    fn default() -> Self {
-        Self::new()
+            config_tx,
+        };
+        (storage, config_rx)
     }
 }
 
@@ -305,6 +308,7 @@ impl RaftStorage<TypeConfig> for MemStorage {
                 openraft::EntryPayload::Normal(req) => match req {
                     LoadTestRequest::SetConfig { yaml, version } => {
                         self.current_config = Some(yaml.clone());
+                        let _ = self.config_tx.send(Some(yaml.clone()));
                         info!(version = %version, "Applied test config from Raft log");
                         responses.push(LoadTestResponse {
                             ok: true,
@@ -362,6 +366,7 @@ impl RaftStorage<TypeConfig> for MemStorage {
         self.last_applied = meta.last_log_id;
         self.last_membership = meta.last_membership.clone();
         self.current_config = data.current_config;
+        let _ = self.config_tx.send(self.current_config.clone());
         Ok(())
     }
 
@@ -519,13 +524,15 @@ impl RaftNetworkFactory<TypeConfig> for GrpcNetworkFactory {
 
 /// A running Raft node.
 ///
-/// Wraps `openraft::Raft<TypeConfig>` plus a handle to the underlying state
-/// machine (via `Arc<Mutex<MemStorage>>`) so callers can read `current_config`.
+/// Wraps `openraft::Raft<TypeConfig>` plus a `watch::Receiver` that is
+/// driven by the real openraft state machine; callers read `current_config`
+/// (or subscribe via `config_receiver`) to observe committed configs.
 #[derive(Clone)]
 pub struct RaftNode {
     pub raft: Arc<RaftInstance>,
-    /// Shared storage — readable by callers to inspect the state machine.
-    storage: Arc<Mutex<MemStorage>>,
+    /// Watch receiver driven by the real openraft state machine.
+    /// Always reflects the last committed `SetConfig` entry.
+    config_rx: watch::Receiver<Option<String>>,
     pub node_id: NodeId,
 }
 
@@ -550,9 +557,15 @@ impl RaftNode {
             .map(|_| ())
     }
 
+    /// Returns a cloned `Receiver` that fires whenever a new config is
+    /// committed.  Use this in `main.rs` to drive worker reconfiguration.
+    pub fn config_receiver(&self) -> watch::Receiver<Option<String>> {
+        self.config_rx.clone()
+    }
+
     /// Returns the currently committed test config YAML, if any.
     pub async fn current_config(&self) -> Option<String> {
-        self.storage.lock().await.current_config.clone()
+        self.config_rx.borrow().clone()
     }
 }
 
@@ -593,13 +606,10 @@ pub async fn start_raft_node(handle: ClusterHandle, peers: Vec<(NodeId, String)>
         .expect("valid openraft config"),
     );
 
-    // Wrap storage in Arc<Mutex<>> so we can read it from RaftNode.
-    let storage_inner = Arc::new(Mutex::new(MemStorage::new()));
-
-    // openraft Adaptor splits the combined storage into (log_store, state_machine).
-    // It wraps the storage in its own Arc<RwLock<>> internally.
-    // We keep a separate Arc<Mutex<>> for our own reads of current_config.
-    let (log_store, state_machine) = Adaptor::new(MemStorage::new());
+    // Create the single MemStorage instance.  The watch Receiver is the only
+    // channel between openraft's state machine and RaftNode::current_config().
+    let (storage, config_rx) = MemStorage::new();
+    let (log_store, state_machine) = Adaptor::new(storage);
 
     let raft = Arc::new(
         openraft::Raft::new(
@@ -634,7 +644,7 @@ pub async fn start_raft_node(handle: ClusterHandle, peers: Vec<(NodeId, String)>
 
     let node = Arc::new(RaftNode {
         raft: raft.clone(),
-        storage: storage_inner,
+        config_rx,
         node_id: this_node_id,
     });
 
@@ -715,7 +725,7 @@ mod tests {
 
     #[tokio::test]
     async fn mem_storage_vote_roundtrip() {
-        let mut s = MemStorage::new();
+        let (mut s, _rx) = MemStorage::new();
         let vote = Vote::new(1, 42);
         s.save_vote(&vote).await.unwrap();
         assert_eq!(s.read_vote().await.unwrap(), Some(vote));
@@ -723,7 +733,7 @@ mod tests {
 
     #[tokio::test]
     async fn mem_storage_initial_log_state() {
-        let mut s = MemStorage::new();
+        let (mut s, _rx) = MemStorage::new();
         let state = s.get_log_state().await.unwrap();
         assert!(state.last_log_id.is_none());
         assert!(state.last_purged_log_id.is_none());
@@ -731,7 +741,7 @@ mod tests {
 
     #[tokio::test]
     async fn mem_storage_apply_set_config() {
-        let mut s = MemStorage::new();
+        let (mut s, mut rx) = MemStorage::new();
         assert!(s.current_config.is_none());
 
         // Build a synthetic Entry with a Normal payload.
@@ -747,19 +757,25 @@ mod tests {
         let resps = s.apply_to_state_machine(&[entry]).await.unwrap();
         assert!(resps[0].ok);
         assert_eq!(s.current_config.as_deref(), Some("workers: 5"));
+        // The watch channel must have been notified with the new config.
+        assert!(rx.has_changed().unwrap());
+        assert_eq!(rx.borrow_and_update().as_deref(), Some("workers: 5"));
     }
 
     #[tokio::test]
     async fn snapshot_roundtrip() {
-        let mut s = MemStorage::new();
+        let (mut s, _rx) = MemStorage::new();
         s.current_config = Some("workers: 10\n".into());
         let mut builder = s.get_snapshot_builder().await;
         let snap = builder.build_snapshot().await.unwrap();
 
-        let mut s2 = MemStorage::new();
+        let (mut s2, mut rx2) = MemStorage::new();
         s2.install_snapshot(&snap.meta, snap.snapshot)
             .await
             .unwrap();
         assert_eq!(s2.current_config.as_deref(), Some("workers: 10\n"));
+        // install_snapshot must also notify the watch channel.
+        assert!(rx2.has_changed().unwrap());
+        assert_eq!(rx2.borrow_and_update().as_deref(), Some("workers: 10\n"));
     }
 }
