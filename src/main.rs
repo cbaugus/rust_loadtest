@@ -430,7 +430,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 error!(error = %e, "Failed to update memory metrics");
             }
             collect_ticks += 1;
-            if collect_ticks % 3 == 0 {
+            if collect_ticks.is_multiple_of(3) {
                 // Every 30s: ask mimalloc to return cached pages to the OS.
                 // mi_collect(true) collects all arenas, not just the calling thread.
                 unsafe { libmimalloc_sys::mi_collect(true) };
