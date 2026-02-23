@@ -76,28 +76,39 @@ async fn test_fixed_think_time() {
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps_completed, 2);
 
-    // Total time should include the 500ms think time
+    let step1_ms = result.steps[0].response_time_ms;
+    let step2_ms = result.steps[1].response_time_ms;
+    let total_ms = total_duration.as_millis() as u64;
+
+    // Total time must include the 500ms think time on top of both requests.
     assert!(
-        total_duration.as_millis() >= 500,
+        total_ms >= 500,
         "Total duration {}ms should be at least 500ms (think time)",
-        total_duration.as_millis()
+        total_ms
     );
 
-    // But individual request metrics should NOT include think time
-    // Step 1 latency should be much less than 500ms
+    // The think time should appear as overhead ON TOP of the two step latencies.
+    // Regardless of how slow httpbin.org is, total ≈ step1 + 500ms + step2.
+    // Using 90% of think time (450ms) as the threshold to absorb scheduling jitter.
+    let think_overhead_ms = total_ms.saturating_sub(step1_ms + step2_ms);
     assert!(
-        result.steps[0].response_time_ms < 500,
-        "Step 1 latency {}ms should not include 500ms think time",
-        result.steps[0].response_time_ms
+        think_overhead_ms >= 450,
+        "Think time overhead should be ~500ms, got {}ms \
+         (total={}ms, step1={}ms, step2={}ms — think time not applied separately?)",
+        think_overhead_ms,
+        total_ms,
+        step1_ms,
+        step2_ms
     );
 
     println!("\nFixed Think Time Test:");
-    println!("  Total duration: {}ms", total_duration.as_millis());
+    println!("  Total duration: {}ms", total_ms);
     println!(
         "  Step 1 latency: {}ms (excludes think time)",
-        result.steps[0].response_time_ms
+        step1_ms
     );
-    println!("  Step 2 latency: {}ms", result.steps[1].response_time_ms);
+    println!("  Step 2 latency: {}ms", step2_ms);
+    println!("  Think time overhead: {}ms", think_overhead_ms);
     println!("  ✅ Think time does NOT count towards request latency");
 }
 
