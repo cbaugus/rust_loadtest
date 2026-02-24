@@ -255,6 +255,13 @@ fn print_config_help() {
     eprintln!("  CONSUL_ADDR             - Consul agent address (default: http://127.0.0.1:8500)");
     eprintln!("  CONSUL_SERVICE_NAME     - Consul service name (default: loadtest-cluster)");
     eprintln!();
+    eprintln!("Cluster config auto-fetch (Issue #76):");
+    eprintln!("  CLUSTER_CONFIG_SOURCE   - External config source: gcs or consul-kv (default: unset)");
+    eprintln!("  GCS_CONFIG_BUCKET       - GCS bucket name (required if CLUSTER_CONFIG_SOURCE=gcs)");
+    eprintln!("  GCS_CONFIG_OBJECT       - GCS object path, e.g. configs/prod.yaml");
+    eprintln!("  CONSUL_CONFIG_KEY       - Consul KV path (default: loadtest/config)");
+    eprintln!("  CLUSTER_CONFIG_TIMEOUT_SECS - Fetch timeout in seconds (default: 30)");
+    eprintln!();
     eprintln!("Logging configuration:");
     eprintln!("  RUST_LOG                - Log level: error, warn, info, debug, trace");
     eprintln!("                            Examples: RUST_LOG=info, RUST_LOG=rust_loadtest=debug");
@@ -420,12 +427,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let raft_for_sub = raft_node.clone();
             let peers_for_sub = peers.clone();
             tokio::spawn(async move {
+                // Timeout applied to every config commit or proxy call so the
+                // HTTP handler never blocks indefinitely (e.g. when Raft loses
+                // quorum during a rolling restart).
+                const COMMIT_TIMEOUT_SECS: u64 = 30;
+
                 while let Some(sub) = config_sub_rx.recv().await {
                     let result: Result<(), String> = if raft_for_sub.is_leader() {
-                        raft_for_sub
-                            .set_config(sub.yaml, sub.version)
-                            .await
-                            .map_err(|e| e.to_string())
+                        info!(version = %sub.version, "Committing config to Raft log (leader)");
+                        match tokio::time::timeout(
+                            Duration::from_secs(COMMIT_TIMEOUT_SECS),
+                            raft_for_sub.set_config(sub.yaml, sub.version),
+                        )
+                        .await
+                        {
+                            Ok(Ok(_)) => Ok(()),
+                            Ok(Err(e)) => Err(e.to_string()),
+                            Err(_) => Err(format!(
+                                "Raft commit timed out after {}s — \
+                                 cluster may have lost quorum, retry in a few seconds",
+                                COMMIT_TIMEOUT_SECS
+                            )),
+                        }
                     } else {
                         // Find the current leader and proxy via gRPC.
                         let leader_id = raft_for_sub.raft.metrics().borrow().current_leader;
@@ -437,6 +460,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     .map(|(_, a)| a.clone());
                                 match addr {
                                     Some(addr) => {
+                                        info!(
+                                            leader = %addr,
+                                            version = %sub.version,
+                                            "Proxying config submission to Raft leader"
+                                        );
                                         let uri = format!("http://{}", addr);
                                         match tonic::transport::Endpoint::from_shared(uri)
                                             .map_err(|e| e.to_string())
@@ -445,15 +473,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                                 Ok(ch) => {
                                                     let mut client =
                                                         LoadTestCoordinatorClient::new(ch);
-                                                    client
-                                                        .distribute_config(ProtoTestConfig {
+                                                    match tokio::time::timeout(
+                                                        Duration::from_secs(COMMIT_TIMEOUT_SECS),
+                                                        client.distribute_config(ProtoTestConfig {
                                                             yaml_content: sub.yaml,
                                                             config_version: sub.version,
                                                             start_at_unix_ms: 0,
-                                                        })
-                                                        .await
-                                                        .map(|_| ())
-                                                        .map_err(|e| e.to_string())
+                                                        }),
+                                                    )
+                                                    .await
+                                                    {
+                                                        Ok(Ok(_)) => Ok(()),
+                                                        Ok(Err(e)) => {
+                                                            // Translate gRPC failed_precondition
+                                                            // (ForwardToLeader) into a clean msg.
+                                                            let msg = e.message().to_string();
+                                                            if msg.starts_with("not the leader") {
+                                                                Err(format!(
+                                                                    "leader changed mid-request: \
+                                                                     {} — retry in a few seconds",
+                                                                    msg
+                                                                ))
+                                                            } else {
+                                                                Err(msg)
+                                                            }
+                                                        }
+                                                        Err(_) => Err(format!(
+                                                            "gRPC proxy to leader timed out \
+                                                             after {}s",
+                                                            COMMIT_TIMEOUT_SECS
+                                                        )),
+                                                    }
                                                 }
                                                 Err(e) => Err(format!(
                                                     "gRPC connect to leader failed: {}",
@@ -468,9 +518,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     }
                                 }
                             }
-                            _ => Err("no leader elected yet — retry in a few seconds".to_string()),
+                            _ => Err(
+                                "no leader elected yet — retry in a few seconds".to_string(),
+                            ),
                         }
                     };
+                    if let Err(ref e) = result {
+                        error!(error = %e, "Config submission failed");
+                    }
                     let _ = sub.respond.send(result);
                 }
             });
@@ -581,6 +636,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         url = %new_cfg.target_url,
                         "Worker pool reconfigured from Raft config (Issue #79)"
                     );
+                }
+            });
+        }
+
+        // ── Leader config auto-fetch (Issue #76) ──────────────────────────
+        if let Some(config_source) =
+            rust_loadtest::config_source::ConfigSource::from_env()
+        {
+            let raft_for_fetch = raft_node.clone();
+            let client_for_fetch = client.clone();
+            tokio::spawn(async move {
+                let timeout_secs = std::env::var("CLUSTER_CONFIG_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let mut metrics_rx = raft_for_fetch.raft.metrics();
+                let mut was_leader = false;
+                loop {
+                    if metrics_rx.changed().await.is_err() {
+                        break;
+                    }
+                    let is_leader = metrics_rx.borrow().current_leader
+                        == Some(raft_for_fetch.node_id);
+                    if is_leader && !was_leader {
+                        match tokio::time::timeout(
+                            Duration::from_secs(timeout_secs),
+                            config_source.fetch(&client_for_fetch),
+                        )
+                        .await
+                        {
+                            Ok(Ok(yaml)) => {
+                                let secs = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
+                                let version = format!("auto-{}", secs);
+                                match raft_for_fetch.set_config(yaml, version).await {
+                                    Ok(_) => info!(
+                                        "Leader committed auto-fetched config (Issue #76)"
+                                    ),
+                                    Err(e) => {
+                                        error!(error = %e, "Failed to commit fetched config")
+                                    }
+                                }
+                            }
+                            Ok(Err(e)) => {
+                                error!(error = %e, "Config fetch from external source failed")
+                            }
+                            Err(_) => error!(
+                                timeout_secs,
+                                "Config fetch timed out"
+                            ),
+                        }
+                    }
+                    was_leader = is_leader;
                 }
             });
         }

@@ -29,6 +29,7 @@ use tonic::{Request, Response, Status, Streaming};
 use tracing::{error, info, warn};
 
 use crate::cluster::ClusterHandle;
+use openraft::error::ClientWriteError;
 use crate::raft::{RaftNode, TypeConfig};
 
 // ── Generated protobuf / gRPC code ───────────────────────────────────────────
@@ -171,10 +172,10 @@ impl LoadTestCoordinator for LoadTestCoordinatorService {
     // ── Test coordination (Issue #79) ────────────────────────────────────
     //
     // DistributeConfig is the entry point for committing a new test config.
-    // On the leader it calls client_write; openraft returns ForwardToLeader
-    // if this node is not the leader, which we surface as an Internal error
-    // so the caller (main.rs submission handler or a follower proxy) can
-    // re-route to the correct peer.
+    // On the leader it calls client_write directly.  If this node is not the
+    // leader, openraft returns ForwardToLeader — we surface that as a
+    // structured 503 (not an opaque internal error) so the HTTP handler in
+    // main.rs can return a human-readable message to the operator.
 
     async fn distribute_config(&self, req: Request<TestConfig>) -> Result<Response<Ack>, Status> {
         let raft = self.raft.as_ref().ok_or_else(|| {
@@ -182,15 +183,30 @@ impl LoadTestCoordinator for LoadTestCoordinatorService {
         })?;
 
         let inner = req.into_inner();
-        raft.set_config(inner.yaml_content, inner.config_version)
-            .await
-            .map(|_| {
-                Response::new(Ack {
-                    ok: true,
-                    message: "config committed to Raft log".to_string(),
-                })
-            })
-            .map_err(|e| Status::internal(format!("Raft error: {}", e)))
+        match raft.set_config(inner.yaml_content, inner.config_version).await {
+            Ok(_) => Ok(Response::new(Ack {
+                ok: true,
+                message: "config committed to Raft log".to_string(),
+            })),
+            Err(e) => {
+                // Detect ForwardToLeader and return the leader address so the
+                // HTTP submission handler (main.rs) can surface a clean error.
+                use openraft::error::RaftError;
+                if let RaftError::APIError(ClientWriteError::ForwardToLeader(fwd)) = &e {
+                    let addr = fwd
+                        .leader_node
+                        .as_ref()
+                        .map(|n| n.addr.as_str())
+                        .unwrap_or("unknown");
+                    Err(Status::failed_precondition(format!(
+                        "not the leader — send to {}",
+                        addr
+                    )))
+                } else {
+                    Err(Status::internal(format!("Raft error: {}", e)))
+                }
+            }
+        }
     }
 
     async fn start_test(&self, _req: Request<StartRequest>) -> Result<Response<Ack>, Status> {

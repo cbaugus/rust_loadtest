@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 
 pub mod assertions;
+pub mod config_source;
 pub mod client;
 pub mod cluster;
 pub mod config;
