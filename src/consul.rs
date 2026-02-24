@@ -392,7 +392,10 @@ mod tests {
         } else {
             &entries[0].service.address
         };
-        assert_eq!(format!("{}:{}", host, entries[0].service.port), "10.0.1.5:7000");
+        assert_eq!(
+            format!("{}:{}", host, entries[0].service.port),
+            "10.0.1.5:7000"
+        );
 
         // Service.Address empty — should fall back to Node.Address.
         let json_no_service_addr = serde_json::json!([{
