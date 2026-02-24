@@ -256,8 +256,12 @@ fn print_config_help() {
     eprintln!("  CONSUL_SERVICE_NAME     - Consul service name (default: loadtest-cluster)");
     eprintln!();
     eprintln!("Cluster config auto-fetch (Issue #76):");
-    eprintln!("  CLUSTER_CONFIG_SOURCE   - External config source: gcs or consul-kv (default: unset)");
-    eprintln!("  GCS_CONFIG_BUCKET       - GCS bucket name (required if CLUSTER_CONFIG_SOURCE=gcs)");
+    eprintln!(
+        "  CLUSTER_CONFIG_SOURCE   - External config source: gcs or consul-kv (default: unset)"
+    );
+    eprintln!(
+        "  GCS_CONFIG_BUCKET       - GCS bucket name (required if CLUSTER_CONFIG_SOURCE=gcs)"
+    );
     eprintln!("  GCS_CONFIG_OBJECT       - GCS object path, e.g. configs/prod.yaml");
     eprintln!("  CONSUL_CONFIG_KEY       - Consul KV path (default: loadtest/config)");
     eprintln!("  CLUSTER_CONFIG_TIMEOUT_SECS - Fetch timeout in seconds (default: 30)");
@@ -518,9 +522,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     }
                                 }
                             }
-                            _ => Err(
-                                "no leader elected yet — retry in a few seconds".to_string(),
-                            ),
+                            _ => Err("no leader elected yet — retry in a few seconds".to_string()),
                         }
                     };
                     if let Err(ref e) = result {
@@ -641,9 +643,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
 
         // ── Leader config auto-fetch (Issue #76) ──────────────────────────
-        if let Some(config_source) =
-            rust_loadtest::config_source::ConfigSource::from_env()
-        {
+        if let Some(config_source) = rust_loadtest::config_source::ConfigSource::from_env() {
             let raft_for_fetch = raft_node.clone();
             let client_for_fetch = client.clone();
             tokio::spawn(async move {
@@ -657,8 +657,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     if metrics_rx.changed().await.is_err() {
                         break;
                     }
-                    let is_leader = metrics_rx.borrow().current_leader
-                        == Some(raft_for_fetch.node_id);
+                    let is_leader =
+                        metrics_rx.borrow().current_leader == Some(raft_for_fetch.node_id);
                     if is_leader && !was_leader {
                         match tokio::time::timeout(
                             Duration::from_secs(timeout_secs),
@@ -673,9 +673,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     .as_secs();
                                 let version = format!("auto-{}", secs);
                                 match raft_for_fetch.set_config(yaml, version).await {
-                                    Ok(_) => info!(
-                                        "Leader committed auto-fetched config (Issue #76)"
-                                    ),
+                                    Ok(_) => {
+                                        info!("Leader committed auto-fetched config (Issue #76)")
+                                    }
                                     Err(e) => {
                                         error!(error = %e, "Failed to commit fetched config")
                                     }
@@ -684,10 +684,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                             Ok(Err(e)) => {
                                 error!(error = %e, "Config fetch from external source failed")
                             }
-                            Err(_) => error!(
-                                timeout_secs,
-                                "Config fetch timed out"
-                            ),
+                            Err(_) => error!(timeout_secs, "Config fetch timed out"),
                         }
                     }
                     was_leader = is_leader;

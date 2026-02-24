@@ -1,13 +1,13 @@
 #![recursion_limit = "256"]
 
 pub mod assertions;
-pub mod config_source;
 pub mod client;
 pub mod cluster;
 pub mod config;
 pub mod config_docs_generator;
 pub mod config_hot_reload;
 pub mod config_merge;
+pub mod config_source;
 pub mod config_validation;
 pub mod config_version;
 pub mod connection_pool;

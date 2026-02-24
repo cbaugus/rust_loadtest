@@ -27,15 +27,9 @@ use tracing::{debug, instrument};
 #[derive(Debug, Clone)]
 pub enum ConfigSource {
     /// Google Cloud Storage — uses the GCE metadata service for ADC tokens.
-    Gcs {
-        bucket: String,
-        object: String,
-    },
+    Gcs { bucket: String, object: String },
     /// HashiCorp Consul KV — plain HTTP, no auth required in dev setups.
-    ConsulKv {
-        consul_addr: String,
-        key: String,
-    },
+    ConsulKv { consul_addr: String, key: String },
 }
 
 impl ConfigSource {
@@ -192,7 +186,10 @@ async fn fetch_consul_kv(
         .json()
         .await?;
 
-    let entry = entries.into_iter().next().ok_or(FetchError::EmptyKvResponse)?;
+    let entry = entries
+        .into_iter()
+        .next()
+        .ok_or(FetchError::EmptyKvResponse)?;
     let b64 = entry.value.ok_or(FetchError::MissingKvValue)?;
 
     let bytes = base64::engine::general_purpose::STANDARD.decode(b64.trim())?;
@@ -217,8 +214,16 @@ pub fn percent_encode(input: &str) -> String {
             }
             b => {
                 out.push('%');
-                out.push(char::from_digit((b >> 4) as u32, 16).unwrap().to_ascii_uppercase());
-                out.push(char::from_digit((b & 0xf) as u32, 16).unwrap().to_ascii_uppercase());
+                out.push(
+                    char::from_digit((b >> 4) as u32, 16)
+                        .unwrap()
+                        .to_ascii_uppercase(),
+                );
+                out.push(
+                    char::from_digit((b & 0xf) as u32, 16)
+                        .unwrap()
+                        .to_ascii_uppercase(),
+                );
             }
         }
     }
@@ -245,7 +250,10 @@ mod tests {
 
     #[test]
     fn percent_encode_spaces_and_special() {
-        assert_eq!(percent_encode("my config/v1 test.yaml"), "my%20config%2Fv1%20test.yaml");
+        assert_eq!(
+            percent_encode("my config/v1 test.yaml"),
+            "my%20config%2Fv1%20test.yaml"
+        );
     }
 
     // ── from_env ──────────────────────────────────────────────────────────────

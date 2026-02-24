@@ -29,8 +29,8 @@ use tonic::{Request, Response, Status, Streaming};
 use tracing::{error, info, warn};
 
 use crate::cluster::ClusterHandle;
-use openraft::error::ClientWriteError;
 use crate::raft::{RaftNode, TypeConfig};
+use openraft::error::ClientWriteError;
 
 // ── Generated protobuf / gRPC code ───────────────────────────────────────────
 
@@ -183,7 +183,10 @@ impl LoadTestCoordinator for LoadTestCoordinatorService {
         })?;
 
         let inner = req.into_inner();
-        match raft.set_config(inner.yaml_content, inner.config_version).await {
+        match raft
+            .set_config(inner.yaml_content, inner.config_version)
+            .await
+        {
             Ok(_) => Ok(Response::new(Ack {
                 ok: true,
                 message: "config committed to Raft log".to_string(),
