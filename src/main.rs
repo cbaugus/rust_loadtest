@@ -672,13 +672,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     .unwrap_or_default()
                                     .as_secs();
                                 let version = format!("auto-{}", secs);
-                                match raft_for_fetch.set_config(yaml, version).await {
-                                    Ok(_) => {
+                                match tokio::time::timeout(
+                                    Duration::from_secs(timeout_secs),
+                                    raft_for_fetch.set_config(yaml, version),
+                                )
+                                .await
+                                {
+                                    Ok(Ok(_)) => {
                                         info!("Leader committed auto-fetched config (Issue #76)")
                                     }
-                                    Err(e) => {
-                                        error!(error = %e, "Failed to commit fetched config")
+                                    Ok(Err(e)) => {
+                                        // Detect ForwardToLeader (stepped down mid-commit) and
+                                        // emit a clean message rather than raw openraft internals.
+                                        use openraft::error::{ClientWriteError, RaftError};
+                                        let msg = if let RaftError::APIError(
+                                            ClientWriteError::ForwardToLeader(ref fwd),
+                                        ) = e
+                                        {
+                                            let addr = fwd
+                                                .leader_node
+                                                .as_ref()
+                                                .map(|n| n.addr.as_str())
+                                                .unwrap_or("unknown");
+                                            format!(
+                                                "stepped down before commit completed \
+                                                 (new leader: {}) — will retry on next election",
+                                                addr
+                                            )
+                                        } else {
+                                            e.to_string()
+                                        };
+                                        error!(error = %msg, "Failed to commit fetched config");
                                     }
+                                    Err(_) => error!(
+                                        timeout_secs,
+                                        "Raft commit timed out after fetching config — \
+                                         cluster may have lost quorum"
+                                    ),
                                 }
                             }
                             Ok(Err(e)) => {
