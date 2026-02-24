@@ -220,38 +220,62 @@ pub fn start_consul_tagging(handle: &crate::cluster::ClusterHandle) -> Option<Co
 
 // ── Consul peer resolution (Issue #81) ───────────────────────────────────────
 
-/// One entry returned by the Consul catalog service API.
+/// Response shape from the Consul health service API (`/v1/health/service/{name}?passing=true`).
+///
+/// Using the health endpoint (not the catalog endpoint) ensures that only services
+/// whose health checks are currently passing are returned.  Stale registrations
+/// from crashed/stopped containers automatically drop out once their
+/// `DeregisterCriticalServiceAfter` window expires — and are invisible before
+/// that because their health checks are failing.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct CatalogEntry {
-    address: String,
-    service_address: String,
-    service_port: u16,
+struct HealthEntry {
+    node: HealthNode,
+    service: HealthService,
 }
 
-/// Query the Consul catalog for all registered instances of `service_name`
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct HealthNode {
+    address: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct HealthService {
+    address: String,
+    port: u16,
+}
+
+/// Query the Consul health API for all *passing* instances of `service_name`
 /// and return their `host:port` gRPC addresses.
 ///
-/// Uses `/v1/catalog/service/{name}` (not the health endpoint) so nodes are
-/// visible immediately after registration, before their health checks pass.
+/// Uses `/v1/health/service/{name}?passing=true` so only services whose health
+/// checks are currently passing are included.  This automatically excludes:
+/// - Stale registrations from crashed/restarted containers (failing HTTP check)
+/// - Services being deregistered (`DeregisterCriticalServiceAfter`)
+/// - Nodes that haven't finished starting up yet
+///
+/// During cluster startup the caller retries via [`resolve_consul_peers_with_retry`]
+/// so the slight delay until the first health check passes is acceptable.
 pub async fn resolve_consul_peers(consul_addr: &str, service_name: &str) -> Vec<String> {
     let url = format!(
-        "{}/v1/catalog/service/{}",
+        "{}/v1/health/service/{}?passing=true",
         consul_addr.trim_end_matches('/'),
         service_name
     );
 
     let client = Client::new();
-    let entries: Vec<CatalogEntry> = match client.get(&url).send().await {
+    let entries: Vec<HealthEntry> = match client.get(&url).send().await {
         Ok(resp) => match resp.json().await {
             Ok(v) => v,
             Err(e) => {
-                warn!(error = %e, "Failed to parse Consul catalog response");
+                warn!(error = %e, "Failed to parse Consul health response");
                 return vec![];
             }
         },
         Err(e) => {
-            warn!(error = %e, "Failed to query Consul catalog");
+            warn!(error = %e, "Failed to query Consul health API");
             return vec![];
         }
     };
@@ -260,12 +284,12 @@ pub async fn resolve_consul_peers(consul_addr: &str, service_name: &str) -> Vec<
         .into_iter()
         .map(|e| {
             // ServiceAddress takes precedence; fall back to the node Address.
-            let host = if e.service_address.is_empty() {
-                e.address
+            let host = if e.service.address.is_empty() {
+                e.node.address
             } else {
-                e.service_address
+                e.service.address
             };
-            format!("{}:{}", host, e.service_port)
+            format!("{}:{}", host, e.service.port)
         })
         .collect()
 }
@@ -349,49 +373,41 @@ mod tests {
         assert_eq!(c.health_check_url(), "http://localhost:8090/health/cluster");
     }
 
-    /// Verify that CatalogEntry deserialization works for both cases:
-    /// ServiceAddress populated and empty (falls back to Address).
+    /// Verify that HealthEntry deserialization works for both cases:
+    /// Service.Address populated and empty (falls back to Node.Address).
+    ///
+    /// The health API response shape (`/v1/health/service/{name}?passing=true`)
+    /// nests the address under `Node` and `Service` objects.
     #[test]
-    fn catalog_entry_address_fallback() {
-        // ServiceAddress populated — should be preferred.
+    fn health_entry_address_fallback() {
+        // Service.Address populated — should be preferred.
         let json_with_service_addr = serde_json::json!([{
-            "Node": "worker-1",
-            "Address": "10.0.1.5",
-            "ServiceAddress": "10.0.1.5",
-            "ServicePort": 7000,
-            "ServiceName": "loadtest-cluster",
-            "ServiceID": "loadtest-cluster-node-1",
-            "ServiceTags": ["forming"]
+            "Node": { "Node": "worker-1", "Address": "10.0.1.5" },
+            "Service": { "Address": "10.0.1.5", "Port": 7000 },
+            "Checks": []
         }]);
-        let entries: Vec<CatalogEntry> = serde_json::from_value(json_with_service_addr).unwrap();
-        let host = if entries[0].service_address.is_empty() {
-            &entries[0].address
+        let entries: Vec<HealthEntry> = serde_json::from_value(json_with_service_addr).unwrap();
+        let host = if entries[0].service.address.is_empty() {
+            &entries[0].node.address
         } else {
-            &entries[0].service_address
+            &entries[0].service.address
         };
-        assert_eq!(
-            format!("{}:{}", host, entries[0].service_port),
-            "10.0.1.5:7000"
-        );
+        assert_eq!(format!("{}:{}", host, entries[0].service.port), "10.0.1.5:7000");
 
-        // ServiceAddress empty — should fall back to Address.
+        // Service.Address empty — should fall back to Node.Address.
         let json_no_service_addr = serde_json::json!([{
-            "Node": "worker-2",
-            "Address": "10.0.1.6",
-            "ServiceAddress": "",
-            "ServicePort": 7000,
-            "ServiceName": "loadtest-cluster",
-            "ServiceID": "loadtest-cluster-node-2",
-            "ServiceTags": ["forming"]
+            "Node": { "Node": "worker-2", "Address": "10.0.1.6" },
+            "Service": { "Address": "", "Port": 7000 },
+            "Checks": []
         }]);
-        let entries2: Vec<CatalogEntry> = serde_json::from_value(json_no_service_addr).unwrap();
-        let host2 = if entries2[0].service_address.is_empty() {
-            &entries2[0].address
+        let entries2: Vec<HealthEntry> = serde_json::from_value(json_no_service_addr).unwrap();
+        let host2 = if entries2[0].service.address.is_empty() {
+            &entries2[0].node.address
         } else {
-            &entries2[0].service_address
+            &entries2[0].service.address
         };
         assert_eq!(
-            format!("{}:{}", host2, entries2[0].service_port),
+            format!("{}:{}", host2, entries2[0].service.port),
             "10.0.1.6:7000"
         );
     }
