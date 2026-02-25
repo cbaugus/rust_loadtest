@@ -10,6 +10,8 @@ use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{Assertion, RequestConfig, Scenario, ScenarioContext, Step};
 use std::collections::HashMap;
 use std::time::Duration;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // Public testing API - always available
 const HTTPBIN_URL: &str = "https://httpbin.org";
@@ -494,6 +496,18 @@ async fn test_multiple_assertions_all_pass() {
 #[tokio::test]
 
 async fn test_multiple_assertions_mixed_results() {
+    // Use a local mock server so assertion counts are deterministic regardless
+    // of httpbin.org availability or rate-limiting in CI.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"{"headers": {"Host": "localhost"}}"#),
+        )
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Multiple Assertions - Mixed".to_string(),
         weight: 1.0,
@@ -517,7 +531,7 @@ async fn test_multiple_assertions_mixed_results() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
