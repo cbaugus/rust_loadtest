@@ -303,7 +303,6 @@ impl Config {
             memory_warning_threshold_percent,
             memory_critical_threshold_percent,
             auto_disable_percentiles_on_warning,
-            scenarios: Some(yaml_config.scenarios.iter().map(|s| s.into()).collect()),
             cluster: ClusterConfig::from_env(),
         };
 
