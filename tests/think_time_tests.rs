@@ -9,8 +9,8 @@ use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{RequestConfig, Scenario, ScenarioContext, Step, ThinkTime};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-
-const BASE_URL: &str = "https://httpbin.org";
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn create_test_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -20,8 +20,25 @@ fn create_test_client() -> reqwest::Client {
         .expect("Failed to create HTTP client")
 }
 
+/// Mount GET /get and GET /json on the mock server.
+async fn mount_basic_routes(server: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(server)
+        .await;
+}
+
 #[tokio::test]
 async fn test_fixed_think_time() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     let scenario = Scenario {
         name: "Fixed Think Time Test".to_string(),
         weight: 1.0,
@@ -53,25 +70,13 @@ async fn test_fixed_think_time() {
         ],
     };
 
-    // Retry up to 3 times to tolerate transient httpbin.org failures in CI.
-    let (result, total_duration) = {
-        let mut last_result = None;
-        let mut last_duration = Duration::default();
-        for attempt in 1..=3 {
-            let client = create_test_client();
-            let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
-            let mut context = ScenarioContext::new();
-            let start = Instant::now();
-            let r = executor.execute(&scenario, &mut context).await;
-            last_duration = start.elapsed();
-            if r.success {
-                last_result = Some(r);
-                break;
-            }
-            eprintln!("Attempt {attempt}/3 failed — retrying");
-        }
-        (last_result.expect("All 3 attempts failed"), last_duration)
-    };
+    let client = create_test_client();
+    let executor = ScenarioExecutor::new(server.uri(), client);
+    let mut context = ScenarioContext::new();
+
+    let start = Instant::now();
+    let result = executor.execute(&scenario, &mut context).await;
+    let total_duration = start.elapsed();
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps_completed, 2);
@@ -88,7 +93,7 @@ async fn test_fixed_think_time() {
     );
 
     // The think time should appear as overhead ON TOP of the two step latencies.
-    // Regardless of how slow httpbin.org is, total ≈ step1 + 500ms + step2.
+    // With wiremock responses are ~instant, so think time is almost all of total.
     // Using 90% of think time (450ms) as the threshold to absorb scheduling jitter.
     let think_overhead_ms = total_ms.saturating_sub(step1_ms + step2_ms);
     assert!(
@@ -111,6 +116,9 @@ async fn test_fixed_think_time() {
 
 #[tokio::test]
 async fn test_random_think_time() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     let scenario = Scenario {
         name: "Random Think Time Test".to_string(),
         weight: 1.0,
@@ -146,7 +154,7 @@ async fn test_random_think_time() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
 
     // Run multiple times to test randomness
     let mut durations = Vec::new();
@@ -184,6 +192,9 @@ async fn test_random_think_time() {
 
 #[tokio::test]
 async fn test_multiple_think_times() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     let scenario = Scenario {
         name: "Multiple Think Times".to_string(),
         weight: 1.0,
@@ -228,7 +239,7 @@ async fn test_multiple_think_times() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
@@ -267,6 +278,9 @@ async fn test_multiple_think_times() {
 
 #[tokio::test]
 async fn test_no_think_time() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     let scenario = Scenario {
         name: "No Think Time".to_string(),
         weight: 1.0,
@@ -299,7 +313,7 @@ async fn test_no_think_time() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
@@ -308,7 +322,7 @@ async fn test_no_think_time() {
 
     assert!(result.success);
 
-    // Should be fast with no think time (under 1 second)
+    // With wiremock responses the round-trips are local — well under 1 second.
     assert!(
         total_duration.as_millis() < 1000,
         "Without think time, should complete quickly ({}ms)",
@@ -322,6 +336,9 @@ async fn test_no_think_time() {
 
 #[tokio::test]
 async fn test_realistic_user_behavior() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     // Simulate realistic e-commerce browsing with varied think times
     let scenario = Scenario {
         name: "Realistic User Behavior".to_string(),
@@ -376,7 +393,7 @@ async fn test_realistic_user_behavior() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
