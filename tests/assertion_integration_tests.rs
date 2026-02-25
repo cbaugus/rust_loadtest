@@ -1,10 +1,9 @@
 //! Integration tests for response assertions framework (Issue #30).
 //!
-//! These tests validate that assertions work correctly against a live API,
-//! including proper failure detection, metrics tracking, and mixed scenarios.
-//!
-//! **NOTE**: Most tests use httpbin.org (public testing API).
-//! E-commerce specific tests require ecom.edge.baugus-lab.com and are marked #[ignore].
+//! These tests validate that assertions work correctly using a local wiremock
+//! server, including proper failure detection, metrics tracking, and mixed
+//! scenarios.  E-commerce specific tests require ecom.edge.baugus-lab.com
+//! and are marked #[ignore].
 
 use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{Assertion, RequestConfig, Scenario, ScenarioContext, Step};
@@ -13,8 +12,6 @@ use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-// Public testing API - always available
-const HTTPBIN_URL: &str = "https://httpbin.org";
 // E-commerce test API - may not be accessible in all environments
 const ECOM_URL: &str = "https://ecom.edge.baugus-lab.com";
 
@@ -28,6 +25,13 @@ fn create_test_client() -> reqwest::Client {
 
 #[tokio::test]
 async fn test_status_code_assertion_pass() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/status/200"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Status Code Assertion - Pass".to_string(),
         weight: 1.0,
@@ -35,7 +39,7 @@ async fn test_status_code_assertion_pass() {
             name: "Get 200 Response".to_string(),
             request: RequestConfig {
                 method: "GET".to_string(),
-                path: "/status/200".to_string(), // httpbin returns 200
+                path: "/status/200".to_string(),
                 body: None,
                 headers: HashMap::new(),
             },
@@ -46,7 +50,7 @@ async fn test_status_code_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -62,6 +66,14 @@ async fn test_status_code_assertion_pass() {
 
 #[tokio::test]
 async fn test_status_code_assertion_fail() {
+    let server = MockServer::start().await;
+    // Mock returns 200; assertion expects 404 — should fail.
+    Mock::given(method("GET"))
+        .and(path("/status/200"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Status Code Assertion - Fail".to_string(),
         weight: 1.0,
@@ -80,7 +92,7 @@ async fn test_status_code_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -96,8 +108,14 @@ async fn test_status_code_assertion_fail() {
 }
 
 #[tokio::test]
-
 async fn test_response_time_assertion_pass() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"url": "ok"}"#))
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Response Time Assertion - Pass".to_string(),
         weight: 1.0,
@@ -116,7 +134,7 @@ async fn test_response_time_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -133,6 +151,14 @@ async fn test_response_time_assertion_pass() {
 
 #[tokio::test]
 async fn test_response_time_assertion_fail() {
+    let server = MockServer::start().await;
+    // Delay of 50ms guarantees the 1ms threshold assertion fails.
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(50)))
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Response Time Assertion - Fail".to_string(),
         weight: 1.0,
@@ -151,7 +177,7 @@ async fn test_response_time_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -167,8 +193,17 @@ async fn test_response_time_assertion_fail() {
 }
 
 #[tokio::test]
-
 async fn test_json_path_assertion_existence() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"{"slideshow": {"title": "Sample Slide Show"}}"#),
+        )
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "JSONPath Existence".to_string(),
         weight: 1.0,
@@ -190,7 +225,7 @@ async fn test_json_path_assertion_existence() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -203,8 +238,17 @@ async fn test_json_path_assertion_existence() {
 }
 
 #[tokio::test]
-
 async fn test_json_path_assertion_value_match() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"{"slideshow": {"title": "Sample Slide Show"}}"#),
+        )
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "JSONPath Value Match".to_string(),
         weight: 1.0,
@@ -226,7 +270,7 @@ async fn test_json_path_assertion_value_match() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -240,6 +284,16 @@ async fn test_json_path_assertion_value_match() {
 
 #[tokio::test]
 async fn test_json_path_assertion_value_mismatch() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"{"slideshow": {"title": "Sample Slide Show"}}"#),
+        )
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "JSONPath Value Mismatch".to_string(),
         weight: 1.0,
@@ -261,7 +315,7 @@ async fn test_json_path_assertion_value_mismatch() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -277,8 +331,17 @@ async fn test_json_path_assertion_value_mismatch() {
 }
 
 #[tokio::test]
-
 async fn test_body_contains_assertion_pass() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"{"slideshow": {"title": "Sample Slide Show"}}"#),
+        )
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Body Contains - Pass".to_string(),
         weight: 1.0,
@@ -297,7 +360,7 @@ async fn test_body_contains_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -311,6 +374,16 @@ async fn test_body_contains_assertion_pass() {
 
 #[tokio::test]
 async fn test_body_contains_assertion_fail() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"{"slideshow": {"title": "Sample Slide Show"}}"#),
+        )
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Body Contains - Fail".to_string(),
         weight: 1.0,
@@ -329,7 +402,7 @@ async fn test_body_contains_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -342,8 +415,17 @@ async fn test_body_contains_assertion_fail() {
 }
 
 #[tokio::test]
-
 async fn test_body_matches_regex_assertion() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"{"slideshow": {"title": "Sample Slide Show"}}"#),
+        )
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Body Matches Regex".to_string(),
         weight: 1.0,
@@ -364,7 +446,7 @@ async fn test_body_matches_regex_assertion() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -378,6 +460,13 @@ async fn test_body_matches_regex_assertion() {
 
 #[tokio::test]
 async fn test_header_exists_assertion_pass() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/headers"))
+        .respond_with(ResponseTemplate::new(200).insert_header("content-type", "application/json"))
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Header Exists - Pass".to_string(),
         weight: 1.0,
@@ -395,22 +484,11 @@ async fn test_header_exists_assertion_pass() {
         }],
     };
 
-    // Retry up to 3 times to tolerate transient httpbin.org failures in CI.
-    let result = {
-        let mut last = None;
-        for attempt in 1..=3 {
-            let client = create_test_client();
-            let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
-            let mut context = ScenarioContext::new();
-            let r = executor.execute(&scenario, &mut context).await;
-            if r.success {
-                last = Some(r);
-                break;
-            }
-            eprintln!("Attempt {attempt}/3 failed — retrying");
-        }
-        last.expect("All 3 attempts failed")
-    };
+    let client = create_test_client();
+    let executor = ScenarioExecutor::new(server.uri(), client);
+    let mut context = ScenarioContext::new();
+
+    let result = executor.execute(&scenario, &mut context).await;
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps[0].assertions_passed, 1);
@@ -421,6 +499,14 @@ async fn test_header_exists_assertion_pass() {
 
 #[tokio::test]
 async fn test_header_exists_assertion_fail() {
+    let server = MockServer::start().await;
+    // Response deliberately omits x-missing-header.
+    Mock::given(method("GET"))
+        .and(path("/headers"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Header Exists - Fail".to_string(),
         weight: 1.0,
@@ -439,7 +525,7 @@ async fn test_header_exists_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -452,8 +538,19 @@ async fn test_header_exists_assertion_fail() {
 }
 
 #[tokio::test]
-
 async fn test_multiple_assertions_all_pass() {
+    let server = MockServer::start().await;
+    // Body includes "url" and "headers" keys; response carries Content-Type header.
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_string(r#"{"url": "http://localhost/get", "headers": {}}"#),
+        )
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Multiple Assertions - All Pass".to_string(),
         weight: 1.0,
@@ -481,7 +578,7 @@ async fn test_multiple_assertions_all_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
@@ -494,7 +591,6 @@ async fn test_multiple_assertions_all_pass() {
 }
 
 #[tokio::test]
-
 async fn test_multiple_assertions_mixed_results() {
     // Use a local mock server so assertion counts are deterministic regardless
     // of httpbin.org availability or rate-limiting in CI.
@@ -546,8 +642,22 @@ async fn test_multiple_assertions_mixed_results() {
 }
 
 #[tokio::test]
-
 async fn test_multi_step_assertion_stops_on_failure() {
+    let server = MockServer::start().await;
+    // Step 1 and Step 2 both hit /status/200 (returns 200).
+    // Step 2 asserts StatusCode(404) — fails.
+    // Step 3 hits /get but is never reached.
+    Mock::given(method("GET"))
+        .and(path("/status/200"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"url": "ok"}"#))
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Multi-Step with Assertion Failure".to_string(),
         weight: 1.0,
@@ -592,7 +702,7 @@ async fn test_multi_step_assertion_stops_on_failure() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(HTTPBIN_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor.execute(&scenario, &mut context).await;
