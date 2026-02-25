@@ -239,9 +239,11 @@ impl Config {
         let num_concurrent_tasks = yaml_config.config.workers;
         let test_duration = yaml_config.config.duration.to_std_duration()?;
         let skip_tls_verify = yaml_config.config.skip_tls_verify;
-        let custom_headers = yaml_config.config.custom_headers.clone().or_else(|| {
-            env::var("CUSTOM_HEADERS").ok().filter(|s| !s.is_empty())
-        });
+        let custom_headers = yaml_config
+            .config
+            .custom_headers
+            .clone()
+            .or_else(|| env::var("CUSTOM_HEADERS").ok().filter(|s| !s.is_empty()));
 
         // Load model: YAML is authoritative — do not check LOAD_MODEL_TYPE/TARGET_RPS env vars.
         let load_model = yaml_config.load.to_load_model()?;
