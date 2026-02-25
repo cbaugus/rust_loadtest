@@ -502,8 +502,7 @@ async fn test_multiple_assertions_mixed_results() {
     Mock::given(method("GET"))
         .and(path("/get"))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_string(r#"{"headers": {"Host": "localhost"}}"#),
+            ResponseTemplate::new(200).set_body_string(r#"{"headers": {"Host": "localhost"}}"#),
         )
         .mount(&server)
         .await;
