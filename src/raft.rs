@@ -390,23 +390,24 @@ pub struct GrpcNetwork {
 }
 
 impl GrpcNetwork {
-    fn get_client(&mut self) -> Result<&mut LoadTestCoordinatorClient<Channel>, String> {
+    async fn get_client(&mut self) -> Result<&mut LoadTestCoordinatorClient<Channel>, String> {
         if self.client.is_none() {
             let uri = if self.target_addr.starts_with("http") {
                 self.target_addr.clone()
             } else {
                 format!("http://{}", self.target_addr)
             };
-            // connect_lazy() returns immediately without a blocking TCP handshake.
-            // Tonic dials on the first RPC and reconnects automatically on failure.
-            // connect_timeout limits the TCP handshake; timeout limits each RPC call,
-            // ensuring heartbeats fail fast rather than hanging until a follower's
-            // election timer fires and causes an unnecessary leader re-election.
+            // connect_timeout bounds the TCP handshake so an unreachable peer
+            // fails within 3 s rather than hanging indefinitely.  This throttles
+            // RPCError::Unreachable delivery to openraft (at most one error per
+            // heartbeat interval per peer), avoiding the rapid-fire burst that
+            // triggers a panic in openraft 0.9.21's replication task.
             let ch = Endpoint::from_shared(uri)
                 .map_err(|e| e.to_string())?
                 .connect_timeout(Duration::from_secs(3))
-                .timeout(Duration::from_secs(4))
-                .connect_lazy();
+                .connect()
+                .await
+                .map_err(|e| e.to_string())?;
             self.client = Some(LoadTestCoordinatorClient::new(ch));
         }
         Ok(self.client.as_mut().unwrap())
@@ -433,17 +434,23 @@ impl RaftNetwork<TypeConfig> for GrpcNetwork {
 
         let client = self
             .get_client()
+            .await
             .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
 
-        let proto_resp = client
-            .append_entries(ProtoAER {
+        // Per-RPC timeout guards against an established-but-stuck channel hanging
+        // indefinitely.  Must be shorter than election_timeout_min (5 000 ms).
+        let proto_resp = tokio::time::timeout(
+            Duration::from_secs(4),
+            client.append_entries(ProtoAER {
                 term,
                 leader_id: leader,
                 payload,
                 ..Default::default()
-            })
-            .await
-            .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
+            }),
+        )
+        .await
+        .map_err(|_| RPCError::Unreachable(unreachable("append_entries RPC timed out")))?
+        .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
 
         serde_json::from_slice(&proto_resp.into_inner().payload)
             .map_err(|e| RPCError::Unreachable(unreachable(e)))
@@ -462,17 +469,21 @@ impl RaftNetwork<TypeConfig> for GrpcNetwork {
 
         let client = self
             .get_client()
+            .await
             .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
 
-        let proto_resp = client
-            .request_vote(ProtoVR {
+        let proto_resp = tokio::time::timeout(
+            Duration::from_secs(4),
+            client.request_vote(ProtoVR {
                 term,
                 candidate_id: candidate,
                 payload,
                 ..Default::default()
-            })
-            .await
-            .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
+            }),
+        )
+        .await
+        .map_err(|_| RPCError::Unreachable(unreachable("vote RPC timed out")))?
+        .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
 
         serde_json::from_slice(&proto_resp.into_inner().payload)
             .map_err(|e| RPCError::Unreachable(unreachable(e)))
@@ -493,16 +504,20 @@ impl RaftNetwork<TypeConfig> for GrpcNetwork {
 
         let client = self
             .get_client()
+            .await
             .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
 
-        let proto_resp = client
-            .install_snapshot(ProtoSR {
+        let proto_resp = tokio::time::timeout(
+            Duration::from_secs(4),
+            client.install_snapshot(ProtoSR {
                 term,
                 payload,
                 ..Default::default()
-            })
-            .await
-            .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
+            }),
+        )
+        .await
+        .map_err(|_| RPCError::Unreachable(unreachable("install_snapshot RPC timed out")))?
+        .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
 
         serde_json::from_slice(&proto_resp.into_inner().payload)
             .map_err(|e| RPCError::Unreachable(unreachable(e)))
