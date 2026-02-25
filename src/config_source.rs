@@ -235,6 +235,12 @@ pub fn percent_encode(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Serialise all tests that mutate environment variables.
+    // Rust runs tests in parallel by default; concurrent set_var / remove_var
+    // calls on the same keys cause data races between from_env_* tests.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     // ── percent_encode ────────────────────────────────────────────────────────
 
@@ -260,12 +266,14 @@ mod tests {
 
     #[test]
     fn from_env_unset_returns_none() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::remove_var("CLUSTER_CONFIG_SOURCE");
         assert!(ConfigSource::from_env().is_none());
     }
 
     #[test]
     fn from_env_consul_kv_defaults() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("CLUSTER_CONFIG_SOURCE", "consul-kv");
         std::env::remove_var("CONSUL_ADDR");
         std::env::remove_var("CONSUL_CONFIG_KEY");
@@ -284,6 +292,7 @@ mod tests {
 
     #[test]
     fn from_env_consul_kv_custom_key() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("CLUSTER_CONFIG_SOURCE", "consul-kv");
         std::env::set_var("CONSUL_CONFIG_KEY", "my/custom/key");
         std::env::remove_var("CONSUL_ADDR");
@@ -300,6 +309,7 @@ mod tests {
 
     #[test]
     fn from_env_unknown_source_returns_none() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("CLUSTER_CONFIG_SOURCE", "s3");
         assert!(ConfigSource::from_env().is_none());
         std::env::remove_var("CLUSTER_CONFIG_SOURCE");
