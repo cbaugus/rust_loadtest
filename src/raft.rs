@@ -27,7 +27,7 @@
 use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::ops::RangeBounds;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use openraft::error::{InstallSnapshotError, RPCError, RaftError, Unreachable};
 use openraft::network::{RPCOption, RaftNetwork, RaftNetworkFactory};
@@ -102,7 +102,11 @@ pub fn node_id_from_str(s: &str) -> u64 {
 /// `(RaftLogStorage, RaftStateMachine)` split required by `Raft::new`.
 pub struct MemStorage {
     vote: Option<Vote<NodeId>>,
-    log: BTreeMap<u64, Entry<TypeConfig>>,
+    /// Shared with every live `MemLogReader`.  Uses a sync `RwLock` (no `.await`
+    /// needed) so that entries appended *after* a reader is created are
+    /// immediately visible — satisfying openraft's contract that
+    /// `limited_get_log_entries` must never return empty for a non-empty range.
+    log: Arc<RwLock<BTreeMap<u64, Entry<TypeConfig>>>>,
     committed: Option<LogId<NodeId>>,
     last_purged: Option<LogId<NodeId>>,
     last_applied: Option<LogId<NodeId>>,
@@ -122,7 +126,7 @@ impl MemStorage {
         let (config_tx, config_rx) = watch::channel(None);
         let storage = Self {
             vote: None,
-            log: BTreeMap::new(),
+            log: Arc::new(RwLock::new(BTreeMap::new())),
             committed: None,
             last_purged: None,
             last_applied: None,
@@ -146,13 +150,18 @@ impl RaftLogReader<TypeConfig> for MemStorage {
     where
         RB: RangeBounds<u64> + Clone + std::fmt::Debug + Send,
     {
-        Ok(self.log.range(range).map(|(_, e)| e.clone()).collect())
+        let log = self.log.read().unwrap();
+        Ok(log.range(range).map(|(_, e)| e.clone()).collect())
     }
 }
 
-/// Log reader backed by a snapshot of the log at a point in time.
+/// Log reader sharing the live log with `MemStorage` via `Arc<RwLock<...>>`.
+///
+/// Unlike a static clone, entries appended *after* this reader was created
+/// are immediately visible, satisfying openraft's contract that
+/// `limited_get_log_entries` must never return empty for a non-empty range.
 pub struct MemLogReader {
-    log: BTreeMap<u64, Entry<TypeConfig>>,
+    log: Arc<RwLock<BTreeMap<u64, Entry<TypeConfig>>>>,
 }
 
 impl RaftLogReader<TypeConfig> for MemLogReader {
@@ -163,7 +172,8 @@ impl RaftLogReader<TypeConfig> for MemLogReader {
     where
         RB: RangeBounds<u64> + Clone + std::fmt::Debug + Send,
     {
-        Ok(self.log.range(range).map(|(_, e)| e.clone()).collect())
+        let log = self.log.read().unwrap();
+        Ok(log.range(range).map(|(_, e)| e.clone()).collect())
     }
 }
 
@@ -228,7 +238,13 @@ impl RaftStorage<TypeConfig> for MemStorage {
     // ── Log ───────────────────────────────────────────────────────────────────
 
     async fn get_log_state(&mut self) -> Result<LogState<TypeConfig>, StorageError<NodeId>> {
-        let last = self.log.values().next_back().map(|e| *e.get_log_id());
+        // Per the openraft contract: when the log is empty, `last_log_id` must
+        // equal `last_purged_log_id` (not None).
+        let last = {
+            let log = self.log.read().unwrap();
+            log.values().next_back().map(|e| *e.get_log_id())
+        }
+        .or(self.last_purged);
         Ok(LogState {
             last_purged_log_id: self.last_purged,
             last_log_id: last,
@@ -248,8 +264,10 @@ impl RaftStorage<TypeConfig> for MemStorage {
     }
 
     async fn get_log_reader(&mut self) -> Self::LogReader {
+        // Clone the Arc (cheap pointer copy), not the BTreeMap data, so the
+        // reader always sees the live log contents.
         MemLogReader {
-            log: self.log.clone(),
+            log: Arc::clone(&self.log),
         }
     }
 
@@ -258,8 +276,9 @@ impl RaftStorage<TypeConfig> for MemStorage {
     where
         I: IntoIterator<Item = Entry<TypeConfig>> + Send,
     {
+        let mut log = self.log.write().unwrap();
         for entry in entries {
-            self.log.insert(entry.get_log_id().index, entry);
+            log.insert(entry.get_log_id().index, entry);
         }
         Ok(())
     }
@@ -269,13 +288,19 @@ impl RaftStorage<TypeConfig> for MemStorage {
         &mut self,
         log_id: LogId<NodeId>,
     ) -> Result<(), StorageError<NodeId>> {
-        self.log.retain(|&idx, _| idx < log_id.index);
+        let mut log = self.log.write().unwrap();
+        log.retain(|&idx, _| idx < log_id.index);
         Ok(())
     }
 
-    /// Delete applied log entries up to `log_id` inclusive (v1 method name).
+    /// Track the purge boundary without removing entries from memory.
+    ///
+    /// Physically removing entries would allow `limited_get_log_entries` to
+    /// return an empty slice for a range openraft considers non-empty —
+    /// violating the contract and triggering a panic in the replication task
+    /// (`openraft 0.9.21 replication/mod.rs:399`).  Our log is small
+    /// (O(100) entries) so keeping everything in memory is fine.
     async fn purge_logs_upto(&mut self, log_id: LogId<NodeId>) -> Result<(), StorageError<NodeId>> {
-        self.log.retain(|&idx, _| idx > log_id.index);
         self.last_purged = Some(log_id);
         Ok(())
     }
