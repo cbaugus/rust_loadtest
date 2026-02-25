@@ -280,16 +280,26 @@ pub async fn resolve_consul_peers(consul_addr: &str, service_name: &str) -> Vec<
         }
     };
 
+    // Deduplicate by address:port.  Both the ConsulClient registration
+    // (loadtest-cluster-{node_id}) and the Nomad service block may register
+    // under the same service name with the same host:port, producing duplicate
+    // entries once Nomad's health checks also start passing.
+    let mut seen = std::collections::HashSet::new();
     entries
         .into_iter()
-        .map(|e| {
+        .filter_map(|e| {
             // ServiceAddress takes precedence; fall back to the node Address.
             let host = if e.service.address.is_empty() {
                 e.node.address
             } else {
                 e.service.address
             };
-            format!("{}:{}", host, e.service.port)
+            let addr = format!("{}:{}", host, e.service.port);
+            if seen.insert(addr.clone()) {
+                Some(addr)
+            } else {
+                None
+            }
         })
         .collect()
 }
