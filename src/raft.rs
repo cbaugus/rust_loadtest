@@ -41,6 +41,7 @@ use openraft::{
     StoredMembership, TokioRuntime, Vote,
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tokio::sync::watch;
 use tonic::transport::{Channel, Endpoint};
 use tracing::info;
@@ -389,18 +390,23 @@ pub struct GrpcNetwork {
 }
 
 impl GrpcNetwork {
-    async fn get_client(&mut self) -> Result<&mut LoadTestCoordinatorClient<Channel>, String> {
+    fn get_client(&mut self) -> Result<&mut LoadTestCoordinatorClient<Channel>, String> {
         if self.client.is_none() {
             let uri = if self.target_addr.starts_with("http") {
                 self.target_addr.clone()
             } else {
                 format!("http://{}", self.target_addr)
             };
+            // connect_lazy() returns immediately without a blocking TCP handshake.
+            // Tonic dials on the first RPC and reconnects automatically on failure.
+            // connect_timeout limits the TCP handshake; timeout limits each RPC call,
+            // ensuring heartbeats fail fast rather than hanging until a follower's
+            // election timer fires and causes an unnecessary leader re-election.
             let ch = Endpoint::from_shared(uri)
                 .map_err(|e| e.to_string())?
-                .connect()
-                .await
-                .map_err(|e| e.to_string())?;
+                .connect_timeout(Duration::from_secs(3))
+                .timeout(Duration::from_secs(4))
+                .connect_lazy();
             self.client = Some(LoadTestCoordinatorClient::new(ch));
         }
         Ok(self.client.as_mut().unwrap())
@@ -427,7 +433,6 @@ impl RaftNetwork<TypeConfig> for GrpcNetwork {
 
         let client = self
             .get_client()
-            .await
             .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
 
         let proto_resp = client
@@ -457,7 +462,6 @@ impl RaftNetwork<TypeConfig> for GrpcNetwork {
 
         let client = self
             .get_client()
-            .await
             .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
 
         let proto_resp = client
@@ -489,7 +493,6 @@ impl RaftNetwork<TypeConfig> for GrpcNetwork {
 
         let client = self
             .get_client()
-            .await
             .map_err(|e| RPCError::Unreachable(unreachable(e)))?;
 
         let proto_resp = client
