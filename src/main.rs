@@ -556,9 +556,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         None => continue,
                     };
 
-                    // Parse YAML → Config (env-var overrides still apply).
+                    // Parse YAML → Config.  YAML values are authoritative: the
+                    // document was deliberately pushed/fetched to replace the
+                    // running config, so startup env-var defaults
+                    // (NUM_CONCURRENT_TASKS, TARGET_RPS, TARGET_URL, …) must
+                    // not shadow the YAML values.
                     let new_cfg = match serde_yaml::from_str::<YamlConfig>(&yaml) {
-                        Ok(yaml_cfg) => match Config::from_yaml_with_env_overrides(&yaml_cfg) {
+                        Ok(yaml_cfg) => match Config::from_yaml(&yaml_cfg) {
                             Ok(c) => c,
                             Err(e) => {
                                 error!(error = %e, "Raft config YAML failed Config validation");
