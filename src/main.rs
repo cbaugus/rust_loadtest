@@ -713,8 +713,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
                 let (time_remaining_secs, current_yaml) = {
                     let ts = test_state_for_updater.lock().unwrap();
-                    let remaining =
-                        ts.duration.as_secs_f64() - ts.start.elapsed().as_secs_f64();
+                    let remaining = ts.duration.as_secs_f64() - ts.start.elapsed().as_secs_f64();
                     (remaining as i64, ts.yaml.clone())
                 };
 
