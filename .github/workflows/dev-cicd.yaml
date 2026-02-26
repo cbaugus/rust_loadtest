@@ -105,3 +105,58 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+
+  # Prune job - deletes dev-<sha> tags older than 24 hours after each successful push.
+  # The mutable `dev` tag is never touched; only the per-commit `dev-<sha>` tags are pruned.
+  prune-old-dev-images:
+    name: Prune Dev Images (>24h)
+    runs-on: ubuntu-latest
+    needs: [build-docker]
+    if: github.event_name == 'push'
+    steps:
+      - name: Delete dev-<sha> tags older than 24 hours
+        env:
+          HUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          HUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Authenticate and get a short-lived Docker Hub JWT.
+          TOKEN=$(curl -sf -X POST "https://hub.docker.com/v2/users/login" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"${HUB_USERNAME}\",\"password\":\"${HUB_TOKEN}\"}" \
+            | jq -r '.token')
+
+          REPO="cbaugus/rust_loadtest"
+          CUTOFF=$(date -u -d '24 hours ago' '+%Y-%m-%dT%H:%M:%SZ')
+          DELETED=0
+          PAGE=1
+
+          echo "Pruning dev-* tags last updated before ${CUTOFF}"
+
+          while true; do
+            RESPONSE=$(curl -sf \
+              "https://hub.docker.com/v2/repositories/${REPO}/tags/?page_size=100&page=${PAGE}" \
+              -H "Authorization: Bearer ${TOKEN}")
+
+            # Stream tag-name/last_updated pairs for every dev-<sha> tag on this page.
+            while read -r TAG UPDATED; do
+              if [[ "$UPDATED" < "$CUTOFF" ]]; then
+                echo "  deleting ${TAG} (updated ${UPDATED})"
+                curl -sf -X DELETE \
+                  "https://hub.docker.com/v2/repositories/${REPO}/tags/${TAG}/" \
+                  -H "Authorization: Bearer ${TOKEN}" || true
+                DELETED=$((DELETED + 1))
+              else
+                echo "  keeping  ${TAG} (updated ${UPDATED})"
+              fi
+            done < <(echo "$RESPONSE" \
+              | jq -r '.results[] | select(.name | test("^dev-")) | "\(.name) \(.last_updated)"')
+
+            # Stop when there are no more pages.
+            NEXT=$(echo "$RESPONSE" | jq -r '.next // empty')
+            [ -z "$NEXT" ] && break
+            PAGE=$((PAGE + 1))
+          done
+
+          echo "Done — deleted ${DELETED} tag(s)."
