@@ -262,6 +262,15 @@ struct NodeMetrics {
     memory_mb: f64,
     total_memory_mb: f64,
     cpu_pct: f64,
+    time_remaining_secs: i64,
+    current_yaml: Option<String>,
+}
+
+/// Tracks the active test run — shared between the config-watcher and metrics updater.
+struct TestState {
+    start: time::Instant,
+    duration: Duration,
+    yaml: Option<String>, // None = initial config from environment variables
 }
 
 /// Worker pool managed by the config-watcher task (Issue #79).
@@ -345,6 +354,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Shared live metrics written by the metrics-updater, read by GET /health.
     let live_metrics: Arc<Mutex<NodeMetrics>> = Arc::new(Mutex::new(NodeMetrics::default()));
 
+    // Shared active-test state — set at startup, updated on each POST /config.
+    let test_state: Arc<Mutex<TestState>> = Arc::new(Mutex::new(TestState {
+        start: time::Instant::now(), // updated again just before workers launch
+        duration: config.test_duration,
+        yaml: None,
+    }));
+
     // ── Standalone health + config HTTP server ─────────────────────────────
     // GET  /health  → JSON with node identity and live metrics
     // POST /config  → accept YAML body, apply new config, restart workers
@@ -377,17 +393,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                             match (req.method(), req.uri().path()) {
                                 (&Method::GET, "/health") => {
                                     let m = lm.lock().unwrap().clone();
-                                    let body = format!(
-                                        r#"{{"status":"ok","node_id":"{node_id}","region":"{region}","state":"standalone","rps":{rps:.2},"error_rate_pct":{err:.2},"workers":{workers},"memory_mb":{mem:.1},"total_memory_mb":{total:.1},"cpu_pct":{cpu:.1}}}"#,
-                                        node_id = node_id,
-                                        region = region,
-                                        rps = m.rps,
-                                        err = m.error_rate_pct,
-                                        workers = m.workers,
-                                        mem = m.memory_mb,
-                                        total = m.total_memory_mb,
-                                        cpu = m.cpu_pct,
-                                    );
+                                    let body = serde_json::json!({
+                                        "status": "ok",
+                                        "node_id": node_id,
+                                        "region": region,
+                                        "rps": (m.rps * 100.0).round() / 100.0,
+                                        "error_rate_pct": (m.error_rate_pct * 100.0).round() / 100.0,
+                                        "workers": m.workers,
+                                        "memory_mb": (m.memory_mb * 10.0).round() / 10.0,
+                                        "total_memory_mb": (m.total_memory_mb * 10.0).round() / 10.0,
+                                        "cpu_pct": (m.cpu_pct * 10.0).round() / 10.0,
+                                        "time_remaining_secs": m.time_remaining_secs,
+                                        "current_yaml": m.current_yaml,
+                                    })
+                                    .to_string();
                                     Ok::<_, Infallible>(
                                         Response::builder()
                                             .status(StatusCode::OK)
@@ -449,6 +468,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let pool_for_watcher = worker_pool.clone();
         let client_for_watcher = client.clone();
         let region_for_watcher = config.cluster.region.clone();
+        let test_state_for_watcher = test_state.clone();
         tokio::spawn(async move {
             while let Some(yaml) = config_rx.recv().await {
                 let new_cfg = match serde_yaml::from_str::<YamlConfig>(&yaml) {
@@ -526,6 +546,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     state.handles = new_handles;
                 }
 
+                {
+                    let mut ts = test_state_for_watcher.lock().unwrap();
+                    ts.start = new_start;
+                    ts.duration = new_cfg.test_duration;
+                    ts.yaml = Some(yaml.clone());
+                }
+
                 WORKERS_CONFIGURED_TOTAL.set(new_cfg.num_concurrent_tasks as f64);
                 info!(
                     workers = new_cfg.num_concurrent_tasks,
@@ -587,6 +614,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     {
         use rust_loadtest::errors::ErrorCategory;
         let live_metrics_for_updater = live_metrics.clone();
+        let test_state_for_updater = test_state.clone();
         let region = config.cluster.region.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(1));
@@ -683,6 +711,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 #[cfg(not(target_os = "linux"))]
                 let cpu_pct = 0.0_f64;
 
+                let (time_remaining_secs, current_yaml) = {
+                    let ts = test_state_for_updater.lock().unwrap();
+                    let remaining =
+                        ts.duration.as_secs_f64() - ts.start.elapsed().as_secs_f64();
+                    (remaining as i64, ts.yaml.clone())
+                };
+
                 *live_metrics_for_updater.lock().unwrap() = NodeMetrics {
                     rps,
                     error_rate_pct,
@@ -690,6 +725,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     memory_mb,
                     total_memory_mb,
                     cpu_pct,
+                    time_remaining_secs,
+                    current_yaml,
                 };
 
                 prev_requests = curr_requests;
@@ -737,6 +774,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Main loop to run for a duration
     let start_time = time::Instant::now();
+
+    // Sync test_state start to the actual worker launch time.
+    {
+        let mut ts = test_state.lock().unwrap();
+        ts.start = start_time;
+    }
 
     let mut handles = Vec::new();
     for i in 0..config.num_concurrent_tasks {
