@@ -16,6 +16,7 @@ use std::convert::Infallible;
 use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
+use rust_loadtest::load_models::LoadModel;
 use rust_loadtest::memory_guard::{
     init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig,
 };
@@ -31,7 +32,6 @@ use rust_loadtest::percentiles::{
     GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES,
 };
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
-use rust_loadtest::load_models::LoadModel;
 use rust_loadtest::worker::{run_worker, WorkerConfig};
 use rust_loadtest::yaml_config::YamlConfig;
 
@@ -347,7 +347,9 @@ fn spawn_completion_watcher(
             if ts.generation != generation {
                 return;
             }
-            ts.standby.clone().unwrap_or_else(|| (*startup_standby).clone())
+            ts.standby
+                .clone()
+                .unwrap_or_else(|| (*startup_standby).clone())
         };
 
         // Drain current workers before switching to standby.
@@ -387,7 +389,9 @@ fn spawn_completion_watcher(
                     send_json: sb.send_json,
                     json_payload: sb.json_payload.clone(),
                     test_duration: standby_duration,
-                    load_model: LoadModel::Rps { target_rps: standby_rps },
+                    load_model: LoadModel::Rps {
+                        target_rps: standby_rps,
+                    },
                     num_concurrent_tasks: num_workers,
                     percentile_tracking_enabled: sb.percentile_tracking_enabled,
                     percentile_sampling_rate: sb.percentile_sampling_rate,
