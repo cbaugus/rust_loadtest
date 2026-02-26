@@ -1,6 +1,7 @@
 //! Integration tests for multi-step scenario execution.
 //!
-//! These tests run against httpbin.org to validate scenario execution.
+//! Most tests run against httpbin.org; `test_multi_step_with_delays` uses a
+//! local wiremock server so it is not affected by external network flakiness.
 //!
 //! Run with: cargo test --test scenario_integration_tests
 
@@ -10,6 +11,8 @@ use rust_loadtest::scenario::{
 };
 use std::collections::HashMap;
 use std::time::Duration;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const BASE_URL: &str = "https://httpbin.org";
 
@@ -140,6 +143,19 @@ async fn test_variable_substitution() {
 
 #[tokio::test]
 async fn test_multi_step_with_delays() {
+    // Use a local mock server so this test is not sensitive to httpbin.org availability.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Multi-Step with Think Times".to_string(),
         weight: 1.0,
@@ -184,7 +200,7 @@ async fn test_multi_step_with_delays() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let start = std::time::Instant::now();

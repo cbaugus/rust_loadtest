@@ -74,11 +74,11 @@ job "envoy-loadtest" {
     attribute = "$${meta.node-switcher}"
     value = "on"
   }
-  # constraint {
-  #   attribute = "$${meta.purpose}"
-  #   operator  = "="
-  #   value     = "ops"
-  # }
+  constraint {
+    attribute = "$${meta.purpose}"
+    operator  = "="
+    value     = "worker"
+  }
 
   constraint {
     attribute = "$${meta.purpose}"
@@ -87,7 +87,7 @@ job "envoy-loadtest" {
   }
 
   group "envoy-loadtest" {
-    count = 3
+    count = 2
 
     scaling {
       enabled = true
@@ -112,16 +112,22 @@ job "envoy-loadtest" {
         to = 9090
       }
 
-      # gRPC inter-node Raft/coordination port (CLUSTER_BIND_ADDR)
-      port "cluster" {
-        static = 7000
-        to     = 7000
-      }
-
       # HTTP cluster health endpoint (CLUSTER_HEALTH_ADDR)
       port "health" {
         static = 8080
         to     = 8080
+      }
+    }
+
+    service {
+      name = "load-health"
+      tags = ["load-health"]
+      port = "health"
+      check {
+        type     = "tcp"
+        port     = "health"
+        interval = "10s"
+        timeout  = "6s"
       }
     }
 
@@ -138,26 +144,7 @@ job "envoy-loadtest" {
       }
     }
 
-    # Cluster discovery service — nodes find each other via
-    # loadtest-cluster.service.consul when DISCOVERY_MODE=consul.
-    # The rust_loadtest process also registers/updates its own state tags
-    # (forming/follower/leader) through the Consul HTTP API, so this service
-    # block just ensures the port and health check are registered by Nomad.
-    service {
-      name = "loadtest-cluster"
-      tags = ["loadtest-cluster"]
-      port = "cluster"
-      check {
-        #name     = "cluster-health-http"
-        type     = "http"
-        path     = "/health/cluster"
-        port     = "health"
-        interval = "30s"
-        timeout  = "90s"
-      }
-    }
-
-    task "envoy-loadtest" {
+     task "envoy-loadtest" {
       driver = "docker"
       config {
         logging {
@@ -166,11 +153,10 @@ job "envoy-loadtest" {
             gelf-address = "udp://gelf.service.consul:12201"
           }
         }
-        image      = "cbaugus/rust_loadtest:dev-f16afdb"
+        image      = "cbaugus/rust_loadtest:dev-9138374"
         force_pull = true
         ports = [
           "metrics",
-          "cluster",
           "health",
         ]
       }
@@ -179,14 +165,6 @@ job "envoy-loadtest" {
         destination = "secrets/config.env"
         env         = true
         data        = <<EOH
-# ── Config auto-fetch from Consul KV (Issue #76) ─────────────────────────────
-# The elected leader reads this key and distributes the YAML to all nodes.
-# Upload the config before deploying:
-#   consul kv put loadtest/config @nomad/consul-kv-config-example.yaml
-CLUSTER_CONFIG_SOURCE=consul-kv
-CONSUL_CONFIG_KEY=loadtest/config
-CLUSTER_CONFIG_TIMEOUT_SECS=30
-
 # ── Startup defaults (required by Config::from_env at process start) ──────────
 # IMPORTANT: TARGET_URL, NUM_CONCURRENT_TASKS, LOAD_MODEL_TYPE, and TARGET_RPS
 # must be set even when CLUSTER_CONFIG_SOURCE=consul-kv.  Config::from_env()
@@ -196,45 +174,17 @@ CLUSTER_CONFIG_TIMEOUT_SECS=30
 TARGET_URL=http://dialtone.service.consul:5678
 REQUEST_TYPE=GET
 SKIP_TLS_VERIFY=true
-NUM_CONCURRENT_TASKS=25
-TEST_DURATION=72h
+NUM_CONCURRENT_TASKS=300
+TEST_DURATION=2h
 LOAD_MODEL_TYPE=Rps
-TARGET_RPS=200
+TARGET_RPS=0
 
-# ── Cluster (enable to run as a coordinated multi-node cluster) ───────────────
-CLUSTER_ENABLED=true
-
-# This node's address as seen by peers — MUST match the entry Consul resolves
-# for this node (Consul mode) or the value in CLUSTER_NODES (static mode).
-# NOMAD_IP_cluster is set by Nomad to the host IP bound to the "cluster" port.
-CLUSTER_SELF_ADDR={{ env "NOMAD_IP_cluster" }}:7000
-
-# Node identity label used in metrics and logs (does NOT drive Raft node ID —
-# that comes from CLUSTER_SELF_ADDR above). Defaults to $HOSTNAME (alloc ID).
-# CLUSTER_NODE_ID=
-
-# gRPC bind address for Raft transport. Must match the "cluster" port above.
-CLUSTER_BIND_ADDR=0.0.0.0:7000
-
-# HTTP health/state endpoint. Must match the "health" port above.
-CLUSTER_HEALTH_ADDR=0.0.0.0:8080
-
-# ── Discovery mode — choose ONE ──────────────────────────────────────────────
-
-# Consul-based peer discovery (recommended for Nomad).
-# CLUSTER_MIN_PEERS = total cluster size minus 1.
-# The code does min = CLUSTER_MIN_PEERS + 1 (includes self).
-# This job sets count=3 → CLUSTER_MIN_PEERS=2 → waits for 3 total.
-DISCOVERY_MODE=consul
-CONSUL_ADDR=http://consul.service.consul:8500
-CONSUL_SERVICE_NAME=loadtest-cluster
-CLUSTER_MIN_PEERS=2
 EOH
       }
 
       resources {
-        cpu    = 8000
-        memory = 8192
+        cpu    = 11400
+        memory = 20000
       }
     }
   }
