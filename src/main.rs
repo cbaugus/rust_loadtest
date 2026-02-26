@@ -264,9 +264,9 @@ struct NodeMetrics {
     cpu_pct: f64,
     time_remaining_secs: i64,
     current_yaml: Option<String>,
-    node_state: String,           // "running" | "idle"
-    test_started_at_unix: Option<u64>, // Unix seconds; None when idle
-    test_duration_secs: Option<u64>,   // None when idle
+    node_state: String,                 // "running" | "idle"
+    test_started_at_unix: Option<u64>,  // Unix seconds; None when idle
+    test_duration_secs: Option<u64>,    // None when idle
     test_percent_complete: Option<f64>, // 0.0–100.0; None when idle
 }
 
@@ -291,12 +291,12 @@ impl Default for NodeMetrics {
 
 /// Tracks the active test run — shared between the config-watcher and metrics updater.
 struct TestState {
-    start: time::Instant,       // monotonic clock, for elapsed/remaining
-    started_at_unix: u64,       // wall-clock Unix seconds when test started
+    start: time::Instant, // monotonic clock, for elapsed/remaining
+    started_at_unix: u64, // wall-clock Unix seconds when test started
     duration: Duration,
-    yaml: Option<String>,       // None = initial config from environment variables
-    node_state: &'static str,   // "running" | "idle"
-    generation: u64,            // bumped on each new test; idle-watcher checks this
+    yaml: Option<String>,     // None = initial config from environment variables
+    node_state: &'static str, // "running" | "idle"
+    generation: u64,          // bumped on each new test; idle-watcher checks this
 }
 
 /// Returns the current Unix timestamp in seconds.
@@ -790,7 +790,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     let remaining = dur - elapsed;
                     let (started_at, dur_secs, pct) = if ts.node_state == "running" {
                         let pct = ((elapsed / dur) * 100.0).clamp(0.0, 100.0);
-                        (Some(ts.started_at_unix), Some(ts.duration.as_secs()), Some(pct))
+                        (
+                            Some(ts.started_at_unix),
+                            Some(ts.duration.as_secs()),
+                            Some(pct),
+                        )
                     } else {
                         (None, None, None)
                     };
