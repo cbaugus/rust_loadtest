@@ -31,6 +31,7 @@ use rust_loadtest::percentiles::{
     GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES,
 };
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
+use rust_loadtest::load_models::LoadModel;
 use rust_loadtest::worker::{run_worker, WorkerConfig};
 use rust_loadtest::yaml_config::YamlConfig;
 
@@ -289,14 +290,29 @@ impl Default for NodeMetrics {
     }
 }
 
+/// Runtime standby configuration: keep connections warm between tests.
+#[derive(Clone)]
+struct StandbyRunConfig {
+    workers: usize,
+    rps: f64,
+    url: String,
+    request_type: String,
+    send_json: bool,
+    json_payload: Option<String>,
+    percentile_tracking_enabled: bool,
+    percentile_sampling_rate: u8,
+    region: String,
+}
+
 /// Tracks the active test run — shared between the config-watcher and metrics updater.
 struct TestState {
     start: time::Instant, // monotonic clock, for elapsed/remaining
     started_at_unix: u64, // wall-clock Unix seconds when test started
     duration: Duration,
     yaml: Option<String>,     // None = initial config from environment variables
-    node_state: &'static str, // "running" | "idle"
-    generation: u64,          // bumped on each new test; idle-watcher checks this
+    node_state: &'static str, // "running" | "idle" | "standby"
+    generation: u64,          // bumped on each new test; completion-watcher checks this
+    standby: Option<StandbyRunConfig>,
 }
 
 /// Returns the current Unix timestamp in seconds.
@@ -307,16 +323,99 @@ fn unix_now() -> u64 {
         .as_secs()
 }
 
-/// Spawns a background task that transitions `test_state` to `"idle"` after
-/// `duration`, but only if the test generation hasn't changed (i.e. no new
-/// `POST /config` was received in the meantime).
-fn spawn_idle_watcher(test_state: Arc<Mutex<TestState>>, generation: u64, duration: Duration) {
+/// Spawns a background task that transitions `test_state` after `duration`:
+/// - If a standby config is available (from the YAML `standby:` block or
+///   the startup env-var fallback): drains workers and spawns standby pool.
+/// - Otherwise: sets `node_state` to `"idle"`.
+///
+/// A double generation check prevents stale watchers from acting on a test
+/// that has already been superseded by a new `POST /config`.
+fn spawn_completion_watcher(
+    test_state: Arc<Mutex<TestState>>,
+    worker_pool: Arc<tokio::sync::Mutex<WorkerPool>>,
+    client: reqwest::Client,
+    startup_standby: Arc<StandbyRunConfig>,
+    generation: u64,
+    duration: Duration,
+) {
     tokio::spawn(async move {
         tokio::time::sleep(duration).await;
-        let mut ts = test_state.lock().unwrap();
-        if ts.generation == generation {
-            ts.node_state = "idle";
-            ts.yaml = None;
+
+        // Check 1: did a new test start before the timer fired?
+        let sb = {
+            let ts = test_state.lock().unwrap();
+            if ts.generation != generation {
+                return;
+            }
+            ts.standby.clone().unwrap_or_else(|| (*startup_standby).clone())
+        };
+
+        // Drain current workers before switching to standby.
+        {
+            let state = worker_pool.lock().await;
+            let _ = state.stop_tx.send(true);
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        {
+            let stale: Vec<_> = worker_pool.lock().await.handles.drain(..).collect();
+            for h in stale {
+                h.abort();
+            }
+        }
+
+        // Check 2: did a new test arrive while we were draining?
+        {
+            let ts = test_state.lock().unwrap();
+            if ts.generation != generation {
+                return;
+            }
+        }
+
+        // Spawn standby workers — they run until a new POST /config fires stop.
+        // Duration is set to ~1 year so workers don't self-terminate.
+        let standby_duration = Duration::from_secs(365 * 24 * 3600);
+        let (new_stop_tx, new_stop_rx) = watch::channel(false);
+        let new_start = time::Instant::now();
+        let num_workers = sb.workers;
+        let standby_rps = sb.rps;
+        let new_handles: Vec<_> = (0..num_workers)
+            .map(|i| {
+                let wc = WorkerConfig {
+                    task_id: i,
+                    url: sb.url.clone(),
+                    request_type: sb.request_type.clone(),
+                    send_json: sb.send_json,
+                    json_payload: sb.json_payload.clone(),
+                    test_duration: standby_duration,
+                    load_model: LoadModel::Rps { target_rps: standby_rps },
+                    num_concurrent_tasks: num_workers,
+                    percentile_tracking_enabled: sb.percentile_tracking_enabled,
+                    percentile_sampling_rate: sb.percentile_sampling_rate,
+                    region: sb.region.clone(),
+                    stop_rx: new_stop_rx.clone(),
+                };
+                tokio::spawn(run_worker(client.clone(), wc, new_start))
+            })
+            .collect();
+        {
+            let mut state = worker_pool.lock().await;
+            state.stop_tx = new_stop_tx;
+            state.handles = new_handles;
+        }
+
+        // Final state update — only if generation still matches (guard against races).
+        let applied = {
+            let mut ts = test_state.lock().unwrap();
+            if ts.generation == generation {
+                ts.node_state = "standby";
+                ts.yaml = None;
+                true
+            } else {
+                false
+            }
+        };
+        if applied {
+            WORKERS_CONFIGURED_TOTAL.set(num_workers as f64);
         }
     });
 }
@@ -357,6 +456,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Print configuration summary
     config.print_summary(&client_result.parsed_headers);
+
+    // Startup standby config: fallback when a test YAML has no `standby:` block.
+    // Nodes auto-revert to their startup state (typically TARGET_RPS=0) after a test ends.
+    let startup_standby: Arc<StandbyRunConfig> = Arc::new(StandbyRunConfig {
+        workers: config.num_concurrent_tasks,
+        rps: if let LoadModel::Rps { target_rps } = &config.load_model {
+            *target_rps
+        } else {
+            0.0
+        },
+        url: config.target_url.clone(),
+        request_type: config.request_type.clone(),
+        send_json: config.send_json,
+        json_payload: config.json_payload.clone(),
+        percentile_tracking_enabled: config.percentile_tracking_enabled,
+        percentile_sampling_rate: config.percentile_sampling_rate,
+        region: config.cluster.region.clone(),
+    });
 
     // Start the Prometheus metrics HTTP server
     let metrics_port = 9090;
@@ -410,6 +527,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         yaml: None,
         node_state: "running",
         generation: 0,
+        standby: None,
     }));
 
     // ── Standalone health + config HTTP server ─────────────────────────────
@@ -525,11 +643,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let client_for_watcher = client.clone();
         let region_for_watcher = config.cluster.region.clone();
         let test_state_for_watcher = test_state.clone();
+        let startup_standby_for_watcher = startup_standby.clone();
         tokio::spawn(async move {
             while let Some(yaml) = config_rx.recv().await {
-                let new_cfg = match serde_yaml::from_str::<YamlConfig>(&yaml) {
+                let (yaml_cfg_parsed, new_cfg) = match serde_yaml::from_str::<YamlConfig>(&yaml) {
                     Ok(yaml_cfg) => match Config::from_yaml(&yaml_cfg) {
-                        Ok(c) => c,
+                        Ok(c) => (yaml_cfg, c),
                         Err(e) => {
                             error!(error = %e, "Config YAML failed validation");
                             continue;
@@ -540,6 +659,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         continue;
                     }
                 };
+
+                // Extract optional standby config from the YAML `standby:` block.
+                let standby_cfg = yaml_cfg_parsed.standby.as_ref().map(|sb| StandbyRunConfig {
+                    workers: sb.workers,
+                    rps: sb.rps,
+                    url: new_cfg.target_url.clone(),
+                    request_type: new_cfg.request_type.clone(),
+                    send_json: new_cfg.send_json,
+                    json_payload: new_cfg.json_payload.clone(),
+                    percentile_tracking_enabled: new_cfg.percentile_tracking_enabled,
+                    percentile_sampling_rate: new_cfg.percentile_sampling_rate,
+                    region: region_for_watcher.clone(),
+                });
 
                 info!(
                     workers = new_cfg.num_concurrent_tasks,
@@ -610,10 +742,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     ts.yaml = Some(yaml.clone());
                     ts.node_state = "running";
                     ts.generation += 1;
+                    ts.standby = standby_cfg;
                     ts.generation
                 };
-                spawn_idle_watcher(
+                spawn_completion_watcher(
                     test_state_for_watcher.clone(),
+                    pool_for_watcher.clone(),
+                    new_client.clone(),
+                    startup_standby_for_watcher.clone(),
                     new_gen,
                     new_cfg.test_duration,
                 );
@@ -869,7 +1005,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Main loop to run for a duration
     let start_time = time::Instant::now();
 
-    // Sync test_state to actual worker launch time and spawn the idle-watcher.
+    // Sync test_state to actual worker launch time and spawn the completion-watcher.
     let startup_gen = {
         let mut ts = test_state.lock().unwrap();
         ts.start = start_time;
@@ -878,7 +1014,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ts.generation += 1;
         ts.generation
     };
-    spawn_idle_watcher(test_state.clone(), startup_gen, config.test_duration);
+    spawn_completion_watcher(
+        test_state.clone(),
+        worker_pool.clone(),
+        client.clone(),
+        startup_standby.clone(),
+        startup_gen,
+        config.test_duration,
+    );
 
     let mut handles = Vec::new();
     for i in 0..config.num_concurrent_tasks {
