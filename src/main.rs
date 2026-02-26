@@ -254,7 +254,7 @@ fn print_config_help() {
 }
 
 /// Live per-node metrics exposed on the health endpoint.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 struct NodeMetrics {
     rps: f64,
     error_rate_pct: f64,
@@ -264,13 +264,61 @@ struct NodeMetrics {
     cpu_pct: f64,
     time_remaining_secs: i64,
     current_yaml: Option<String>,
+    node_state: String,           // "running" | "idle"
+    test_started_at_unix: Option<u64>, // Unix seconds; None when idle
+    test_duration_secs: Option<u64>,   // None when idle
+    test_percent_complete: Option<f64>, // 0.0–100.0; None when idle
+}
+
+impl Default for NodeMetrics {
+    fn default() -> Self {
+        Self {
+            rps: 0.0,
+            error_rate_pct: 0.0,
+            workers: 0,
+            memory_mb: 0.0,
+            total_memory_mb: 0.0,
+            cpu_pct: 0.0,
+            time_remaining_secs: 0,
+            current_yaml: None,
+            node_state: "running".to_string(),
+            test_started_at_unix: None,
+            test_duration_secs: None,
+            test_percent_complete: None,
+        }
+    }
 }
 
 /// Tracks the active test run — shared between the config-watcher and metrics updater.
 struct TestState {
-    start: time::Instant,
+    start: time::Instant,       // monotonic clock, for elapsed/remaining
+    started_at_unix: u64,       // wall-clock Unix seconds when test started
     duration: Duration,
-    yaml: Option<String>, // None = initial config from environment variables
+    yaml: Option<String>,       // None = initial config from environment variables
+    node_state: &'static str,   // "running" | "idle"
+    generation: u64,            // bumped on each new test; idle-watcher checks this
+}
+
+/// Returns the current Unix timestamp in seconds.
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Spawns a background task that transitions `test_state` to `"idle"` after
+/// `duration`, but only if the test generation hasn't changed (i.e. no new
+/// `POST /config` was received in the meantime).
+fn spawn_idle_watcher(test_state: Arc<Mutex<TestState>>, generation: u64, duration: Duration) {
+    tokio::spawn(async move {
+        tokio::time::sleep(duration).await;
+        let mut ts = test_state.lock().unwrap();
+        if ts.generation == generation {
+            ts.node_state = "idle";
+            ts.yaml = None;
+        }
+    });
 }
 
 /// Worker pool managed by the config-watcher task (Issue #79).
@@ -357,8 +405,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Shared active-test state — set at startup, updated on each POST /config.
     let test_state: Arc<Mutex<TestState>> = Arc::new(Mutex::new(TestState {
         start: time::Instant::now(), // updated again just before workers launch
+        started_at_unix: unix_now(),
         duration: config.test_duration,
         yaml: None,
+        node_state: "running",
+        generation: 0,
     }));
 
     // ── Standalone health + config HTTP server ─────────────────────────────
@@ -397,6 +448,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         "status": "ok",
                                         "node_id": node_id,
                                         "region": region,
+                                        "node_state": m.node_state,
                                         "rps": (m.rps * 100.0).round() / 100.0,
                                         "error_rate_pct": (m.error_rate_pct * 100.0).round() / 100.0,
                                         "workers": m.workers,
@@ -404,6 +456,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         "total_memory_mb": (m.total_memory_mb * 10.0).round() / 10.0,
                                         "cpu_pct": (m.cpu_pct * 10.0).round() / 10.0,
                                         "time_remaining_secs": m.time_remaining_secs,
+                                        "test_started_at_unix": m.test_started_at_unix,
+                                        "test_duration_secs": m.test_duration_secs,
+                                        "test_percent_complete": m.test_percent_complete
+                                            .map(|p| (p * 10.0).round() / 10.0),
                                         "current_yaml": m.current_yaml,
                                     })
                                     .to_string();
@@ -546,12 +602,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     state.handles = new_handles;
                 }
 
-                {
+                let new_gen = {
                     let mut ts = test_state_for_watcher.lock().unwrap();
                     ts.start = new_start;
+                    ts.started_at_unix = unix_now();
                     ts.duration = new_cfg.test_duration;
                     ts.yaml = Some(yaml.clone());
-                }
+                    ts.node_state = "running";
+                    ts.generation += 1;
+                    ts.generation
+                };
+                spawn_idle_watcher(
+                    test_state_for_watcher.clone(),
+                    new_gen,
+                    new_cfg.test_duration,
+                );
 
                 WORKERS_CONFIGURED_TOTAL.set(new_cfg.num_concurrent_tasks as f64);
                 info!(
@@ -711,10 +776,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 #[cfg(not(target_os = "linux"))]
                 let cpu_pct = 0.0_f64;
 
-                let (time_remaining_secs, current_yaml) = {
+                let (
+                    time_remaining_secs,
+                    current_yaml,
+                    node_state,
+                    test_started_at_unix,
+                    test_duration_secs,
+                    test_percent_complete,
+                ) = {
                     let ts = test_state_for_updater.lock().unwrap();
-                    let remaining = ts.duration.as_secs_f64() - ts.start.elapsed().as_secs_f64();
-                    (remaining as i64, ts.yaml.clone())
+                    let elapsed = ts.start.elapsed().as_secs_f64();
+                    let dur = ts.duration.as_secs_f64();
+                    let remaining = dur - elapsed;
+                    let (started_at, dur_secs, pct) = if ts.node_state == "running" {
+                        let pct = ((elapsed / dur) * 100.0).clamp(0.0, 100.0);
+                        (Some(ts.started_at_unix), Some(ts.duration.as_secs()), Some(pct))
+                    } else {
+                        (None, None, None)
+                    };
+                    (
+                        remaining as i64,
+                        ts.yaml.clone(),
+                        ts.node_state.to_string(),
+                        started_at,
+                        dur_secs,
+                        pct,
+                    )
                 };
 
                 *live_metrics_for_updater.lock().unwrap() = NodeMetrics {
@@ -726,6 +813,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     cpu_pct,
                     time_remaining_secs,
                     current_yaml,
+                    node_state,
+                    test_started_at_unix,
+                    test_duration_secs,
+                    test_percent_complete,
                 };
 
                 prev_requests = curr_requests;
@@ -774,11 +865,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Main loop to run for a duration
     let start_time = time::Instant::now();
 
-    // Sync test_state start to the actual worker launch time.
-    {
+    // Sync test_state to actual worker launch time and spawn the idle-watcher.
+    let startup_gen = {
         let mut ts = test_state.lock().unwrap();
         ts.start = start_time;
-    }
+        ts.started_at_unix = unix_now();
+        ts.node_state = "running";
+        ts.generation += 1;
+        ts.generation
+    };
+    spawn_idle_watcher(test_state.clone(), startup_gen, config.test_duration);
 
     let mut handles = Vec::new();
     for i in 0..config.num_concurrent_tasks {
