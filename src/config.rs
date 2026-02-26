@@ -37,6 +37,38 @@ pub enum ConfigError {
     YamlConfig(#[from] YamlConfigError),
 }
 
+/// Minimal cluster/node identity kept for metrics labels.
+#[derive(Debug, Clone)]
+pub struct ClusterConfig {
+    /// Stable node identity used in metric labels.
+    /// Defaults to `CLUSTER_NODE_ID` env var, then `HOSTNAME`, then `"unknown-node"`.
+    pub node_id: String,
+
+    /// Geographic region tag attached to all emitted metrics.
+    /// Defaults to `"local"`.
+    pub region: String,
+}
+
+impl ClusterConfig {
+    /// Parse cluster configuration from environment variables.
+    pub fn from_env() -> Self {
+        let node_id = std::env::var("CLUSTER_NODE_ID").unwrap_or_else(|_| {
+            std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown-node".to_string())
+        });
+        let region = std::env::var("CLUSTER_REGION").unwrap_or_else(|_| "local".to_string());
+        Self { node_id, region }
+    }
+
+    /// Create a cluster config for testing purposes.
+    #[cfg(test)]
+    pub fn for_testing() -> Self {
+        Self {
+            node_id: "test-node".to_string(),
+            region: "local".to_string(),
+        }
+    }
+}
+
 /// Main configuration for the load test.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -61,6 +93,9 @@ pub struct Config {
     pub memory_warning_threshold_percent: f64,
     pub memory_critical_threshold_percent: f64,
     pub auto_disable_percentiles_on_warning: bool,
+
+    // Cluster configuration (Issue #45)
+    pub cluster: ClusterConfig,
 }
 
 /// Helper to get a required environment variable.
@@ -213,6 +248,93 @@ impl Config {
             memory_warning_threshold_percent,
             memory_critical_threshold_percent,
             auto_disable_percentiles_on_warning,
+            cluster: ClusterConfig::from_env(),
+        };
+
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Build a `Config` from a `YamlConfig` where **YAML values are authoritative**.
+    ///
+    /// Used by the Raft config-apply path (Issue #79/#76).  The YAML document
+    /// was deliberately pushed/fetched to replace the running config, so its
+    /// `workers`, `baseUrl`, `load.target`, etc. must not be shadowed by the
+    /// startup env-var defaults (`NUM_CONCURRENT_TASKS`, `TARGET_RPS`, …).
+    ///
+    /// Fields absent from the YAML spec (e.g. `SEND_JSON`, `JSON_PAYLOAD`,
+    /// `CLIENT_CERT_PATH`, percentile settings) still come from env vars.
+    pub fn from_yaml(yaml_config: &YamlConfig) -> Result<Self, ConfigError> {
+        // YAML wins for the fields it owns; env vars fill in the rest.
+        let target_url = yaml_config.config.base_url.clone();
+        let num_concurrent_tasks = yaml_config.config.workers;
+        let test_duration = yaml_config.config.duration.to_std_duration()?;
+        let skip_tls_verify = yaml_config.config.skip_tls_verify;
+        let custom_headers = yaml_config
+            .config
+            .custom_headers
+            .clone()
+            .or_else(|| env::var("CUSTOM_HEADERS").ok().filter(|s| !s.is_empty()));
+
+        // Load model: YAML is authoritative — do not check LOAD_MODEL_TYPE/TARGET_RPS env vars.
+        let load_model = yaml_config.load.to_load_model()?;
+
+        // Fields not present in the YAML spec still come from env vars.
+        let request_type = env::var("REQUEST_TYPE").unwrap_or_else(|_| "GET".to_string());
+        let send_json = env_bool("SEND_JSON", false);
+        let json_payload = if send_json {
+            Some(
+                env_required("JSON_PAYLOAD").map_err(|_| ConfigError::MissingLoadModelParams {
+                    model: "SEND_JSON=true".into(),
+                    required: "JSON_PAYLOAD".into(),
+                })?,
+            )
+        } else {
+            None
+        };
+        let resolve_target_addr = env::var("RESOLVE_TARGET_ADDR").ok();
+        let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
+        let client_key_path = env::var("CLIENT_KEY_PATH").ok();
+        let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
+        let percentile_sampling_rate: u8 = env_parse_or("PERCENTILE_SAMPLING_RATE", 100u8)?;
+        let max_histogram_labels: usize = env_parse_or("MAX_HISTOGRAM_LABELS", 100)?;
+        let histogram_rotation_interval =
+            if let Ok(interval_str) = env::var("HISTOGRAM_ROTATION_INTERVAL") {
+                parse_duration_string(&interval_str).map_err(|e| ConfigError::InvalidDuration {
+                    var: "HISTOGRAM_ROTATION_INTERVAL".into(),
+                    message: e,
+                })?
+            } else {
+                Duration::from_secs(0)
+            };
+        let memory_warning_threshold_percent: f64 =
+            env_parse_or("MEMORY_WARNING_THRESHOLD_PERCENT", 80.0)?;
+        let memory_critical_threshold_percent: f64 =
+            env_parse_or("MEMORY_CRITICAL_THRESHOLD_PERCENT", 90.0)?;
+        let auto_disable_percentiles_on_warning =
+            env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
+
+        let config = Config {
+            target_url,
+            request_type,
+            send_json,
+            json_payload,
+            num_concurrent_tasks,
+            test_duration,
+            load_model,
+            skip_tls_verify,
+            resolve_target_addr,
+            client_cert_path,
+            client_key_path,
+            custom_headers,
+            percentile_tracking_enabled,
+            percentile_sampling_rate,
+            max_histogram_labels,
+            histogram_rotation_interval,
+            memory_warning_threshold_percent,
+            memory_critical_threshold_percent,
+            auto_disable_percentiles_on_warning,
+            cluster: ClusterConfig::from_env(),
         };
 
         config.validate()?;
@@ -377,6 +499,7 @@ impl Config {
             memory_warning_threshold_percent,
             memory_critical_threshold_percent,
             auto_disable_percentiles_on_warning,
+            cluster: ClusterConfig::from_env(),
         };
 
         config.validate()?;
@@ -579,6 +702,7 @@ impl Config {
             memory_warning_threshold_percent: 80.0,
             memory_critical_threshold_percent: 90.0,
             auto_disable_percentiles_on_warning: true,
+            cluster: ClusterConfig::for_testing(),
         }
     }
 
@@ -609,7 +733,15 @@ impl Config {
             mtls_enabled = mtls_enabled,
             custom_headers_count = custom_headers_count,
             percentile_tracking = self.percentile_tracking_enabled,
+            region = %self.cluster.region,
+            node_id = %self.cluster.node_id,
             "Starting load test"
+        );
+
+        info!(
+            region = %self.cluster.region,
+            node_id = %self.cluster.node_id,
+            "Standalone node"
         );
 
         if !self.percentile_tracking_enabled {

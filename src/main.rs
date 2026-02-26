@@ -4,20 +4,28 @@ use mimalloc::MiMalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 use std::sync::{Arc, Mutex};
+use tokio::sync::{mpsc, watch};
 use tokio::time::{self, Duration};
 use tracing::{error, info};
 use tracing_subscriber::{fmt, EnvFilter};
 
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use std::convert::Infallible;
+
 use rust_loadtest::client::build_client;
 use rust_loadtest::config::Config;
 use rust_loadtest::connection_pool::{PoolConfig, GLOBAL_POOL_STATS};
+use rust_loadtest::load_models::LoadModel;
 use rust_loadtest::memory_guard::{
     init_percentile_tracking_flag, spawn_memory_guard, MemoryGuardConfig,
 };
+use rust_loadtest::metrics::CLUSTER_NODE_INFO;
 use rust_loadtest::metrics::{
     gather_metrics_string, register_metrics, start_metrics_server, update_memory_metrics,
     CONNECTION_POOL_IDLE_TIMEOUT_SECONDS, CONNECTION_POOL_MAX_IDLE,
-    PERCENTILE_SAMPLING_RATE_PERCENT, WORKERS_CONFIGURED_TOTAL,
+    PERCENTILE_SAMPLING_RATE_PERCENT, PROCESS_MEMORY_RSS_BYTES, REQUEST_ERRORS_BY_CATEGORY,
+    REQUEST_TOTAL, WORKERS_CONFIGURED_TOTAL,
 };
 use rust_loadtest::percentiles::{
     format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES,
@@ -25,6 +33,7 @@ use rust_loadtest::percentiles::{
 };
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
 use rust_loadtest::worker::{run_worker, WorkerConfig};
+use rust_loadtest::yaml_config::YamlConfig;
 
 /// Initializes the tracing subscriber for structured logging.
 fn init_tracing() {
@@ -228,10 +237,201 @@ fn print_config_help() {
     );
     eprintln!("  REQUEST_TIMEOUT_SECS    - Per-request timeout in seconds (default: 30)");
     eprintln!();
+    eprintln!("Node identity configuration:");
+    eprintln!(
+        "  CLUSTER_NODE_ID         - Stable node identity for metrics labels (default: $HOSTNAME)"
+    );
+    eprintln!("  CLUSTER_REGION          - Geographic region label for metrics (default: local)");
+    eprintln!(
+        "  CLUSTER_HEALTH_ADDR     - Health/config HTTP listen address (default: 0.0.0.0:8080)"
+    );
+    eprintln!("    GET  /health          - Returns JSON with live node metrics");
+    eprintln!("    POST /config          - Accepts a YAML config body to reconfigure workers");
+    eprintln!();
     eprintln!("Logging configuration:");
     eprintln!("  RUST_LOG                - Log level: error, warn, info, debug, trace");
     eprintln!("                            Examples: RUST_LOG=info, RUST_LOG=rust_loadtest=debug");
     eprintln!("  LOG_FORMAT              - Output format: json or default (human-readable)");
+}
+
+/// Live per-node metrics exposed on the health endpoint.
+#[derive(Clone)]
+struct NodeMetrics {
+    rps: f64,
+    error_rate_pct: f64,
+    workers: u32,
+    memory_mb: f64,
+    total_memory_mb: f64,
+    cpu_pct: f64,
+    time_remaining_secs: i64,
+    current_yaml: Option<String>,
+    node_state: String,                 // "running" | "idle"
+    test_started_at_unix: Option<u64>,  // Unix seconds; None when idle
+    test_duration_secs: Option<u64>,    // None when idle
+    test_percent_complete: Option<f64>, // 0.0–100.0; None when idle
+}
+
+impl Default for NodeMetrics {
+    fn default() -> Self {
+        Self {
+            rps: 0.0,
+            error_rate_pct: 0.0,
+            workers: 0,
+            memory_mb: 0.0,
+            total_memory_mb: 0.0,
+            cpu_pct: 0.0,
+            time_remaining_secs: 0,
+            current_yaml: None,
+            node_state: "running".to_string(),
+            test_started_at_unix: None,
+            test_duration_secs: None,
+            test_percent_complete: None,
+        }
+    }
+}
+
+/// Runtime standby configuration: keep connections warm between tests.
+#[derive(Clone)]
+struct StandbyRunConfig {
+    workers: usize,
+    rps: f64,
+    url: String,
+    request_type: String,
+    send_json: bool,
+    json_payload: Option<String>,
+    percentile_tracking_enabled: bool,
+    percentile_sampling_rate: u8,
+    region: String,
+}
+
+/// Tracks the active test run — shared between the config-watcher and metrics updater.
+struct TestState {
+    start: time::Instant, // monotonic clock, for elapsed/remaining
+    started_at_unix: u64, // wall-clock Unix seconds when test started
+    duration: Duration,
+    yaml: Option<String>,     // None = initial config from environment variables
+    node_state: &'static str, // "running" | "idle" | "standby"
+    generation: u64,          // bumped on each new test; completion-watcher checks this
+    standby: Option<StandbyRunConfig>,
+}
+
+/// Returns the current Unix timestamp in seconds.
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Spawns a background task that transitions `test_state` after `duration`:
+/// - If a standby config is available (from the YAML `standby:` block or
+///   the startup env-var fallback): drains workers and spawns standby pool.
+/// - Otherwise: sets `node_state` to `"idle"`.
+///
+/// A double generation check prevents stale watchers from acting on a test
+/// that has already been superseded by a new `POST /config`.
+fn spawn_completion_watcher(
+    test_state: Arc<Mutex<TestState>>,
+    worker_pool: Arc<tokio::sync::Mutex<WorkerPool>>,
+    client: reqwest::Client,
+    startup_standby: Arc<StandbyRunConfig>,
+    generation: u64,
+    duration: Duration,
+) {
+    tokio::spawn(async move {
+        tokio::time::sleep(duration).await;
+
+        // Check 1: did a new test start before the timer fired?
+        let sb = {
+            let ts = test_state.lock().unwrap();
+            if ts.generation != generation {
+                return;
+            }
+            ts.standby
+                .clone()
+                .unwrap_or_else(|| (*startup_standby).clone())
+        };
+
+        // Drain current workers before switching to standby.
+        {
+            let state = worker_pool.lock().await;
+            let _ = state.stop_tx.send(true);
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        {
+            let stale: Vec<_> = worker_pool.lock().await.handles.drain(..).collect();
+            for h in stale {
+                h.abort();
+            }
+        }
+
+        // Check 2: did a new test arrive while we were draining?
+        {
+            let ts = test_state.lock().unwrap();
+            if ts.generation != generation {
+                return;
+            }
+        }
+
+        // Spawn standby workers — they run until a new POST /config fires stop.
+        // Duration is set to ~1 year so workers don't self-terminate.
+        let standby_duration = Duration::from_secs(365 * 24 * 3600);
+        let (new_stop_tx, new_stop_rx) = watch::channel(false);
+        let new_start = time::Instant::now();
+        let num_workers = sb.workers;
+        let standby_rps = sb.rps;
+        let new_handles: Vec<_> = (0..num_workers)
+            .map(|i| {
+                let wc = WorkerConfig {
+                    task_id: i,
+                    url: sb.url.clone(),
+                    request_type: sb.request_type.clone(),
+                    send_json: sb.send_json,
+                    json_payload: sb.json_payload.clone(),
+                    test_duration: standby_duration,
+                    load_model: LoadModel::Rps {
+                        target_rps: standby_rps,
+                    },
+                    num_concurrent_tasks: num_workers,
+                    percentile_tracking_enabled: sb.percentile_tracking_enabled,
+                    percentile_sampling_rate: sb.percentile_sampling_rate,
+                    region: sb.region.clone(),
+                    stop_rx: new_stop_rx.clone(),
+                };
+                tokio::spawn(run_worker(client.clone(), wc, new_start))
+            })
+            .collect();
+        {
+            let mut state = worker_pool.lock().await;
+            state.stop_tx = new_stop_tx;
+            state.handles = new_handles;
+        }
+
+        // Final state update — only if generation still matches (guard against races).
+        let applied = {
+            let mut ts = test_state.lock().unwrap();
+            if ts.generation == generation {
+                ts.node_state = "standby";
+                ts.yaml = None;
+                true
+            } else {
+                false
+            }
+        };
+        if applied {
+            WORKERS_CONFIGURED_TOTAL.set(num_workers as f64);
+        }
+    });
+}
+
+/// Worker pool managed by the config-watcher task (Issue #79).
+///
+/// Holds the stop-signal sender and the JoinHandles of config-watcher-spawned
+/// workers (not the initial startup workers — those hold a clone of the same
+/// `stop_tx` so they still receive the stop signal).
+struct WorkerPool {
+    stop_tx: watch::Sender<bool>,
+    handles: Vec<tokio::task::JoinHandle<()>>,
 }
 
 #[tokio::main]
@@ -261,6 +461,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Print configuration summary
     config.print_summary(&client_result.parsed_headers);
 
+    // Startup standby config: fallback when a test YAML has no `standby:` block.
+    // Nodes auto-revert to their startup state (typically TARGET_RPS=0) after a test ends.
+    let startup_standby: Arc<StandbyRunConfig> = Arc::new(StandbyRunConfig {
+        workers: config.num_concurrent_tasks,
+        rps: if let LoadModel::Rps { target_rps } = &config.load_model {
+            *target_rps
+        } else {
+            0.0
+        },
+        url: config.target_url.clone(),
+        request_type: config.request_type.clone(),
+        send_json: config.send_json,
+        json_payload: config.json_payload.clone(),
+        percentile_tracking_enabled: config.percentile_tracking_enabled,
+        percentile_sampling_rate: config.percentile_sampling_rate,
+        region: config.cluster.region.clone(),
+    });
+
     // Start the Prometheus metrics HTTP server
     let metrics_port = 9090;
     let registry_arc = Arc::new(Mutex::new(prometheus::default_registry().clone()));
@@ -276,6 +494,279 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         metrics_port = metrics_port,
         "Prometheus metrics server started"
     );
+
+    // Set cluster node info metric — standalone mode.
+    CLUSTER_NODE_INFO
+        .with_label_values(&[
+            &config.cluster.node_id,
+            &config.cluster.region,
+            "standalone",
+        ])
+        .set(1.0);
+
+    // Stop-signal channel: shared by all workers.  The config-watcher task
+    // sends `true` to drain workers before reconfiguration.
+    // Workers also self-terminate via the test-duration check.  (Issue #79)
+    let (worker_stop_tx, worker_stop_rx) = watch::channel(false);
+
+    // Worker pool managed by the config-watcher.
+    // Initially empty — the startup workers hold stop_rx clones but are not
+    // tracked here; the stop signal propagates to them regardless.
+    let worker_pool = Arc::new(tokio::sync::Mutex::new(WorkerPool {
+        stop_tx: worker_stop_tx,
+        handles: Vec::new(),
+    }));
+
+    // Config-submission channel: HTTP POST /config → config-watcher task.
+    let (config_tx, mut config_rx) = mpsc::unbounded_channel::<String>();
+
+    // Shared live metrics written by the metrics-updater, read by GET /health.
+    let live_metrics: Arc<Mutex<NodeMetrics>> = Arc::new(Mutex::new(NodeMetrics::default()));
+
+    // Shared active-test state — set at startup, updated on each POST /config.
+    let test_state: Arc<Mutex<TestState>> = Arc::new(Mutex::new(TestState {
+        start: time::Instant::now(), // updated again just before workers launch
+        started_at_unix: unix_now(),
+        duration: config.test_duration,
+        yaml: None,
+        node_state: "running",
+        generation: 0,
+        standby: None,
+    }));
+
+    // ── Standalone health + config HTTP server ─────────────────────────────
+    // GET  /health  → JSON with node identity and live metrics
+    // POST /config  → accept YAML body, apply new config, restart workers
+    {
+        let health_addr =
+            std::env::var("CLUSTER_HEALTH_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+        let addr: std::net::SocketAddr = health_addr.parse().unwrap_or_else(|_| {
+            error!(addr = %health_addr, "Invalid CLUSTER_HEALTH_ADDR, using 0.0.0.0:8080");
+            "0.0.0.0:8080".parse().unwrap()
+        });
+
+        let node_id_for_http = config.cluster.node_id.clone();
+        let region_for_http = config.cluster.region.clone();
+        let live_metrics_for_http = live_metrics.clone();
+        let config_tx_for_http = config_tx.clone();
+
+        tokio::spawn(async move {
+            let make_svc = make_service_fn(move |_conn| {
+                let node_id = node_id_for_http.clone();
+                let region = region_for_http.clone();
+                let lm = live_metrics_for_http.clone();
+                let tx = config_tx_for_http.clone();
+                async move {
+                    Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
+                        let node_id = node_id.clone();
+                        let region = region.clone();
+                        let lm = lm.clone();
+                        let tx = tx.clone();
+                        async move {
+                            match (req.method(), req.uri().path()) {
+                                (&Method::GET, "/health") => {
+                                    let m = lm.lock().unwrap().clone();
+                                    let body = serde_json::json!({
+                                        "status": "ok",
+                                        "node_id": node_id,
+                                        "region": region,
+                                        "node_state": m.node_state,
+                                        "rps": (m.rps * 100.0).round() / 100.0,
+                                        "error_rate_pct": (m.error_rate_pct * 100.0).round() / 100.0,
+                                        "workers": m.workers,
+                                        "memory_mb": (m.memory_mb * 10.0).round() / 10.0,
+                                        "total_memory_mb": (m.total_memory_mb * 10.0).round() / 10.0,
+                                        "cpu_pct": (m.cpu_pct * 10.0).round() / 10.0,
+                                        "time_remaining_secs": m.time_remaining_secs,
+                                        "test_started_at_unix": m.test_started_at_unix,
+                                        "test_duration_secs": m.test_duration_secs,
+                                        "test_percent_complete": m.test_percent_complete
+                                            .map(|p| (p * 10.0).round() / 10.0),
+                                        "current_yaml": m.current_yaml,
+                                    })
+                                    .to_string();
+                                    Ok::<_, Infallible>(
+                                        Response::builder()
+                                            .status(StatusCode::OK)
+                                            .header("Content-Type", "application/json")
+                                            .body(Body::from(body))
+                                            .unwrap(),
+                                    )
+                                }
+                                (&Method::POST, "/config") => {
+                                    let body_bytes = hyper::body::to_bytes(req.into_body())
+                                        .await
+                                        .unwrap_or_default();
+                                    let yaml = String::from_utf8_lossy(&body_bytes).into_owned();
+                                    // Quick parse check before queuing.
+                                    match serde_yaml::from_str::<YamlConfig>(&yaml) {
+                                        Ok(_) => {
+                                            let _ = tx.send(yaml);
+                                            Ok::<_, Infallible>(
+                                                Response::builder()
+                                                    .status(StatusCode::OK)
+                                                    .body(Body::from("config accepted"))
+                                                    .unwrap(),
+                                            )
+                                        }
+                                        Err(e) => Ok::<_, Infallible>(
+                                            Response::builder()
+                                                .status(StatusCode::BAD_REQUEST)
+                                                .body(Body::from(format!("invalid YAML: {}", e)))
+                                                .unwrap(),
+                                        ),
+                                    }
+                                }
+                                _ => Ok::<_, Infallible>(
+                                    Response::builder()
+                                        .status(StatusCode::NOT_FOUND)
+                                        .body(Body::empty())
+                                        .unwrap(),
+                                ),
+                            }
+                        }
+                    }))
+                }
+            });
+
+            if let Ok(server) = Server::try_bind(&addr) {
+                info!(addr = %addr, "Health/config HTTP server started");
+                if let Err(e) = server.serve(make_svc).await {
+                    error!(error = %e, "Health/config HTTP server error");
+                }
+            } else {
+                error!(addr = %addr, "Failed to bind health/config HTTP server");
+            }
+        });
+    }
+
+    // ── Config-watcher / worker-pool reconfiguration ───────────────────────
+    // Receives YAML from POST /config, drains workers, spawns fresh pool.
+    {
+        let pool_for_watcher = worker_pool.clone();
+        let client_for_watcher = client.clone();
+        let region_for_watcher = config.cluster.region.clone();
+        let test_state_for_watcher = test_state.clone();
+        let startup_standby_for_watcher = startup_standby.clone();
+        tokio::spawn(async move {
+            while let Some(yaml) = config_rx.recv().await {
+                let (yaml_cfg_parsed, new_cfg) = match serde_yaml::from_str::<YamlConfig>(&yaml) {
+                    Ok(yaml_cfg) => match Config::from_yaml(&yaml_cfg) {
+                        Ok(c) => (yaml_cfg, c),
+                        Err(e) => {
+                            error!(error = %e, "Config YAML failed validation");
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        error!(error = %e, "Failed to parse config YAML");
+                        continue;
+                    }
+                };
+
+                // Extract optional standby config from the YAML `standby:` block.
+                let standby_cfg = yaml_cfg_parsed.standby.as_ref().map(|sb| StandbyRunConfig {
+                    workers: sb.workers,
+                    rps: sb.rps,
+                    url: new_cfg.target_url.clone(),
+                    request_type: new_cfg.request_type.clone(),
+                    send_json: new_cfg.send_json,
+                    json_payload: new_cfg.json_payload.clone(),
+                    percentile_tracking_enabled: new_cfg.percentile_tracking_enabled,
+                    percentile_sampling_rate: new_cfg.percentile_sampling_rate,
+                    region: region_for_watcher.clone(),
+                });
+
+                info!(
+                    workers = new_cfg.num_concurrent_tasks,
+                    url = %new_cfg.target_url,
+                    load_model = ?new_cfg.load_model,
+                    "Config submitted via POST /config — draining worker pool"
+                );
+
+                // Signal graceful stop (workers exit after current request).
+                {
+                    let state = pool_for_watcher.lock().await;
+                    let _ = state.stop_tx.send(true);
+                }
+                // 5 s grace period for in-flight requests to complete.
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                // Abort any handles still running past the grace window.
+                let stale: Vec<_> = pool_for_watcher.lock().await.handles.drain(..).collect();
+                for h in stale {
+                    h.abort();
+                }
+
+                // Rebuild HTTP client in case TLS/pool config changed.
+                let new_client =
+                    match rust_loadtest::client::build_client(&new_cfg.to_client_config()) {
+                        Ok(r) => r.client,
+                        Err(e) => {
+                            error!(
+                                error = %e,
+                                "Failed to build HTTP client for new config — reusing existing"
+                            );
+                            client_for_watcher.clone()
+                        }
+                    };
+
+                let (new_stop_tx, new_stop_rx) = watch::channel(false);
+                let new_start = time::Instant::now();
+                let new_handles: Vec<_> = (0..new_cfg.num_concurrent_tasks)
+                    .map(|i| {
+                        let wc = WorkerConfig {
+                            task_id: i,
+                            url: new_cfg.target_url.clone(),
+                            request_type: new_cfg.request_type.clone(),
+                            send_json: new_cfg.send_json,
+                            json_payload: new_cfg.json_payload.clone(),
+                            test_duration: new_cfg.test_duration,
+                            load_model: new_cfg.load_model.clone(),
+                            num_concurrent_tasks: new_cfg.num_concurrent_tasks,
+                            percentile_tracking_enabled: new_cfg.percentile_tracking_enabled,
+                            percentile_sampling_rate: new_cfg.percentile_sampling_rate,
+                            region: region_for_watcher.clone(),
+                            stop_rx: new_stop_rx.clone(),
+                        };
+                        tokio::spawn(run_worker(new_client.clone(), wc, new_start))
+                    })
+                    .collect();
+
+                {
+                    let mut state = pool_for_watcher.lock().await;
+                    state.stop_tx = new_stop_tx;
+                    state.handles = new_handles;
+                }
+
+                let new_gen = {
+                    let mut ts = test_state_for_watcher.lock().unwrap();
+                    ts.start = new_start;
+                    ts.started_at_unix = unix_now();
+                    ts.duration = new_cfg.test_duration;
+                    ts.yaml = Some(yaml.clone());
+                    ts.node_state = "running";
+                    ts.generation += 1;
+                    ts.standby = standby_cfg;
+                    ts.generation
+                };
+                spawn_completion_watcher(
+                    test_state_for_watcher.clone(),
+                    pool_for_watcher.clone(),
+                    new_client.clone(),
+                    startup_standby_for_watcher.clone(),
+                    new_gen,
+                    new_cfg.test_duration,
+                );
+
+                WORKERS_CONFIGURED_TOTAL.set(new_cfg.num_concurrent_tasks as f64);
+                info!(
+                    workers = new_cfg.num_concurrent_tasks,
+                    url = %new_cfg.target_url,
+                    "Worker pool reconfigured from POST /config"
+                );
+            }
+        });
+    }
 
     // Initialize percentile tracking runtime flag (Issue #72)
     init_percentile_tracking_flag(config.percentile_tracking_enabled);
@@ -300,17 +791,183 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Memory guard not started - percentile tracking disabled via config");
     }
 
-    // Spawn memory monitoring task (Issue #69)
+    // Spawn memory monitoring task (Issue #69).
+    // Also calls mi_collect() every 30s to return mimalloc arena pages to the
+    // OS — without this, mimalloc retains freed pages as allocator caches which
+    // shows up as ever-growing RSS under sustained high-throughput load.
     tokio::spawn(async move {
         let mut interval = time::interval(Duration::from_secs(10));
+        let mut collect_ticks: u32 = 0;
         loop {
             interval.tick().await;
             if let Err(e) = update_memory_metrics() {
                 error!(error = %e, "Failed to update memory metrics");
             }
+            collect_ticks += 1;
+            if collect_ticks.is_multiple_of(3) {
+                // Every 30s: ask mimalloc to return cached pages to the OS.
+                // mi_collect(true) collects all arenas, not just the calling thread.
+                unsafe { libmimalloc_sys::mi_collect(true) };
+            }
         }
     });
-    info!("Memory monitoring started (updates every 10s)");
+    info!("Memory monitoring started (updates every 10s, mi_collect every 30s)");
+
+    // Spawn health-endpoint metrics updater — refreshes per-node RPS, error
+    // rate, worker count, memory and CPU once per second so the loadtest-control
+    // web app can display live stats without scraping Prometheus.
+    {
+        use rust_loadtest::errors::ErrorCategory;
+        let live_metrics_for_updater = live_metrics.clone();
+        let test_state_for_updater = test_state.clone();
+        let region = config.cluster.region.clone();
+        tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_secs(1));
+            let mut prev_requests: u64 = 0;
+            let mut prev_errors: u64 = 0;
+            // CPU tracking (Linux only) — tracks utime+stime jiffies
+            #[cfg(target_os = "linux")]
+            let mut prev_cpu_ticks: Option<u64> = None;
+
+            loop {
+                interval.tick().await;
+
+                // ── Request counter (monotonic) ──────────────────────────
+                let curr_requests = REQUEST_TOTAL.with_label_values(&[&region]).get();
+
+                // ── Error counter: sum all known categories ───────────────
+                let curr_errors: u64 = ErrorCategory::all()
+                    .iter()
+                    .map(|cat| {
+                        REQUEST_ERRORS_BY_CATEGORY
+                            .with_label_values(&[cat.label(), &region])
+                            .get()
+                    })
+                    .sum();
+
+                let delta_req = curr_requests.saturating_sub(prev_requests);
+                let delta_err = curr_errors.saturating_sub(prev_errors);
+                let rps = delta_req as f64;
+                let error_rate_pct = if delta_req > 0 {
+                    (delta_err as f64 / delta_req as f64) * 100.0
+                } else {
+                    0.0
+                };
+
+                // ── Workers & memory ─────────────────────────────────────
+                let workers = WORKERS_CONFIGURED_TOTAL.get() as u32;
+                let memory_mb = PROCESS_MEMORY_RSS_BYTES.get() / (1024.0 * 1024.0);
+
+                // ── Total memory limit (cgroup → system fallback) ─────────
+                // Mirror the logic in memory_guard::detect_memory_limit so the
+                // health endpoint can expose memory_used% without a Prometheus query.
+                let total_memory_mb: f64 = {
+                    // cgroup v2
+                    let v2 = std::fs::read_to_string("/sys/fs/cgroup/memory.max")
+                        .ok()
+                        .and_then(|s| {
+                            let t = s.trim();
+                            if t == "max" {
+                                None
+                            } else {
+                                t.parse::<u64>().ok()
+                            }
+                        });
+                    // cgroup v1
+                    let v1 = std::fs::read_to_string("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u64>().ok())
+                        .filter(|&b| b < u64::MAX / 2); // ignore sentinel "unlimited" values
+
+                    #[cfg(target_os = "linux")]
+                    let system = {
+                        use procfs::{Current, Meminfo};
+                        Meminfo::current().ok().map(|m| m.mem_total)
+                    };
+                    #[cfg(not(target_os = "linux"))]
+                    let system: Option<u64> = None;
+
+                    v2.or(v1)
+                        .or(system)
+                        .map(|bytes| bytes as f64 / (1024.0 * 1024.0))
+                        .unwrap_or(0.0)
+                };
+
+                // ── CPU % (Linux only via procfs) ────────────────────────
+                // Reports percentage of one CPU core consumed by this process
+                // in the last second (100 = fully saturating one core).
+                // Computed from utime+stime delta in jiffies (CLK_TCK=100).
+                #[cfg(target_os = "linux")]
+                let cpu_pct = {
+                    use procfs::process::Process;
+                    let mut pct = 0.0_f64;
+                    if let Ok(me) = Process::myself() {
+                        if let Ok(stat) = me.stat() {
+                            let proc_ticks = stat.utime + stat.stime;
+                            if let Some(prev) = prev_cpu_ticks {
+                                // delta ticks / CLK_TCK (100) * 100 = pct of one core
+                                pct = proc_ticks.saturating_sub(prev) as f64;
+                            }
+                            prev_cpu_ticks = Some(proc_ticks);
+                        }
+                    }
+                    pct
+                };
+                #[cfg(not(target_os = "linux"))]
+                let cpu_pct = 0.0_f64;
+
+                let (
+                    time_remaining_secs,
+                    current_yaml,
+                    node_state,
+                    test_started_at_unix,
+                    test_duration_secs,
+                    test_percent_complete,
+                ) = {
+                    let ts = test_state_for_updater.lock().unwrap();
+                    let elapsed = ts.start.elapsed().as_secs_f64();
+                    let dur = ts.duration.as_secs_f64();
+                    let remaining = dur - elapsed;
+                    let (started_at, dur_secs, pct) = if ts.node_state == "running" {
+                        let pct = ((elapsed / dur) * 100.0).clamp(0.0, 100.0);
+                        (
+                            Some(ts.started_at_unix),
+                            Some(ts.duration.as_secs()),
+                            Some(pct),
+                        )
+                    } else {
+                        (None, None, None)
+                    };
+                    (
+                        remaining as i64,
+                        ts.yaml.clone(),
+                        ts.node_state.to_string(),
+                        started_at,
+                        dur_secs,
+                        pct,
+                    )
+                };
+
+                *live_metrics_for_updater.lock().unwrap() = NodeMetrics {
+                    rps,
+                    error_rate_pct,
+                    workers,
+                    memory_mb,
+                    total_memory_mb,
+                    cpu_pct,
+                    time_remaining_secs,
+                    current_yaml,
+                    node_state,
+                    test_started_at_unix,
+                    test_duration_secs,
+                    test_percent_complete,
+                };
+
+                prev_requests = curr_requests;
+                prev_errors = curr_errors;
+            }
+        });
+    }
 
     // Spawn histogram rotation task if enabled (Issue #67)
     if config.histogram_rotation_interval.as_secs() > 0 {
@@ -352,6 +1009,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Main loop to run for a duration
     let start_time = time::Instant::now();
 
+    // Sync test_state to actual worker launch time and spawn the completion-watcher.
+    let startup_gen = {
+        let mut ts = test_state.lock().unwrap();
+        ts.start = start_time;
+        ts.started_at_unix = unix_now();
+        ts.node_state = "running";
+        ts.generation += 1;
+        ts.generation
+    };
+    spawn_completion_watcher(
+        test_state.clone(),
+        worker_pool.clone(),
+        client.clone(),
+        startup_standby.clone(),
+        startup_gen,
+        config.test_duration,
+    );
+
     let mut handles = Vec::new();
     for i in 0..config.num_concurrent_tasks {
         let worker_config = WorkerConfig {
@@ -365,6 +1040,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             num_concurrent_tasks: config.num_concurrent_tasks,
             percentile_tracking_enabled: config.percentile_tracking_enabled,
             percentile_sampling_rate: config.percentile_sampling_rate,
+            region: config.cluster.region.clone(),
+            // Graceful-stop signal (Issue #79). In cluster mode the
+            // config-watcher fires this before replacing the worker pool.
+            // In standalone mode it is never fired; workers self-terminate
+            // via the test-duration check.
+            stop_rx: worker_stop_rx.clone(),
         };
 
         let client_clone = client.clone();

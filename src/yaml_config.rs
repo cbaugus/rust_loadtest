@@ -352,6 +352,21 @@ pub enum YamlAssertion {
     HeaderExists { header: String },
 }
 
+/// Standby configuration: applied after the test completes to keep connections warm.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct YamlStandbyConfig {
+    /// Number of workers to run in standby (inherits URL and method from the main config).
+    #[serde(default = "default_standby_workers")]
+    pub workers: usize,
+    /// Target RPS in standby; 0.0 = connected but silent.
+    #[serde(default)]
+    pub rps: f64,
+}
+
+fn default_standby_workers() -> usize {
+    2
+}
+
 /// Root YAML configuration structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct YamlConfig {
@@ -365,6 +380,10 @@ pub struct YamlConfig {
     pub load: YamlLoadModel,
 
     pub scenarios: Vec<YamlScenario>,
+
+    /// Optional standby configuration applied after test duration expires.
+    #[serde(default)]
+    pub standby: Option<YamlStandbyConfig>,
 }
 
 impl YamlConfig {
@@ -643,6 +662,7 @@ impl Default for YamlConfig {
             },
             load: YamlLoadModel::Concurrent,
             scenarios: vec![],
+            standby: None,
         }
     }
 }

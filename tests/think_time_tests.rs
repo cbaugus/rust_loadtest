@@ -9,8 +9,8 @@ use rust_loadtest::executor::ScenarioExecutor;
 use rust_loadtest::scenario::{RequestConfig, Scenario, ScenarioContext, Step, ThinkTime};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-
-const BASE_URL: &str = "https://httpbin.org";
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn create_test_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -20,8 +20,25 @@ fn create_test_client() -> reqwest::Client {
         .expect("Failed to create HTTP client")
 }
 
+/// Mount GET /get and GET /json on the mock server.
+async fn mount_basic_routes(server: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(server)
+        .await;
+}
+
 #[tokio::test]
 async fn test_fixed_think_time() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     let scenario = Scenario {
         name: "Fixed Think Time Test".to_string(),
         weight: 1.0,
@@ -54,7 +71,7 @@ async fn test_fixed_think_time() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
@@ -64,33 +81,44 @@ async fn test_fixed_think_time() {
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps_completed, 2);
 
-    // Total time should include the 500ms think time
+    let step1_ms = result.steps[0].response_time_ms;
+    let step2_ms = result.steps[1].response_time_ms;
+    let total_ms = total_duration.as_millis() as u64;
+
+    // Total time must include the 500ms think time on top of both requests.
     assert!(
-        total_duration.as_millis() >= 500,
+        total_ms >= 500,
         "Total duration {}ms should be at least 500ms (think time)",
-        total_duration.as_millis()
+        total_ms
     );
 
-    // But individual request metrics should NOT include think time
-    // Step 1 latency should be much less than 500ms
+    // The think time should appear as overhead ON TOP of the two step latencies.
+    // With wiremock responses are ~instant, so think time is almost all of total.
+    // Using 90% of think time (450ms) as the threshold to absorb scheduling jitter.
+    let think_overhead_ms = total_ms.saturating_sub(step1_ms + step2_ms);
     assert!(
-        result.steps[0].response_time_ms < 500,
-        "Step 1 latency {}ms should not include 500ms think time",
-        result.steps[0].response_time_ms
+        think_overhead_ms >= 450,
+        "Think time overhead should be ~500ms, got {}ms \
+         (total={}ms, step1={}ms, step2={}ms — think time not applied separately?)",
+        think_overhead_ms,
+        total_ms,
+        step1_ms,
+        step2_ms
     );
 
     println!("\nFixed Think Time Test:");
-    println!("  Total duration: {}ms", total_duration.as_millis());
-    println!(
-        "  Step 1 latency: {}ms (excludes think time)",
-        result.steps[0].response_time_ms
-    );
-    println!("  Step 2 latency: {}ms", result.steps[1].response_time_ms);
+    println!("  Total duration: {}ms", total_ms);
+    println!("  Step 1 latency: {}ms (excludes think time)", step1_ms);
+    println!("  Step 2 latency: {}ms", step2_ms);
+    println!("  Think time overhead: {}ms", think_overhead_ms);
     println!("  ✅ Think time does NOT count towards request latency");
 }
 
 #[tokio::test]
 async fn test_random_think_time() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     let scenario = Scenario {
         name: "Random Think Time Test".to_string(),
         weight: 1.0,
@@ -126,7 +154,7 @@ async fn test_random_think_time() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
 
     // Run multiple times to test randomness
     let mut durations = Vec::new();
@@ -164,6 +192,9 @@ async fn test_random_think_time() {
 
 #[tokio::test]
 async fn test_multiple_think_times() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     let scenario = Scenario {
         name: "Multiple Think Times".to_string(),
         weight: 1.0,
@@ -208,7 +239,7 @@ async fn test_multiple_think_times() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
@@ -247,6 +278,9 @@ async fn test_multiple_think_times() {
 
 #[tokio::test]
 async fn test_no_think_time() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     let scenario = Scenario {
         name: "No Think Time".to_string(),
         weight: 1.0,
@@ -279,7 +313,7 @@ async fn test_no_think_time() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
@@ -288,7 +322,7 @@ async fn test_no_think_time() {
 
     assert!(result.success);
 
-    // Should be fast with no think time (under 1 second)
+    // With wiremock responses the round-trips are local — well under 1 second.
     assert!(
         total_duration.as_millis() < 1000,
         "Without think time, should complete quickly ({}ms)",
@@ -302,6 +336,9 @@ async fn test_no_think_time() {
 
 #[tokio::test]
 async fn test_realistic_user_behavior() {
+    let server = MockServer::start().await;
+    mount_basic_routes(&server).await;
+
     // Simulate realistic e-commerce browsing with varied think times
     let scenario = Scenario {
         name: "Realistic User Behavior".to_string(),
@@ -356,7 +393,7 @@ async fn test_realistic_user_behavior() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();

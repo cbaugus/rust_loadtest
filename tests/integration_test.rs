@@ -21,15 +21,19 @@ fn init_metrics() {
 }
 
 fn get_total_requests() -> u64 {
-    REQUEST_TOTAL.get()
+    REQUEST_TOTAL.with_label_values(&["local"]).get()
 }
 
 fn get_status_code_count(code: &str) -> u64 {
-    REQUEST_STATUS_CODES.with_label_values(&[code]).get()
+    REQUEST_STATUS_CODES
+        .with_label_values(&[code, "local"])
+        .get()
 }
 
 fn get_duration_count() -> u64 {
-    REQUEST_DURATION_SECONDS.get_sample_count()
+    REQUEST_DURATION_SECONDS
+        .with_label_values(&["local"])
+        .get_sample_count()
 }
 
 // --- GET request tests ---
@@ -59,6 +63,8 @@ async fn worker_sends_get_requests() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::new();
@@ -98,6 +104,8 @@ async fn worker_sends_post_requests() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::new();
@@ -133,6 +141,8 @@ async fn worker_sends_json_post_body() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::new();
@@ -167,6 +177,8 @@ async fn worker_tracks_200_status_codes() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::new();
@@ -205,6 +217,8 @@ async fn worker_tracks_404_status_codes() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::new();
@@ -243,6 +257,8 @@ async fn worker_tracks_500_status_codes() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::new();
@@ -283,6 +299,8 @@ async fn worker_records_request_duration() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::new();
@@ -321,13 +339,15 @@ async fn concurrent_requests_returns_to_zero_after_worker_finishes() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::new();
     run_worker(client, config, Instant::now()).await;
 
     // After worker finishes, concurrent requests gauge should not be negative
-    let gauge = CONCURRENT_REQUESTS.get();
+    let gauge = CONCURRENT_REQUESTS.with_label_values(&["local"]).get();
     assert!(
         gauge >= 0.0,
         "concurrent requests gauge should not be negative, got {}",
@@ -355,6 +375,8 @@ async fn worker_handles_connection_error_gracefully() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::builder()
@@ -397,6 +419,8 @@ async fn worker_respects_rps_rate_limit() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let start = Instant::now();
@@ -436,6 +460,8 @@ async fn worker_stops_after_test_duration() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let start = Instant::now();
@@ -482,6 +508,8 @@ async fn worker_handles_slow_responses() {
         num_concurrent_tasks: 1,
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
+        region: "local".to_string(),
+        stop_rx: tokio::sync::watch::channel(false).1,
     };
 
     let client = reqwest::Client::new();

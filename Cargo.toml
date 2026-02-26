@@ -30,6 +30,7 @@ notify = "6.0" # For file watching (hot-reload)
 schemars = "0.8" # For JSON Schema generation
 lru = "0.12" # For LRU cache to limit histogram labels (Issue #68)
 mimalloc = { version = "0.1", default-features = false } # High-performance allocator, returns memory to OS aggressively
+libmimalloc-sys = { version = "0.1", features = ["extended"] } # mi_collect() for periodic arena page return
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.16" # For Linux process memory stats (Issue #69)

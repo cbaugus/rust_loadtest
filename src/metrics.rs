@@ -1,7 +1,7 @@
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use prometheus::{
-    Encoder, Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, Opts, Registry, TextEncoder,
+    Encoder, Gauge, HistogramVec, IntCounter, IntCounterVec, Opts, Registry, TextEncoder,
 };
 use std::env;
 use std::sync::{Arc, Mutex};
@@ -13,31 +13,34 @@ lazy_static::lazy_static! {
 
     // === Single Request Metrics ===
 
-    pub static ref REQUEST_TOTAL: IntCounter =
-        IntCounter::with_opts(
+    pub static ref REQUEST_TOTAL: IntCounterVec =
+        IntCounterVec::new(
             Opts::new("requests_total", "Total number of HTTP requests made")
-                .namespace(METRIC_NAMESPACE.as_str())
+                .namespace(METRIC_NAMESPACE.as_str()),
+            &["region"]
         ).unwrap();
 
     pub static ref REQUEST_STATUS_CODES: IntCounterVec =
         IntCounterVec::new(
             Opts::new("requests_status_codes_total", "Number of HTTP requests by status code")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["status_code"]
+            &["status_code", "region"]
         ).unwrap();
 
-    pub static ref CONCURRENT_REQUESTS: Gauge =
-        Gauge::with_opts(
+    pub static ref CONCURRENT_REQUESTS: prometheus::GaugeVec =
+        prometheus::GaugeVec::new(
             Opts::new("concurrent_requests", "Number of HTTP requests currently in flight")
-                .namespace(METRIC_NAMESPACE.as_str())
+                .namespace(METRIC_NAMESPACE.as_str()),
+            &["region"]
         ).unwrap();
 
-    pub static ref REQUEST_DURATION_SECONDS: Histogram =
-        Histogram::with_opts(
+    pub static ref REQUEST_DURATION_SECONDS: HistogramVec =
+        HistogramVec::new(
             prometheus::HistogramOpts::new(
                 "request_duration_seconds",
                 "HTTP request latencies in seconds."
-            ).namespace(METRIC_NAMESPACE.as_str())
+            ).namespace(METRIC_NAMESPACE.as_str()),
+            &["region"]
         ).unwrap();
 
     // === Scenario Metrics ===
@@ -109,7 +112,7 @@ lazy_static::lazy_static! {
         IntCounterVec::new(
             Opts::new("request_errors_by_category", "Number of errors by category")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["category"]  // category: client_error, server_error, network_error, timeout_error, tls_error, other_error
+            &["category", "region"]
         ).unwrap();
 
     // === Connection Pool Metrics (Issue #36) ===
@@ -239,6 +242,21 @@ lazy_static::lazy_static! {
             .namespace(METRIC_NAMESPACE.as_str()),
         )
         .unwrap();
+
+    // === Cluster Node Info (Issue #45) ===
+
+    /// Info gauge set to 1 when the node is running. Labels identify the node
+    /// within its cluster. In standalone mode: state="standalone".
+    pub static ref CLUSTER_NODE_INFO: prometheus::GaugeVec =
+        prometheus::GaugeVec::new(
+            Opts::new(
+                "cluster_node_info",
+                "Cluster node identity and state (1 = running). Labels: node_id, region, state.",
+            )
+            .namespace(METRIC_NAMESPACE.as_str()),
+            &["node_id", "region", "state"],
+        )
+        .unwrap();
 }
 
 /// Registers all metrics with the default Prometheus registry.
@@ -290,6 +308,9 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     // Test configuration metrics
     prometheus::default_registry().register(Box::new(PERCENTILE_SAMPLING_RATE_PERCENT.clone()))?;
     prometheus::default_registry().register(Box::new(WORKERS_CONFIGURED_TOTAL.clone()))?;
+
+    // Cluster node info (Issue #45)
+    prometheus::default_registry().register(Box::new(CLUSTER_NODE_INFO.clone()))?;
 
     Ok(())
 }
