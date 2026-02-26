@@ -4,7 +4,6 @@ use tokio::time::Duration;
 use tracing::{info, warn};
 
 use crate::client::ClientConfig;
-use crate::cluster::ClusterConfig;
 use crate::config_merge::ConfigMerger;
 use crate::load_models::LoadModel;
 use crate::utils::parse_duration_string;
@@ -36,6 +35,39 @@ pub enum ConfigError {
 
     #[error("YAML config error: {0}")]
     YamlConfig(#[from] YamlConfigError),
+}
+
+/// Minimal cluster/node identity kept for metrics labels.
+#[derive(Debug, Clone)]
+pub struct ClusterConfig {
+    /// Stable node identity used in metric labels.
+    /// Defaults to `CLUSTER_NODE_ID` env var, then `HOSTNAME`, then `"unknown-node"`.
+    pub node_id: String,
+
+    /// Geographic region tag attached to all emitted metrics.
+    /// Defaults to `"local"`.
+    pub region: String,
+}
+
+impl ClusterConfig {
+    /// Parse cluster configuration from environment variables.
+    pub fn from_env() -> Self {
+        let node_id = std::env::var("CLUSTER_NODE_ID").unwrap_or_else(|_| {
+            std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown-node".to_string())
+        });
+        let region =
+            std::env::var("CLUSTER_REGION").unwrap_or_else(|_| "local".to_string());
+        Self { node_id, region }
+    }
+
+    /// Create a cluster config for testing purposes.
+    #[cfg(test)]
+    pub fn for_testing() -> Self {
+        Self {
+            node_id: "test-node".to_string(),
+            region: "local".to_string(),
+        }
+    }
 }
 
 /// Main configuration for the load test.
@@ -702,28 +734,16 @@ impl Config {
             mtls_enabled = mtls_enabled,
             custom_headers_count = custom_headers_count,
             percentile_tracking = self.percentile_tracking_enabled,
-            cluster_enabled = self.cluster.enabled,
             region = %self.cluster.region,
             node_id = %self.cluster.node_id,
             "Starting load test"
         );
 
-        if self.cluster.enabled {
-            info!(
-                node_id = %self.cluster.node_id,
-                region = %self.cluster.region,
-                bind_addr = %self.cluster.bind_addr,
-                health_addr = %self.cluster.health_addr,
-                discovery_mode = %self.cluster.discovery_mode.as_str(),
-                peer_count = self.cluster.nodes.len(),
-                "Cluster mode ENABLED (Issue #45)"
-            );
-        } else {
-            info!(
-                region = %self.cluster.region,
-                "Cluster mode disabled — standalone node (set CLUSTER_ENABLED=true to enable)"
-            );
-        }
+        info!(
+            region = %self.cluster.region,
+            node_id = %self.cluster.node_id,
+            "Standalone node"
+        );
 
         if !self.percentile_tracking_enabled {
             warn!(
