@@ -237,9 +237,13 @@ fn print_config_help() {
     eprintln!("  REQUEST_TIMEOUT_SECS    - Per-request timeout in seconds (default: 30)");
     eprintln!();
     eprintln!("Node identity configuration:");
-    eprintln!("  CLUSTER_NODE_ID         - Stable node identity for metrics labels (default: $HOSTNAME)");
+    eprintln!(
+        "  CLUSTER_NODE_ID         - Stable node identity for metrics labels (default: $HOSTNAME)"
+    );
     eprintln!("  CLUSTER_REGION          - Geographic region label for metrics (default: local)");
-    eprintln!("  CLUSTER_HEALTH_ADDR     - Health/config HTTP listen address (default: 0.0.0.0:8080)");
+    eprintln!(
+        "  CLUSTER_HEALTH_ADDR     - Health/config HTTP listen address (default: 0.0.0.0:8080)"
+    );
     eprintln!("    GET  /health          - Returns JSON with live node metrics");
     eprintln!("    POST /config          - Accepts a YAML config body to reconfigure workers");
     eprintln!();
@@ -315,7 +319,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Set cluster node info metric — standalone mode.
     CLUSTER_NODE_INFO
-        .with_label_values(&[&config.cluster.node_id, &config.cluster.region, "standalone"])
+        .with_label_values(&[
+            &config.cluster.node_id,
+            &config.cluster.region,
+            "standalone",
+        ])
         .set(1.0);
 
     // Stop-signal channel: shared by all workers.  The config-watcher task
@@ -341,8 +349,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // GET  /health  → JSON with node identity and live metrics
     // POST /config  → accept YAML body, apply new config, restart workers
     {
-        let health_addr = std::env::var("CLUSTER_HEALTH_ADDR")
-            .unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+        let health_addr =
+            std::env::var("CLUSTER_HEALTH_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
         let addr: std::net::SocketAddr = health_addr.parse().unwrap_or_else(|_| {
             error!(addr = %health_addr, "Invalid CLUSTER_HEALTH_ADDR, using 0.0.0.0:8080");
             "0.0.0.0:8080".parse().unwrap()
@@ -392,8 +400,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     let body_bytes = hyper::body::to_bytes(req.into_body())
                                         .await
                                         .unwrap_or_default();
-                                    let yaml =
-                                        String::from_utf8_lossy(&body_bytes).into_owned();
+                                    let yaml = String::from_utf8_lossy(&body_bytes).into_owned();
                                     // Quick parse check before queuing.
                                     match serde_yaml::from_str::<YamlConfig>(&yaml) {
                                         Ok(_) => {
@@ -408,10 +415,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         Err(e) => Ok::<_, Infallible>(
                                             Response::builder()
                                                 .status(StatusCode::BAD_REQUEST)
-                                                .body(Body::from(format!(
-                                                    "invalid YAML: {}",
-                                                    e
-                                                )))
+                                                .body(Body::from(format!("invalid YAML: {}", e)))
                                                 .unwrap(),
                                         ),
                                     }
@@ -476,8 +480,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 // 5 s grace period for in-flight requests to complete.
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 // Abort any handles still running past the grace window.
-                let stale: Vec<_> =
-                    pool_for_watcher.lock().await.handles.drain(..).collect();
+                let stale: Vec<_> = pool_for_watcher.lock().await.handles.drain(..).collect();
                 for h in stale {
                     h.abort();
                 }

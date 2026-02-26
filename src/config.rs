@@ -55,8 +55,7 @@ impl ClusterConfig {
         let node_id = std::env::var("CLUSTER_NODE_ID").unwrap_or_else(|_| {
             std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown-node".to_string())
         });
-        let region =
-            std::env::var("CLUSTER_REGION").unwrap_or_else(|_| "local".to_string());
+        let region = std::env::var("CLUSTER_REGION").unwrap_or_else(|_| "local".to_string());
         Self { node_id, region }
     }
 
