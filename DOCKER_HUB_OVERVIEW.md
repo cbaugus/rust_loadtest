@@ -139,8 +139,11 @@ docker run --rm \
 | `LOAD_MODEL_TYPE` | Yes | - | Load model: `Concurrent`, `Rps`, `RampRps`, or `DailyTraffic` |
 | `NUM_CONCURRENT_TASKS` | No | 10 | Maximum concurrent requests |
 | `TEST_DURATION` | No | 2h | Test duration (e.g., `10m`, `1h`, `3d`) |
-| `REQUEST_TYPE` | No | POST | HTTP method: `GET` or `POST` |
+| `REQUEST_TYPE` | No | GET | HTTP method: `GET` or `POST` |
 | `SKIP_TLS_VERIFY` | No | false | Skip TLS certificate verification |
+| `CLUSTER_NODE_ID` | No | hostname | Node identifier used in metrics labels |
+| `CLUSTER_REGION` | No | default | Region label used in metrics and health output |
+| `CLUSTER_HEALTH_ADDR` | No | 0.0.0.0:8080 | Bind address for the live control HTTP API |
 
 ### Load Model Specific Variables
 
@@ -214,14 +217,85 @@ Send JSON data with POST requests:
 -e JSON_PAYLOAD='{"key":"value","nested":{"data":"here"}}'
 ```
 
+## Live Control API (port 8080)
+
+Every node exposes a lightweight HTTP API for real-time inspection and reconfiguration.
+
+### GET /health
+
+Returns live node status as JSON:
+
+```json
+{
+  "node_id": "node-1",
+  "region": "us-east",
+  "node_state": "running",
+  "rps": 1423.7,
+  "error_rate_pct": 0.12,
+  "workers": 25,
+  "memory_mb": 142.3,
+  "total_memory_mb": 16384.0,
+  "cpu_pct": 14.5,
+  "time_remaining_secs": 3542,
+  "test_started_at_unix": 1706000000,
+  "test_duration_secs": 7200,
+  "test_percent_complete": 50.8,
+  "current_yaml": "version: \"1.0\"\n..."
+}
+```
+
+`node_state` values: `"running"` (active test), `"standby"` (test complete, keeping connections warm), `"idle"` (no config).
+
+### POST /config
+
+Submit a YAML config to start or reconfigure the test immediately — no restart required:
+
+```bash
+curl -X POST http://<node>:8080/config \
+  -H "Content-Type: application/x-yaml" \
+  --data-binary @config.yaml
+```
+
+**Example YAML config with standby:**
+
+```yaml
+version: "1.0"
+config:
+  baseUrl: "https://your-service.com"
+  workers: 50
+  duration: "1h"
+  timeout: "30s"
+load:
+  model: "rps"
+  target: 500
+scenarios:
+  - name: "Health check"
+    weight: 100
+    steps:
+      - name: "GET /"
+        request:
+          method: "GET"
+          path: "/"
+        assertions:
+          - type: statusCode
+            expected: 200
+standby:
+  workers: 2
+  rps: 0
+```
+
+When the test duration expires, nodes automatically transition to `"standby"` state using the `standby:` block (or startup env-var defaults if no `standby:` block is present). Standby workers keep connections warm at low (or zero) RPS until a new `POST /config` arrives.
+
 ## Why Choose This Tool?
 
 ✅ **High Performance**: Built in Rust for maximum throughput and minimal overhead
 ✅ **Flexible Load Models**: From simple concurrent loads to complex daily traffic patterns
+✅ **Live Reconfiguration**: Update test parameters on the fly via `POST /config` — no restart needed
+✅ **Auto Standby**: Nodes automatically switch to warm-standby mode after test completion
 ✅ **Production Ready**: Chainguard static images with minimal CVEs
-✅ **Easy Monitoring**: Built-in Prometheus metrics
+✅ **Easy Monitoring**: Built-in Prometheus metrics (port 9090) + live health API (port 8080)
 ✅ **Secure**: Support for HTTPS, mTLS, and custom authentication
-✅ **Container Native**: Optimized for Docker/Kubernetes deployments
+✅ **Container Native**: Optimized for Docker/Kubernetes/Nomad deployments
 ✅ **Actively Maintained**: Regular updates and security patches
 
 ## Support & Documentation
