@@ -217,10 +217,36 @@ rust_loadtest_histogram_memory_estimate_bytes / 1024 / 1024
 ```
 .
 ├── Cargo.toml
-├── src
-│   └── main.rs
 ├── Dockerfile              # Standard Ubuntu-based build
-└── Dockerfile.static       # Minimal Chainguard static build
+├── Dockerfile.static       # Minimal Chainguard static build
+├── src
+│   ├── main.rs             # Entry point, HTTP control API, worker lifecycle
+│   ├── lib.rs              # Public module declarations
+│   ├── config.rs           # Environment-variable config loading
+│   ├── yaml_config.rs      # YAML config parsing (POST /config body)
+│   ├── config_merge.rs     # Merge YAML overrides onto env-var defaults
+│   ├── config_validation.rs
+│   ├── config_version.rs
+│   ├── config_hot_reload.rs
+│   ├── load_models.rs      # Concurrent / Rps / RampRps / DailyTraffic
+│   ├── worker.rs           # Per-worker async loop
+│   ├── scenario.rs         # Multi-step scenario types
+│   ├── executor.rs         # Scenario executor
+│   ├── multi_scenario.rs   # Weighted scenario selector
+│   ├── metrics.rs          # Prometheus metric registration
+│   ├── percentiles.rs      # HDR histogram tracking
+│   ├── memory_guard.rs     # Auto-OOM protection
+│   ├── throughput.rs       # RPS calculation helpers
+│   ├── connection_pool.rs  # Reqwest connection-pool config
+│   ├── client.rs           # HTTP client builder (mTLS, DNS override)
+│   ├── extractor.rs        # JSON/regex variable extraction
+│   ├── assertions.rs       # Step assertion evaluation
+│   ├── data_source.rs      # CSV/static data sources
+│   ├── errors.rs
+│   └── utils.rs
+└── tests
+    ├── scenario_integration_tests.rs
+    └── ...
 ```
 
 
@@ -231,7 +257,7 @@ The load testing tool is configured primarily through environment variables pass
 ### Common Environment Variables
 
 * TARGET_URL (Required): The full URL of the endpoint you want to load test (e.g., http://example.com/api/data or https://secure-api.com/status).
-* REQUEST_TYPE (Optional, default: POST): The HTTP method to use for requests. Supported values are "GET" and "POST".
+* REQUEST_TYPE (Optional, default: GET): The HTTP method to use for requests. Supported values are "GET" and "POST".
 * NUM_CONCURRENT_TASKS (Optional, default: 10): The maximum number of concurrent HTTP requests (worker tasks) that the load generator will attempt to maintain. This acts as a concurrency limit.
 * TEST_DURATION (Optional, default: 2h): The total duration for which the load test will run. Accepts values like 10m (10 minutes), 1h (1 hour), 3d (3 days).
 * SKIP_TLS_VERIFY (Optional, default: false): Set to "true" to skip TLS/SSL certificate verification for HTTPS endpoints. Use with caution, primarily for testing environments with self-signed certificates.
@@ -244,6 +270,12 @@ The load testing tool is configured primarily through environment variables pass
 * MEMORY_WARNING_THRESHOLD_PERCENT (Optional, default: 80.0): Memory usage percentage that triggers warning and defensive actions. When memory exceeds this threshold, auto-OOM protection can automatically disable percentile tracking to prevent crashes.
 * MEMORY_CRITICAL_THRESHOLD_PERCENT (Optional, default: 90.0): Memory usage percentage that triggers critical warnings and aggressive cleanup. At this level, histograms are rotated to free as much memory as possible.
 * AUTO_DISABLE_PERCENTILES_ON_WARNING (Optional, default: true): When true, automatically disables percentile tracking and rotates histograms when memory warning threshold is exceeded. Set to false for monitoring-only mode (logs warnings without taking action).
+
+### Node Identity Variables
+
+* CLUSTER_NODE_ID (Optional, default: system hostname): Node identifier attached to `rust_loadtest_cluster_node_info` metric labels and `GET /health` JSON output.
+* CLUSTER_REGION (Optional, default: "default"): Region label used in metrics and health output.
+* CLUSTER_HEALTH_ADDR (Optional, default: "0.0.0.0:8080"): Bind address for the live control HTTP API (`GET /health`, `POST /config`).
 
 Load Model Specific Environment Variables
 The behavior of the load test is determined by LOAD_MODEL_TYPE and its associated variables:
@@ -358,7 +390,7 @@ docker run --rm \
 
 You can configure the tool to send either GET or POST requests using the `REQUEST_TYPE` environment variable:
 
-* `REQUEST_TYPE` (Optional, default: POST): Set to `"GET"` for GET requests or `"POST"` for POST requests.
+* `REQUEST_TYPE` (Optional, default: GET): Set to `"GET"` for GET requests or `"POST"` for POST requests.
 
 **Example with GET requests:**
 
@@ -372,7 +404,7 @@ docker run --rm \
   cbaugus/rust-loadtester:latest
 ```
 
-**Example with POST requests (default):**
+**Example with POST requests:**
 
 ```bash
 docker run --rm \
@@ -499,3 +531,82 @@ Example curl command (from the host machine running Docker):
 ```bash
 curl http://localhost:9090/metrics
 ```
+
+## Live Control API (port 8080)
+
+Every node exposes a lightweight HTTP API on port 8080 for real-time inspection and reconfiguration without restarting the container.
+
+### GET /health
+
+Returns live node status as JSON:
+
+```bash
+curl http://localhost:8080/health
+```
+
+```json
+{
+  "node_id": "node-1",
+  "region": "us-east",
+  "node_state": "running",
+  "rps": 1423.7,
+  "error_rate_pct": 0.12,
+  "workers": 25,
+  "memory_mb": 142.3,
+  "total_memory_mb": 16384.0,
+  "cpu_pct": 14.5,
+  "time_remaining_secs": 3542,
+  "test_started_at_unix": 1706000000,
+  "test_duration_secs": 7200,
+  "test_percent_complete": 50.8,
+  "current_yaml": "version: \"1.0\"\n..."
+}
+```
+
+`node_state` values:
+- `"running"` — active test in progress
+- `"standby"` — test duration expired; workers are keeping connections warm at low/zero RPS
+- `"idle"` — no config submitted yet (startup only)
+
+### POST /config
+
+Submit a YAML config body to start or reconfigure the test on the fly:
+
+```bash
+curl -X POST http://localhost:8080/config \
+  -H "Content-Type: application/x-yaml" \
+  --data-binary @config.yaml
+```
+
+Workers are gracefully drained, then new workers start with the updated config — all without restarting the container.
+
+**Example config.yaml:**
+
+```yaml
+version: "1.0"
+config:
+  baseUrl: "https://your-service.com"
+  workers: 50
+  duration: "1h"
+  timeout: "30s"
+  skipTlsVerify: false
+load:
+  model: "rps"
+  target: 500
+scenarios:
+  - name: "Health check"
+    weight: 100
+    steps:
+      - name: "GET /"
+        request:
+          method: "GET"
+          path: "/"
+        assertions:
+          - type: statusCode
+            expected: 200
+standby:
+  workers: 2
+  rps: 0
+```
+
+**The `standby:` block** is optional. When the test duration expires, nodes automatically transition to `"standby"` state and spawn the configured number of standby workers at the given RPS (use `rps: 0` for zero-traffic warm standby). If no `standby:` block is present, the node falls back to the startup env-var defaults.
