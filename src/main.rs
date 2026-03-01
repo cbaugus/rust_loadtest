@@ -27,12 +27,12 @@ use rust_loadtest::metrics::{
     PERCENTILE_SAMPLING_RATE_PERCENT, PROCESS_MEMORY_RSS_BYTES, REQUEST_ERRORS_BY_CATEGORY,
     REQUEST_TOTAL, WORKERS_CONFIGURED_TOTAL,
 };
+use rust_loadtest::multi_scenario::ScenarioSelector;
 use rust_loadtest::percentiles::{
     format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES,
     GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES,
 };
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
-use rust_loadtest::multi_scenario::ScenarioSelector;
 use rust_loadtest::worker::{run_scenario_worker, run_worker, ScenarioWorkerConfig, WorkerConfig};
 use rust_loadtest::yaml_config::YamlConfig;
 
