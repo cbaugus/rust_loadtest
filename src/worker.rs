@@ -419,6 +419,21 @@ pub async fn run_scenario_worker(
             }
         }
 
+        // Count each executed step as one HTTP request so that REQUEST_TOTAL
+        // (and therefore the RPS shown in GET /health) reflects actual requests
+        // made, not scenario executions.  A 4-step scenario at 2 SPS = 8 RPS.
+        for step in &result.steps {
+            REQUEST_TOTAL.with_label_values(&[&config.region]).inc();
+            if let Some(code) = step.status_code {
+                REQUEST_STATUS_CODES
+                    .with_label_values(&[status_code_label(code), &config.region])
+                    .inc();
+            }
+            REQUEST_DURATION_SECONDS
+                .with_label_values(&[&config.region])
+                .observe(step.response_time_ms as f64 / 1000.0);
+        }
+
         // Record throughput (Issue #35)
         SCENARIO_REQUESTS_TOTAL
             .with_label_values(&[&config.scenario.name])
