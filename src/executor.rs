@@ -237,7 +237,11 @@ impl ScenarioExecutor {
 
         // Build the full URL with variable substitution
         let path = context.substitute_variables(&step.request.path);
-        let url = format!("{}{}", self.base_url, path);
+        let url = if path.starts_with("http://") || path.starts_with("https://") {
+            path
+        } else {
+            format!("{}{}", self.base_url, path)
+        };
 
         debug!(
             step = %step.name,

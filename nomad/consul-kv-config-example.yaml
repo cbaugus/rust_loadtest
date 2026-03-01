@@ -1,0 +1,61 @@
+# Consul KV test config — dual-host JWT auth flow (Issue #82)
+#
+# Upload to Consul KV before deploying the cluster:
+#
+#   consul kv put loadtest/config @nomad/consul-kv-config-example.yaml
+#
+# Demonstrates multi-host steps: step 1 fetches a JWT from the auth service
+# (relative path → baseUrl), step 2 calls the API service using a full URL
+# override.  The extracted jwt_token variable is passed between steps.
+
+version: "1.0"
+
+metadata:
+  name: "Dual-host JWT auth flow"
+  description: "Fetch JWT from auth service, use it against API service"
+
+config:
+  baseUrl: "http://auth-service.service.consul:8080"
+  workers: 50
+  duration: "75h"
+  timeout: "30s"
+  skipTlsVerify: false
+
+load:
+  model: "rps"
+  target: 200
+
+scenarios:
+  - name: "JWT Auth → API call"
+    weight: 100
+    steps:
+      - name: "Login — get JWT"
+        request:
+          method: "POST"
+          path: "/api/auth/login"           # relative → uses baseUrl (auth service)
+          body: '{"username":"loadtest","password":"secret"}'
+          headers:
+            Content-Type: "application/json"
+        extract:
+          - type: jsonPath
+            name: "jwt_token"
+            jsonPath: "$.access_token"
+        assertions:
+          - type: statusCode
+            expected: 200
+
+      - name: "Call API with JWT"
+        request:
+          method: "GET"
+          path: "http://api-service.service.consul:9090/api/data"  # full URL → host B
+          headers:
+            Authorization: "Bearer ${jwt_token}"
+        assertions:
+          - type: statusCode
+            expected: 200
+          - type: responseTime
+            max: "2s"
+
+standby:
+  workers: 2
+  rps: 0

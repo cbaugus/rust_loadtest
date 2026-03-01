@@ -153,7 +153,7 @@ job "envoy-loadtest" {
             gelf-address = "udp://gelf.service.consul:12201"
           }
         }
-        image      = "cbaugus/rust_loadtest:dev-9138374"
+        image      = "cbaugus/rust_loadtest:dev"
         force_pull = true
         ports = [
           "metrics",
