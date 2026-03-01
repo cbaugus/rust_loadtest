@@ -9,6 +9,7 @@ use crate::extractor;
 use crate::metrics::{
     CONCURRENT_SCENARIOS, SCENARIO_ASSERTIONS_TOTAL, SCENARIO_DURATION_SECONDS,
     SCENARIO_EXECUTIONS_TOTAL, SCENARIO_STEPS_TOTAL, SCENARIO_STEP_DURATION_SECONDS,
+    SCENARIO_STEP_STATUS_CODES,
 };
 use crate::scenario::{Scenario, ScenarioContext, Step};
 use std::time::Instant;
@@ -155,7 +156,7 @@ impl ScenarioExecutor {
                 "Executing step"
             );
 
-            let step_result = self.execute_step(step, context).await;
+            let step_result = self.execute_step(&scenario.name, step, context).await;
 
             let success = step_result.success;
             step_results.push(step_result);
@@ -232,7 +233,12 @@ impl ScenarioExecutor {
     }
 
     /// Execute a single step.
-    async fn execute_step(&self, step: &Step, context: &mut ScenarioContext) -> StepResult {
+    async fn execute_step(
+        &self,
+        scenario_name: &str,
+        step: &Step,
+        context: &mut ScenarioContext,
+    ) -> StepResult {
         let step_start = Instant::now();
 
         // Build the full URL with variable substitution
@@ -376,7 +382,7 @@ impl ScenarioExecutor {
                                 // Record assertion metrics
                                 let result_label = if result.passed { "passed" } else { "failed" };
                                 SCENARIO_ASSERTIONS_TOTAL
-                                    .with_label_values(&["scenario", &step.name, result_label])
+                                    .with_label_values(&[scenario_name, &step.name, result_label])
                                     .inc();
                             }
 
@@ -432,12 +438,17 @@ impl ScenarioExecutor {
                 // Record step metrics
                 let response_time_secs = response_time_ms as f64 / 1000.0;
                 SCENARIO_STEP_DURATION_SECONDS
-                    .with_label_values(&["scenario", &step.name])
+                    .with_label_values(&[scenario_name, &step.name])
                     .observe(response_time_secs);
+
+                let status_code_str = status.as_u16().to_string();
+                SCENARIO_STEP_STATUS_CODES
+                    .with_label_values(&[scenario_name, &step.name, &status_code_str])
+                    .inc();
 
                 let step_status = if success { "success" } else { "failed" };
                 SCENARIO_STEPS_TOTAL
-                    .with_label_values(&["scenario", &step.name, step_status])
+                    .with_label_values(&[scenario_name, &step.name, step_status])
                     .inc();
 
                 debug!(
@@ -469,7 +480,7 @@ impl ScenarioExecutor {
 
                 // Record failed step metrics
                 SCENARIO_STEPS_TOTAL
-                    .with_label_values(&["scenario", &step.name, "failed"])
+                    .with_label_values(&[scenario_name, &step.name, "failed"])
                     .inc();
 
                 StepResult {
