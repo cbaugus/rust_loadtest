@@ -398,7 +398,9 @@ pub async fn run_scenario_worker(
         let mut context = ScenarioContext::new();
 
         // Execute the scenario
-        let result = executor.execute(&config.scenario, &mut context, &mut session).await;
+        let result = executor
+            .execute(&config.scenario, &mut context, &mut session)
+            .await;
 
         debug!(
             task_id = config.task_id,

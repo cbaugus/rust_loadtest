@@ -593,7 +593,9 @@ impl YamlConfig {
                 };
 
                 let cache = if let Some(c) = &yaml_step.cache {
-                    Some(StepCache { ttl: c.ttl.to_duration()? })
+                    Some(StepCache {
+                        ttl: c.ttl.to_std_duration()?,
+                    })
                 } else {
                     None
                 };

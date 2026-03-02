@@ -173,7 +173,9 @@ impl ScenarioExecutor {
                 "Executing step"
             );
 
-            let step_result = self.execute_step(&scenario.name, step, context, session).await;
+            let step_result = self
+                .execute_step(&scenario.name, step, context, session)
+                .await;
 
             let success = step_result.success;
             step_results.push(step_result);
@@ -396,7 +398,13 @@ impl ScenarioExecutor {
                                     ttl_secs = cache_cfg.ttl.as_secs(),
                                     "Caching step result in session store"
                                 );
-                                session.insert(step.name.clone(), SessionEntry { variables: vars, expires_at });
+                                session.insert(
+                                    step.name.clone(),
+                                    SessionEntry {
+                                        variables: vars,
+                                        expires_at,
+                                    },
+                                );
                             }
 
                             count
@@ -607,6 +615,7 @@ mod tests {
             error: None,
             assertions_passed: 2,
             assertions_failed: 0,
+            cache_hit: false,
         };
 
         assert!(result.success);
