@@ -3,7 +3,7 @@
 //! These tests validate that throughput (requests per second) is tracked
 //! separately for each scenario type, enabling performance comparison.
 
-use rust_loadtest::executor::ScenarioExecutor;
+use rust_loadtest::executor::{ScenarioExecutor, SessionStore};
 use rust_loadtest::scenario::{RequestConfig, Scenario, ScenarioContext, Step};
 use rust_loadtest::throughput::{format_throughput_table, ThroughputTracker};
 use std::collections::HashMap;
@@ -169,6 +169,7 @@ async fn test_scenario_throughput_tracking() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -179,7 +180,7 @@ async fn test_scenario_throughput_tracking() {
         let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
         let mut context = ScenarioContext::new();
 
-        let result = executor.execute(&scenario, &mut context).await;
+        let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
         assert!(result.success);
 
         // Record throughput
@@ -211,6 +212,7 @@ async fn test_multiple_scenarios_different_throughput() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -229,6 +231,7 @@ async fn test_multiple_scenarios_different_throughput() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -241,6 +244,7 @@ async fn test_multiple_scenarios_different_throughput() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -252,7 +256,7 @@ async fn test_multiple_scenarios_different_throughput() {
         let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
         let mut context = ScenarioContext::new();
 
-        let result = executor.execute(&fast_scenario, &mut context).await;
+        let result = executor.execute(&fast_scenario, &mut context, &mut SessionStore::new()).await;
         tracker.record(
             &fast_scenario.name,
             Duration::from_millis(result.total_time_ms),
@@ -265,7 +269,7 @@ async fn test_multiple_scenarios_different_throughput() {
         let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
         let mut context = ScenarioContext::new();
 
-        let result = executor.execute(&slow_scenario, &mut context).await;
+        let result = executor.execute(&slow_scenario, &mut context, &mut SessionStore::new()).await;
         tracker.record(
             &slow_scenario.name,
             Duration::from_millis(result.total_time_ms),

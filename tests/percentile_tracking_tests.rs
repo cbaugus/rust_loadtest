@@ -3,7 +3,7 @@
 //! These tests validate that percentile calculations are accurate and that
 //! latencies are properly tracked across requests, scenarios, and steps.
 
-use rust_loadtest::executor::ScenarioExecutor;
+use rust_loadtest::executor::{ScenarioExecutor, SessionStore};
 use rust_loadtest::percentiles::{
     MultiLabelPercentileTracker, PercentileTracker, GLOBAL_SCENARIO_PERCENTILES,
     GLOBAL_STEP_PERCENTILES,
@@ -234,6 +234,7 @@ async fn test_scenario_percentile_tracking() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -246,6 +247,7 @@ async fn test_scenario_percentile_tracking() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -257,7 +259,7 @@ async fn test_scenario_percentile_tracking() {
     // Execute scenario multiple times
     for _ in 0..5 {
         let mut context = ScenarioContext::new();
-        let result = executor.execute(&scenario, &mut context).await;
+        let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
 
         assert!(result.success);
 
