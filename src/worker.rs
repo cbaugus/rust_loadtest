@@ -22,7 +22,7 @@ fn should_sample(rate: u8) -> bool {
 
 use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::errors::ErrorCategory;
-use crate::executor::ScenarioExecutor;
+use crate::executor::{ScenarioExecutor, SessionStore};
 use crate::load_models::LoadModel;
 use crate::memory_guard::is_percentile_tracking_active;
 use crate::metrics::{
@@ -348,6 +348,11 @@ pub async fn run_scenario_worker(
 
     let mut next_fire = time::Instant::now() + initial_stagger;
 
+    // Session store persists across iterations for this worker.
+    // Steps with `cache: { ttl }` store their extracted variables here so
+    // subsequent iterations skip the HTTP request until the TTL expires.
+    let mut session = SessionStore::new();
+
     loop {
         time::sleep_until(next_fire).await;
 
@@ -393,7 +398,7 @@ pub async fn run_scenario_worker(
         let mut context = ScenarioContext::new();
 
         // Execute the scenario
-        let result = executor.execute(&config.scenario, &mut context).await;
+        let result = executor.execute(&config.scenario, &mut context, &mut session).await;
 
         debug!(
             task_id = config.task_id,
@@ -422,7 +427,11 @@ pub async fn run_scenario_worker(
         // Count each executed step as one HTTP request so that REQUEST_TOTAL
         // (and therefore the RPS shown in GET /health) reflects actual requests
         // made, not scenario executions.  A 4-step scenario at 2 SPS = 8 RPS.
+        // Cache hits are skipped — no HTTP request was made.
         for step in &result.steps {
+            if step.cache_hit {
+                continue;
+            }
             REQUEST_TOTAL.with_label_values(&[&config.region]).inc();
             if let Some(code) = step.status_code {
                 REQUEST_STATUS_CODES

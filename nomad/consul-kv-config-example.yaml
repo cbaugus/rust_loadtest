@@ -15,15 +15,15 @@ metadata:
   description: "Fetch JWT from auth service, use it against API service"
 
 config:
-  baseUrl: "http://auth-service.service.consul:8080"
-  workers: 50
+  baseUrl: "http://192.168.2.23:31362"
+  workers: 25
   duration: "75h"
   timeout: "30s"
   skipTlsVerify: false
 
 load:
   model: "rps"
-  target: 200
+  target: 400
 
 scenarios:
   - name: "JWT Auth → API call"
@@ -32,14 +32,16 @@ scenarios:
       - name: "Login — get JWT"
         request:
           method: "POST"
-          path: "/api/auth/login"           # relative → uses baseUrl (auth service)
-          body: '{"username":"loadtest","password":"secret"}'
+          path: "/auth/login"           # relative → uses baseUrl (auth service)
+          body: '{"email":"test@example.com","password":"password123"}'
           headers:
             Content-Type: "application/json"
         extract:
           - type: jsonPath
             name: "jwt_token"
-            jsonPath: "$.access_token"
+            jsonPath: "$.token"
+        cache:
+          ttl: "1h"                     # reuse token for 1 hour per worker; re-login on expiry
         assertions:
           - type: statusCode
             expected: 200
@@ -47,7 +49,7 @@ scenarios:
       - name: "Call API with JWT"
         request:
           method: "GET"
-          path: "http://api-service.service.consul:9090/api/data"  # full URL → host B
+          path: "http://ecom-test-target.service.consul:31362/users/me"  # full URL → host B
           headers:
             Authorization: "Bearer ${jwt_token}"
         assertions:

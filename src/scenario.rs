@@ -99,6 +99,18 @@ impl ThinkTime {
     }
 }
 
+/// Per-worker session cache configuration for a step.
+///
+/// When set, the step's extracted variables are cached in the worker's session
+/// store for the given TTL.  On subsequent scenario iterations the HTTP request
+/// is skipped entirely and the cached values are injected directly — simulating
+/// an app that keeps a long-lived token and only re-authenticates on expiry.
+#[derive(Debug, Clone)]
+pub struct StepCache {
+    /// How long to reuse the cached variables before making a fresh request.
+    pub ttl: Duration,
+}
+
 /// A single step within a scenario.
 #[derive(Debug, Clone)]
 pub struct Step {
@@ -113,6 +125,10 @@ pub struct Step {
 
     /// Assertions to validate the response
     pub assertions: Vec<Assertion>,
+
+    /// Optional session cache: reuse extracted variables for the given TTL
+    /// instead of making a real HTTP request on every scenario iteration.
+    pub cache: Option<StepCache>,
 
     /// Optional delay after this step completes (think time)
     ///
@@ -450,6 +466,7 @@ mod tests {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             }],
         };
