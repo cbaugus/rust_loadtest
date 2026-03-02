@@ -54,7 +54,9 @@ async fn test_status_code_assertion_pass() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps.len(), 1);
@@ -97,7 +99,9 @@ async fn test_status_code_assertion_fail() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(!result.success, "Scenario should fail due to assertion");
     assert_eq!(result.steps.len(), 1);
@@ -140,7 +144,9 @@ async fn test_response_time_assertion_pass() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps[0].assertions_passed, 1);
@@ -184,7 +190,9 @@ async fn test_response_time_assertion_fail() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(!result.success, "Scenario should fail due to slow response");
     assert_eq!(result.steps[0].assertions_passed, 0);
@@ -233,7 +241,9 @@ async fn test_json_path_assertion_existence() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps[0].assertions_passed, 1);
@@ -279,7 +289,9 @@ async fn test_json_path_assertion_value_match() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps[0].assertions_passed, 1);
@@ -325,7 +337,9 @@ async fn test_json_path_assertion_value_mismatch() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(
         !result.success,
@@ -371,7 +385,9 @@ async fn test_body_contains_assertion_pass() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps[0].assertions_passed, 1);
@@ -414,7 +430,9 @@ async fn test_body_contains_assertion_fail() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(!result.success, "Scenario should fail");
     assert_eq!(result.steps[0].assertions_passed, 0);
@@ -459,7 +477,9 @@ async fn test_body_matches_regex_assertion() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps[0].assertions_passed, 1);
@@ -499,7 +519,9 @@ async fn test_header_exists_assertion_pass() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps[0].assertions_passed, 1);
@@ -540,7 +562,9 @@ async fn test_header_exists_assertion_fail() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(!result.success, "Scenario should fail");
     assert_eq!(result.steps[0].assertions_passed, 0);
@@ -594,7 +618,9 @@ async fn test_multiple_assertions_all_pass() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Scenario should succeed");
     assert_eq!(result.steps[0].assertions_passed, 5);
@@ -643,7 +669,9 @@ async fn test_multiple_assertions_mixed_results() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(
         !result.success,
@@ -722,7 +750,9 @@ async fn test_multi_step_assertion_stops_on_failure() {
     let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(!result.success, "Scenario should fail");
     assert_eq!(
@@ -812,7 +842,9 @@ async fn test_realistic_e_commerce_flow_with_assertions() {
     let executor = ScenarioExecutor::new(ECOM_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "E-commerce flow should succeed");
     assert_eq!(result.steps_completed, 3);

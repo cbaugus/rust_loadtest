@@ -169,8 +169,8 @@ async fn test_random_think_time() {
         let mut context = ScenarioContext::new();
         let start = Instant::now();
         let result = executor
-        .execute(&scenario, &mut context, &mut SessionStore::new())
-        .await;
+            .execute(&scenario, &mut context, &mut SessionStore::new())
+            .await;
         let total_duration = start.elapsed();
 
         assert!(result.success);

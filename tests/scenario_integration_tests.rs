@@ -74,7 +74,7 @@ async fn test_product_browsing_scenario() {
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
                 name: "Get Item Details".to_string(),
@@ -87,7 +87,7 @@ async fn test_product_browsing_scenario() {
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };
@@ -181,7 +181,7 @@ async fn test_multi_step_with_delays() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
             },
             Step {
                 name: "Step 2".to_string(),
@@ -194,7 +194,7 @@ async fn test_multi_step_with_delays() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
             },
             Step {
                 name: "Step 3".to_string(),
@@ -207,7 +207,7 @@ async fn test_multi_step_with_delays() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };
@@ -250,7 +250,7 @@ async fn test_scenario_failure_handling() {
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "Invalid Request".to_string(),
@@ -263,7 +263,7 @@ async fn test_scenario_failure_handling() {
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "Should Not Execute".to_string(),
@@ -276,7 +276,7 @@ async fn test_scenario_failure_handling() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };

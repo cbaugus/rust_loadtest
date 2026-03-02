@@ -259,7 +259,9 @@ async fn test_scenario_percentile_tracking() {
     // Execute scenario multiple times
     for _ in 0..5 {
         let mut context = ScenarioContext::new();
-        let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+        let result = executor
+            .execute(&scenario, &mut context, &mut SessionStore::new())
+            .await;
 
         assert!(result.success);
 

@@ -51,7 +51,7 @@ async fn test_cookies_persist_across_steps() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
                 name: "Access Protected Resource (uses cookies)".to_string(),
@@ -64,7 +64,7 @@ async fn test_cookies_persist_across_steps() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };
@@ -137,7 +137,7 @@ async fn test_auth_flow_with_token_and_cookies() {
                 ],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Access Profile with Token".to_string(),
@@ -158,7 +158,7 @@ async fn test_auth_flow_with_token_and_cookies() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };
@@ -284,7 +284,7 @@ async fn test_shopping_flow_with_session() {
                 }],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Register and Login".to_string(),
@@ -311,7 +311,7 @@ async fn test_shopping_flow_with_session() {
                 }],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Add to Cart (with auth)".to_string(),
@@ -335,7 +335,7 @@ async fn test_shopping_flow_with_session() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "View Cart (session maintained)".to_string(),
@@ -352,7 +352,7 @@ async fn test_shopping_flow_with_session() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };
@@ -435,7 +435,11 @@ async fn test_client_without_cookies_fails_session() {
         .execute(&scenario, &mut context_no_cookies, &mut SessionStore::new())
         .await;
     let result_with_cookies = executor_with_cookies
-        .execute(&scenario, &mut context_with_cookies, &mut SessionStore::new())
+        .execute(
+            &scenario,
+            &mut context_with_cookies,
+            &mut SessionStore::new(),
+        )
         .await;
 
     println!("\nCookie Enabled Comparison:");

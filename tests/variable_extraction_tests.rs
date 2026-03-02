@@ -94,7 +94,7 @@ async fn test_extraction_and_reuse_in_next_step() {
                 }],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
                 name: "Use Extracted Value".to_string(),
@@ -107,7 +107,7 @@ async fn test_extraction_and_reuse_in_next_step() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };
@@ -268,7 +268,7 @@ async fn test_shopping_flow_with_extraction() {
                 }],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Post Data with Extracted Value".to_string(),
@@ -294,7 +294,7 @@ async fn test_shopping_flow_with_extraction() {
                 }],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Final GET".to_string(),
@@ -310,7 +310,7 @@ async fn test_shopping_flow_with_extraction() {
                 }],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };
@@ -365,7 +365,7 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
                 ],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "Next Step".to_string(),
@@ -378,7 +378,7 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };

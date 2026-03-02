@@ -311,7 +311,7 @@ async fn test_mixed_methods_scenario() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "POST status".to_string(),
@@ -328,7 +328,7 @@ async fn test_mixed_methods_scenario() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "PUT status".to_string(),
@@ -345,7 +345,7 @@ async fn test_mixed_methods_scenario() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "HEAD health".to_string(),
@@ -358,7 +358,7 @@ async fn test_mixed_methods_scenario() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };
@@ -418,7 +418,7 @@ async fn test_case_insensitive_methods() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             }],
         };
 
@@ -427,8 +427,8 @@ async fn test_case_insensitive_methods() {
         let mut context = ScenarioContext::new();
 
         let result = executor
-        .execute(&scenario, &mut context, &mut SessionStore::new())
-        .await;
+            .execute(&scenario, &mut context, &mut SessionStore::new())
+            .await;
 
         assert!(result.success, "{} should work (case-insensitive)", method);
     }
@@ -454,7 +454,7 @@ async fn test_rest_crud_flow() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "2. POST - Create".to_string(),
@@ -471,7 +471,7 @@ async fn test_rest_crud_flow() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "3. PUT - Update full".to_string(),
@@ -490,7 +490,7 @@ async fn test_rest_crud_flow() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "4. PATCH - Partial update".to_string(),
@@ -507,7 +507,7 @@ async fn test_rest_crud_flow() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "5. HEAD - Check existence".to_string(),
@@ -520,7 +520,7 @@ async fn test_rest_crud_flow() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
             Step {
                 name: "6. DELETE - Remove".to_string(),
@@ -533,7 +533,7 @@ async fn test_rest_crud_flow() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };

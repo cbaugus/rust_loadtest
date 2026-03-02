@@ -180,7 +180,9 @@ async fn test_scenario_throughput_tracking() {
         let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
         let mut context = ScenarioContext::new();
 
-        let result = executor.execute(&scenario, &mut context, &mut SessionStore::new()).await;
+        let result = executor
+            .execute(&scenario, &mut context, &mut SessionStore::new())
+            .await;
         assert!(result.success);
 
         // Record throughput
@@ -256,7 +258,9 @@ async fn test_multiple_scenarios_different_throughput() {
         let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
         let mut context = ScenarioContext::new();
 
-        let result = executor.execute(&fast_scenario, &mut context, &mut SessionStore::new()).await;
+        let result = executor
+            .execute(&fast_scenario, &mut context, &mut SessionStore::new())
+            .await;
         tracker.record(
             &fast_scenario.name,
             Duration::from_millis(result.total_time_ms),
@@ -269,7 +273,9 @@ async fn test_multiple_scenarios_different_throughput() {
         let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
         let mut context = ScenarioContext::new();
 
-        let result = executor.execute(&slow_scenario, &mut context, &mut SessionStore::new()).await;
+        let result = executor
+            .execute(&slow_scenario, &mut context, &mut SessionStore::new())
+            .await;
         tracker.record(
             &slow_scenario.name,
             Duration::from_millis(result.total_time_ms),

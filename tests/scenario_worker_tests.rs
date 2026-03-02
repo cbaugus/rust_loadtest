@@ -118,7 +118,7 @@ async fn test_scenario_worker_with_think_time() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Step 2".to_string(),
@@ -131,7 +131,7 @@ async fn test_scenario_worker_with_think_time() {
                 extractions: vec![],
                 assertions: vec![],
                 cache: None,
-            think_time: None,
+                think_time: None,
             },
         ],
     };
