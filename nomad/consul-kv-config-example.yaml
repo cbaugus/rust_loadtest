@@ -41,7 +41,7 @@ scenarios:
             name: "jwt_token"
             jsonPath: "$.token"
         cache:
-          ttl: "1h"                     # reuse token for 1 hour per worker; re-login on expiry
+          ttl: "3m"                     # reuse token for 1 hour per worker; re-login on expiry
         assertions:
           - type: statusCode
             expected: 200
