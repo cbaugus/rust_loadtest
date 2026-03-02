@@ -15,7 +15,9 @@ use crate::config_validation::{
 };
 use crate::config_version::VersionChecker;
 use crate::load_models::LoadModel;
-use crate::scenario::{Assertion, Extractor, RequestConfig, Scenario, Step, VariableExtraction};
+use crate::scenario::{
+    Assertion, Extractor, RequestConfig, Scenario, Step, StepCache, VariableExtraction,
+};
 
 /// Errors that can occur when loading or parsing YAML configuration.
 #[derive(Error, Debug)]
@@ -276,6 +278,12 @@ impl YamlThinkTime {
     }
 }
 
+/// Session cache config on a step — reuse extracted variables for a TTL.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct YamlStepCache {
+    pub ttl: YamlDuration,
+}
+
 /// Step definition in YAML.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct YamlStep {
@@ -288,6 +296,8 @@ pub struct YamlStep {
 
     #[serde(default)]
     pub assertions: Vec<YamlAssertion>,
+
+    pub cache: Option<YamlStepCache>,
 
     #[serde(rename = "thinkTime")]
     pub think_time: Option<YamlThinkTime>,
@@ -582,11 +592,20 @@ impl YamlConfig {
                     None
                 };
 
+                let cache = if let Some(c) = &yaml_step.cache {
+                    Some(StepCache {
+                        ttl: c.ttl.to_std_duration()?,
+                    })
+                } else {
+                    None
+                };
+
                 steps.push(Step {
                     name: step_name,
                     request,
                     extractions: extractors,
                     assertions,
+                    cache,
                     think_time,
                 });
             }

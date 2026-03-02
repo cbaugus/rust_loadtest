@@ -1,0 +1,63 @@
+# Consul KV test config — dual-host JWT auth flow (Issue #82)
+#
+# Upload to Consul KV before deploying the cluster:
+#
+#   consul kv put loadtest/config @nomad/consul-kv-config-example.yaml
+#
+# Demonstrates multi-host steps: step 1 fetches a JWT from the auth service
+# (relative path → baseUrl), step 2 calls the API service using a full URL
+# override.  The extracted jwt_token variable is passed between steps.
+
+version: "1.0"
+
+metadata:
+  name: "Dual-host JWT auth flow"
+  description: "Fetch JWT from auth service, use it against API service"
+
+config:
+  baseUrl: "http://192.168.2.23:31362"
+  workers: 25
+  duration: "75h"
+  timeout: "30s"
+  skipTlsVerify: false
+
+load:
+  model: "rps"
+  target: 400
+
+scenarios:
+  - name: "JWT Auth → API call"
+    weight: 100
+    steps:
+      - name: "Login — get JWT"
+        request:
+          method: "POST"
+          path: "/auth/login"           # relative → uses baseUrl (auth service)
+          body: '{"email":"test@example.com","password":"password123"}'
+          headers:
+            Content-Type: "application/json"
+        extract:
+          - type: jsonPath
+            name: "jwt_token"
+            jsonPath: "$.token"
+        cache:
+          ttl: "3m"                     # reuse token for 1 hour per worker; re-login on expiry
+        assertions:
+          - type: statusCode
+            expected: 200
+
+      - name: "Call API with JWT"
+        request:
+          method: "GET"
+          path: "http://ecom-test-target.service.consul:31362/users/me"  # full URL → host B
+          headers:
+            Authorization: "Bearer ${jwt_token}"
+        assertions:
+          - type: statusCode
+            expected: 200
+          - type: responseTime
+            max: "2s"
+
+standby:
+  workers: 2
+  rps: 0

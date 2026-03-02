@@ -77,6 +77,13 @@ lazy_static::lazy_static! {
             &["scenario", "step"]
         ).unwrap();
 
+    pub static ref SCENARIO_STEP_STATUS_CODES: IntCounterVec =
+        IntCounterVec::new(
+            Opts::new("scenario_step_status_codes_total", "HTTP status codes per scenario step")
+                .namespace(METRIC_NAMESPACE.as_str()),
+            &["scenario", "step", "status_code"]
+        ).unwrap();
+
     pub static ref SCENARIO_ASSERTIONS_TOTAL: IntCounterVec =
         IntCounterVec::new(
             Opts::new("scenario_assertions_total", "Total number of scenario assertions")
@@ -272,6 +279,7 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     prometheus::default_registry().register(Box::new(SCENARIO_DURATION_SECONDS.clone()))?;
     prometheus::default_registry().register(Box::new(SCENARIO_STEPS_TOTAL.clone()))?;
     prometheus::default_registry().register(Box::new(SCENARIO_STEP_DURATION_SECONDS.clone()))?;
+    prometheus::default_registry().register(Box::new(SCENARIO_STEP_STATUS_CODES.clone()))?;
     prometheus::default_registry().register(Box::new(SCENARIO_ASSERTIONS_TOTAL.clone()))?;
     prometheus::default_registry().register(Box::new(CONCURRENT_SCENARIOS.clone()))?;
 

@@ -3,7 +3,7 @@
 //! These tests validate JSONPath, Regex, Header, and Cookie extraction
 //! from HTTP responses against httpbin.org.
 
-use rust_loadtest::executor::ScenarioExecutor;
+use rust_loadtest::executor::{ScenarioExecutor, SessionStore};
 use rust_loadtest::scenario::{
     Extractor, RequestConfig, Scenario, ScenarioContext, Step, ThinkTime, VariableExtraction,
 };
@@ -44,6 +44,7 @@ async fn test_jsonpath_extraction_from_products() {
                 },
             ],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -52,7 +53,9 @@ async fn test_jsonpath_extraction_from_products() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Scenario should succeed");
 
@@ -90,6 +93,7 @@ async fn test_extraction_and_reuse_in_next_step() {
                     extractor: Extractor::JsonPath("$.origin".to_string()),
                 }],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
@@ -102,6 +106,7 @@ async fn test_extraction_and_reuse_in_next_step() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -111,7 +116,9 @@ async fn test_extraction_and_reuse_in_next_step() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Both steps should succeed");
     assert_eq!(result.steps_completed, 2, "Should complete both steps");
@@ -148,6 +155,7 @@ async fn test_header_extraction() {
                 extractor: Extractor::Header("content-type".to_string()),
             }],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -156,7 +164,9 @@ async fn test_header_extraction() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Should succeed");
 
@@ -202,6 +212,7 @@ async fn test_multiple_extractions_in_single_step() {
                 },
             ],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -210,7 +221,9 @@ async fn test_multiple_extractions_in_single_step() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Should succeed");
 
@@ -254,6 +267,7 @@ async fn test_shopping_flow_with_extraction() {
                     extractor: Extractor::JsonPath("$.slideshow.author".to_string()),
                 }],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
@@ -279,6 +293,7 @@ async fn test_shopping_flow_with_extraction() {
                     extractor: Extractor::JsonPath("$.url".to_string()),
                 }],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
@@ -294,6 +309,7 @@ async fn test_shopping_flow_with_extraction() {
                     extractor: Extractor::JsonPath("$.origin".to_string()),
                 }],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -303,7 +319,9 @@ async fn test_shopping_flow_with_extraction() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // All steps should succeed
     assert!(result.success, "Multi-step flow should succeed");
@@ -346,6 +364,7 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
                     },
                 ],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -358,6 +377,7 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -367,7 +387,9 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // Scenario should still succeed
     assert!(

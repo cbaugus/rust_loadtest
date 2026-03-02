@@ -5,7 +5,7 @@
 //! - Support both fixed and random delays
 //! - Do NOT count towards request latency metrics
 
-use rust_loadtest::executor::ScenarioExecutor;
+use rust_loadtest::executor::{ScenarioExecutor, SessionStore};
 use rust_loadtest::scenario::{RequestConfig, Scenario, ScenarioContext, Step, ThinkTime};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -53,6 +53,7 @@ async fn test_fixed_think_time() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
@@ -65,6 +66,7 @@ async fn test_fixed_think_time() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -75,7 +77,9 @@ async fn test_fixed_think_time() {
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
     let total_duration = start.elapsed();
 
     assert!(result.success, "Scenario should succeed");
@@ -133,6 +137,7 @@ async fn test_random_think_time() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Random {
                     min: Duration::from_millis(200),
                     max: Duration::from_millis(800),
@@ -148,6 +153,7 @@ async fn test_random_think_time() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -162,7 +168,9 @@ async fn test_random_think_time() {
     for _ in 0..5 {
         let mut context = ScenarioContext::new();
         let start = Instant::now();
-        let result = executor.execute(&scenario, &mut context).await;
+        let result = executor
+            .execute(&scenario, &mut context, &mut SessionStore::new())
+            .await;
         let total_duration = start.elapsed();
 
         assert!(result.success);
@@ -209,6 +217,7 @@ async fn test_multiple_think_times() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
@@ -221,6 +230,7 @@ async fn test_multiple_think_times() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
             },
             Step {
@@ -233,6 +243,7 @@ async fn test_multiple_think_times() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(300))),
             },
         ],
@@ -243,7 +254,9 @@ async fn test_multiple_think_times() {
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
     let total_duration = start.elapsed();
 
     assert!(result.success);
@@ -295,6 +308,7 @@ async fn test_no_think_time() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -307,6 +321,7 @@ async fn test_no_think_time() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -317,7 +332,9 @@ async fn test_no_think_time() {
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
     let total_duration = start.elapsed();
 
     assert!(result.success);
@@ -354,6 +371,7 @@ async fn test_realistic_user_behavior() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Random {
                     min: Duration::from_secs(1),
                     max: Duration::from_secs(3),
@@ -369,6 +387,7 @@ async fn test_realistic_user_behavior() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Random {
                     min: Duration::from_secs(2),
                     max: Duration::from_secs(5),
@@ -384,6 +403,7 @@ async fn test_realistic_user_behavior() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Random {
                     min: Duration::from_secs(3),
                     max: Duration::from_secs(10),
@@ -397,7 +417,9 @@ async fn test_realistic_user_behavior() {
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
     let total_duration = start.elapsed();
 
     assert!(result.success);

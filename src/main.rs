@@ -27,12 +27,13 @@ use rust_loadtest::metrics::{
     PERCENTILE_SAMPLING_RATE_PERCENT, PROCESS_MEMORY_RSS_BYTES, REQUEST_ERRORS_BY_CATEGORY,
     REQUEST_TOTAL, WORKERS_CONFIGURED_TOTAL,
 };
+use rust_loadtest::multi_scenario::ScenarioSelector;
 use rust_loadtest::percentiles::{
     format_percentile_table, rotate_all_histograms, GLOBAL_REQUEST_PERCENTILES,
     GLOBAL_SCENARIO_PERCENTILES, GLOBAL_STEP_PERCENTILES,
 };
 use rust_loadtest::throughput::{format_throughput_table, GLOBAL_THROUGHPUT_TRACKER};
-use rust_loadtest::worker::{run_worker, WorkerConfig};
+use rust_loadtest::worker::{run_scenario_worker, run_worker, ScenarioWorkerConfig, WorkerConfig};
 use rust_loadtest::yaml_config::YamlConfig;
 
 /// Initializes the tracing subscriber for structured logging.
@@ -712,25 +713,85 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
                 let (new_stop_tx, new_stop_rx) = watch::channel(false);
                 let new_start = time::Instant::now();
-                let new_handles: Vec<_> = (0..new_cfg.num_concurrent_tasks)
-                    .map(|i| {
-                        let wc = WorkerConfig {
-                            task_id: i,
-                            url: new_cfg.target_url.clone(),
-                            request_type: new_cfg.request_type.clone(),
-                            send_json: new_cfg.send_json,
-                            json_payload: new_cfg.json_payload.clone(),
-                            test_duration: new_cfg.test_duration,
-                            load_model: new_cfg.load_model.clone(),
-                            num_concurrent_tasks: new_cfg.num_concurrent_tasks,
-                            percentile_tracking_enabled: new_cfg.percentile_tracking_enabled,
-                            percentile_sampling_rate: new_cfg.percentile_sampling_rate,
-                            region: region_for_watcher.clone(),
-                            stop_rx: new_stop_rx.clone(),
-                        };
-                        tokio::spawn(run_worker(new_client.clone(), wc, new_start))
-                    })
-                    .collect();
+
+                // If the YAML contains scenarios, use scenario workers; otherwise
+                // fall back to the legacy single-URL worker.
+                let new_handles: Vec<_> = if !yaml_cfg_parsed.scenarios.is_empty() {
+                    match yaml_cfg_parsed.to_scenarios() {
+                        Ok(scenarios) => {
+                            info!(
+                                scenario_count = scenarios.len(),
+                                workers = new_cfg.num_concurrent_tasks,
+                                "Spawning scenario workers"
+                            );
+                            let selector = ScenarioSelector::new(scenarios);
+                            (0..new_cfg.num_concurrent_tasks)
+                                .map(|i| {
+                                    let sc = ScenarioWorkerConfig {
+                                        task_id: i,
+                                        base_url: new_cfg.target_url.clone(),
+                                        scenario: selector.select().clone(),
+                                        test_duration: new_cfg.test_duration,
+                                        load_model: new_cfg.load_model.clone(),
+                                        num_concurrent_tasks: new_cfg.num_concurrent_tasks,
+                                        percentile_tracking_enabled: new_cfg
+                                            .percentile_tracking_enabled,
+                                        percentile_sampling_rate: new_cfg.percentile_sampling_rate,
+                                        region: region_for_watcher.clone(),
+                                    };
+                                    tokio::spawn(run_scenario_worker(
+                                        new_client.clone(),
+                                        sc,
+                                        new_start,
+                                    ))
+                                })
+                                .collect()
+                        }
+                        Err(e) => {
+                            error!(error = %e, "Failed to build scenarios — falling back to single-URL mode");
+                            (0..new_cfg.num_concurrent_tasks)
+                                .map(|i| {
+                                    let wc = WorkerConfig {
+                                        task_id: i,
+                                        url: new_cfg.target_url.clone(),
+                                        request_type: new_cfg.request_type.clone(),
+                                        send_json: new_cfg.send_json,
+                                        json_payload: new_cfg.json_payload.clone(),
+                                        test_duration: new_cfg.test_duration,
+                                        load_model: new_cfg.load_model.clone(),
+                                        num_concurrent_tasks: new_cfg.num_concurrent_tasks,
+                                        percentile_tracking_enabled: new_cfg
+                                            .percentile_tracking_enabled,
+                                        percentile_sampling_rate: new_cfg.percentile_sampling_rate,
+                                        region: region_for_watcher.clone(),
+                                        stop_rx: new_stop_rx.clone(),
+                                    };
+                                    tokio::spawn(run_worker(new_client.clone(), wc, new_start))
+                                })
+                                .collect()
+                        }
+                    }
+                } else {
+                    (0..new_cfg.num_concurrent_tasks)
+                        .map(|i| {
+                            let wc = WorkerConfig {
+                                task_id: i,
+                                url: new_cfg.target_url.clone(),
+                                request_type: new_cfg.request_type.clone(),
+                                send_json: new_cfg.send_json,
+                                json_payload: new_cfg.json_payload.clone(),
+                                test_duration: new_cfg.test_duration,
+                                load_model: new_cfg.load_model.clone(),
+                                num_concurrent_tasks: new_cfg.num_concurrent_tasks,
+                                percentile_tracking_enabled: new_cfg.percentile_tracking_enabled,
+                                percentile_sampling_rate: new_cfg.percentile_sampling_rate,
+                                region: region_for_watcher.clone(),
+                                stop_rx: new_stop_rx.clone(),
+                            };
+                            tokio::spawn(run_worker(new_client.clone(), wc, new_start))
+                        })
+                        .collect()
+                };
 
                 {
                     let mut state = pool_for_watcher.lock().await;
@@ -1057,16 +1118,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         handles.push(handle);
     }
 
-    // Wait for the total test duration to pass
-    tokio::time::sleep(config.test_duration).await;
-    info!(
-        duration_secs = config.test_duration.as_secs(),
-        "Test duration completed, signalling workers to stop"
-    );
+    // Wait for the first test to actually complete.
+    //
+    // Previously this was `sleep(config.test_duration)` which used the
+    // startup env-var duration and caused the process to exit early when a
+    // POST /config submitted a longer test (e.g. 72 h vs TEST_DURATION=2 h).
+    //
+    // `spawn_completion_watcher` is now the authoritative timer: it sleeps for
+    // whatever duration the *active* test requires (updated on every POST /config)
+    // and transitions `node_state` to "standby" when done.  We just poll until
+    // that transition happens.
+    loop {
+        let state = test_state.lock().unwrap().node_state;
+        if state != "running" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(10)).await;
+    }
+    info!("Test duration completed, collecting final metrics");
 
     // Brief pause to allow in-flight metrics to be updated
     tokio::time::sleep(Duration::from_secs(2)).await;
-    info!("Collecting final metrics");
 
     // Print percentile latency statistics (Issue #33, #66)
     print_percentile_report(
@@ -1085,9 +1157,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("\n--- FINAL METRICS ---\n{}", final_metrics_output);
     info!("--- END OF FINAL METRICS ---");
 
-    info!("Pausing for 2 minutes to allow final Prometheus scrape");
-    tokio::time::sleep(Duration::from_secs(120)).await;
-    info!("Pause complete, exiting");
+    // Keep the process alive in standby — workers, the health API, and the
+    // Prometheus metrics endpoint remain active until the container is stopped
+    // externally (SIGTERM from Nomad/Docker).  The final-scrape pause is no
+    // longer necessary because Prometheus continues scraping during standby.
+    info!("Standby mode active — process will remain alive until stopped externally");
+    tokio::time::sleep(Duration::from_secs(365 * 24 * 3600)).await;
 
     Ok(())
 }
