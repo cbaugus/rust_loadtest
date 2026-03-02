@@ -29,6 +29,7 @@ use std::time::{Duration, Instant};
 ///             },
 ///             extractions: vec![],
 ///             assertions: vec![],
+///             cache: None,
 ///             think_time: Some(ThinkTime::Fixed(Duration::from_secs(2))),
 ///         },
 ///     ],
