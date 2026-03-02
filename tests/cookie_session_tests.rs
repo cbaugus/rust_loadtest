@@ -3,7 +3,7 @@
 //! These tests validate that cookies are automatically handled across
 //! requests within a scenario, enabling session-based authentication.
 
-use rust_loadtest::executor::ScenarioExecutor;
+use rust_loadtest::executor::{ScenarioExecutor, SessionStore};
 use rust_loadtest::scenario::{
     Extractor, RequestConfig, Scenario, ScenarioContext, Step, ThinkTime, VariableExtraction,
 };
@@ -50,7 +50,8 @@ async fn test_cookies_persist_across_steps() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
+                cache: None,
+            think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
                 name: "Access Protected Resource (uses cookies)".to_string(),
@@ -62,7 +63,8 @@ async fn test_cookies_persist_across_steps() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: None,
+                cache: None,
+            think_time: None,
             },
         ],
     };
@@ -71,7 +73,9 @@ async fn test_cookies_persist_across_steps() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // If cookies work, both steps should succeed
     // Step 1: Login sets session cookie
@@ -132,7 +136,8 @@ async fn test_auth_flow_with_token_and_cookies() {
                     },
                 ],
                 assertions: vec![],
-                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                cache: None,
+            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Access Profile with Token".to_string(),
@@ -152,7 +157,8 @@ async fn test_auth_flow_with_token_and_cookies() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: None,
+                cache: None,
+            think_time: None,
             },
         ],
     };
@@ -161,7 +167,9 @@ async fn test_auth_flow_with_token_and_cookies() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     println!("\nAuth Flow Test:");
     println!(
@@ -220,6 +228,7 @@ async fn test_cookie_isolation_between_clients() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -235,8 +244,12 @@ async fn test_cookie_isolation_between_clients() {
     let mut context2 = ScenarioContext::new();
 
     // Execute scenarios with different clients
-    let result1 = executor1.execute(&scenario, &mut context1).await;
-    let result2 = executor2.execute(&scenario, &mut context2).await;
+    let result1 = executor1
+        .execute(&scenario, &mut context1, &mut SessionStore::new())
+        .await;
+    let result2 = executor2
+        .execute(&scenario, &mut context2, &mut SessionStore::new())
+        .await;
 
     println!("\nCookie Isolation Test:");
     println!("  Client 1: {}", if result1.success { "✓" } else { "✗" });
@@ -270,7 +283,8 @@ async fn test_shopping_flow_with_session() {
                     extractor: Extractor::JsonPath("$.products[0].id".to_string()),
                 }],
                 assertions: vec![],
-                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                cache: None,
+            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Register and Login".to_string(),
@@ -296,7 +310,8 @@ async fn test_shopping_flow_with_session() {
                     extractor: Extractor::JsonPath("$.token".to_string()),
                 }],
                 assertions: vec![],
-                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                cache: None,
+            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "Add to Cart (with auth)".to_string(),
@@ -319,7 +334,8 @@ async fn test_shopping_flow_with_session() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
+                cache: None,
+            think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
                 name: "View Cart (session maintained)".to_string(),
@@ -335,7 +351,8 @@ async fn test_shopping_flow_with_session() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: None,
+                cache: None,
+            think_time: None,
             },
         ],
     };
@@ -344,7 +361,9 @@ async fn test_shopping_flow_with_session() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     println!("\nShopping Flow with Session:");
     println!("  Success: {}", result.success);
@@ -392,6 +411,7 @@ async fn test_client_without_cookies_fails_session() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -412,10 +432,10 @@ async fn test_client_without_cookies_fails_session() {
     let mut context_with_cookies = ScenarioContext::new();
 
     let result_no_cookies = executor_no_cookies
-        .execute(&scenario, &mut context_no_cookies)
+        .execute(&scenario, &mut context_no_cookies, &mut SessionStore::new())
         .await;
     let result_with_cookies = executor_with_cookies
-        .execute(&scenario, &mut context_with_cookies)
+        .execute(&scenario, &mut context_with_cookies, &mut SessionStore::new())
         .await;
 
     println!("\nCookie Enabled Comparison:");

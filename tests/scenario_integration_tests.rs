@@ -5,7 +5,7 @@
 //!
 //! Run with: cargo test --test scenario_integration_tests
 
-use rust_loadtest::executor::ScenarioExecutor;
+use rust_loadtest::executor::{ScenarioExecutor, SessionStore};
 use rust_loadtest::scenario::{
     Assertion, RequestConfig, Scenario, ScenarioContext, Step, ThinkTime,
 };
@@ -39,6 +39,7 @@ async fn test_health_check_scenario() {
             },
             extractions: vec![],
             assertions: vec![Assertion::StatusCode(200)],
+            cache: None,
             think_time: None,
         }],
     };
@@ -47,7 +48,9 @@ async fn test_health_check_scenario() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Health check scenario should succeed");
     assert_eq!(result.steps.len(), 1);
@@ -70,7 +73,8 @@ async fn test_product_browsing_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
-                think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
+                cache: None,
+            think_time: Some(ThinkTime::Fixed(Duration::from_millis(100))),
             },
             Step {
                 name: "Get Item Details".to_string(),
@@ -82,7 +86,8 @@ async fn test_product_browsing_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
-                think_time: None,
+                cache: None,
+            think_time: None,
             },
         ],
     };
@@ -91,7 +96,9 @@ async fn test_product_browsing_scenario() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.success, "Product browsing scenario should succeed");
     assert_eq!(result.steps_completed, 2);
@@ -124,6 +131,7 @@ async fn test_variable_substitution() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -131,7 +139,9 @@ async fn test_variable_substitution() {
     let client = create_test_client();
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // The request should have been made to /products/prod-123
     // If variable substitution works, we'll get a response
@@ -170,7 +180,8 @@ async fn test_multi_step_with_delays() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
+                cache: None,
+            think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
             },
             Step {
                 name: "Step 2".to_string(),
@@ -182,7 +193,8 @@ async fn test_multi_step_with_delays() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
+                cache: None,
+            think_time: Some(ThinkTime::Fixed(Duration::from_millis(200))),
             },
             Step {
                 name: "Step 3".to_string(),
@@ -194,7 +206,8 @@ async fn test_multi_step_with_delays() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: None,
+                cache: None,
+            think_time: None,
             },
         ],
     };
@@ -204,7 +217,9 @@ async fn test_multi_step_with_delays() {
     let mut context = ScenarioContext::new();
 
     let start = std::time::Instant::now();
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
     let duration = start.elapsed();
 
     assert!(result.success, "Multi-step scenario should succeed");
@@ -234,7 +249,8 @@ async fn test_scenario_failure_handling() {
                 },
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
-                think_time: None,
+                cache: None,
+            think_time: None,
             },
             Step {
                 name: "Invalid Request".to_string(),
@@ -246,7 +262,8 @@ async fn test_scenario_failure_handling() {
                 },
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
-                think_time: None,
+                cache: None,
+            think_time: None,
             },
             Step {
                 name: "Should Not Execute".to_string(),
@@ -258,7 +275,8 @@ async fn test_scenario_failure_handling() {
                 },
                 extractions: vec![],
                 assertions: vec![],
-                think_time: None,
+                cache: None,
+            think_time: None,
             },
         ],
     };
@@ -267,7 +285,9 @@ async fn test_scenario_failure_handling() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // Scenario should fail on step 2
     assert!(!result.success, "Scenario should fail");
@@ -308,6 +328,7 @@ async fn test_timestamp_variable() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -316,7 +337,9 @@ async fn test_timestamp_variable() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // Timestamp substitution should work, request should succeed
     assert!(result.success, "Scenario with timestamp should succeed");
@@ -349,6 +372,7 @@ async fn test_post_request_with_json_body() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -357,7 +381,9 @@ async fn test_post_request_with_json_body() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // POST should work (200 OK from httpbin)
     assert!(
@@ -383,6 +409,7 @@ async fn test_scenario_context_isolation() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -397,8 +424,12 @@ async fn test_scenario_context_isolation() {
     let mut context2 = ScenarioContext::new();
     context2.set_variable("test".to_string(), "value2".to_string());
 
-    let result1 = executor.execute(&scenario, &mut context1).await;
-    let result2 = executor.execute(&scenario, &mut context2).await;
+    let result1 = executor
+        .execute(&scenario, &mut context1, &mut SessionStore::new())
+        .await;
+    let result2 = executor
+        .execute(&scenario, &mut context2, &mut SessionStore::new())
+        .await;
 
     // Both should succeed
     assert!(result1.success);
