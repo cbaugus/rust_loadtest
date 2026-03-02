@@ -25,6 +25,7 @@ async fn test_scenario_worker_respects_duration() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -72,6 +73,7 @@ async fn test_scenario_worker_constant_load() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -115,6 +117,7 @@ async fn test_scenario_worker_with_think_time() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: Some(ThinkTime::Fixed(Duration::from_millis(500))),
             },
             Step {
@@ -127,6 +130,7 @@ async fn test_scenario_worker_with_think_time() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],

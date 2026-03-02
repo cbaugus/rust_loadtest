@@ -4,7 +4,7 @@
 //! client errors, server errors, network errors, timeouts, and TLS errors.
 
 use rust_loadtest::errors::{categorize_status_code, CategorizedError, ErrorCategory};
-use rust_loadtest::executor::ScenarioExecutor;
+use rust_loadtest::executor::{ScenarioExecutor, SessionStore};
 use rust_loadtest::scenario::{Assertion, RequestConfig, Scenario, ScenarioContext, Step};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -182,6 +182,7 @@ async fn test_404_error_categorization() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -190,7 +191,9 @@ async fn test_404_error_categorization() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // Request should "succeed" (no network error) but return 404
     assert_eq!(result.steps[0].status_code, Some(404));
@@ -218,6 +221,7 @@ async fn test_timeout_error_categorization() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -232,7 +236,9 @@ async fn test_timeout_error_categorization() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // Should fail due to timeout
     assert!(!result.success);
@@ -256,6 +262,7 @@ async fn test_network_error_categorization() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -268,7 +275,9 @@ async fn test_network_error_categorization() {
     );
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // Should fail due to DNS/network error
     assert!(!result.success);
@@ -294,6 +303,7 @@ async fn test_mixed_error_types_in_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -306,6 +316,7 @@ async fn test_mixed_error_types_in_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -315,7 +326,9 @@ async fn test_mixed_error_types_in_scenario() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // First step succeeds
     assert!(result.steps[0].success);

@@ -153,7 +153,7 @@ job "envoy-loadtest" {
             gelf-address = "udp://gelf.service.consul:12201"
           }
         }
-        image      = "cbaugus/rust_loadtest:dev-9138374"
+        image      = "cbaugus/rust_loadtest:dev-43db789"
         force_pull = true
         ports = [
           "metrics",
@@ -171,6 +171,7 @@ job "envoy-loadtest" {
 # runs at startup before the Raft cluster forms and before the leader can fetch
 # from Consul KV.  The values here are replaced cluster-wide as soon as the
 # leader commits the Consul KV config to the Raft log.
+RUST_LOG=rust_loadtest=warn
 TARGET_URL=http://dialtone.service.consul:5678
 REQUEST_TYPE=GET
 SKIP_TLS_VERIFY=true

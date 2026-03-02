@@ -9,11 +9,25 @@ use crate::extractor;
 use crate::metrics::{
     CONCURRENT_SCENARIOS, SCENARIO_ASSERTIONS_TOTAL, SCENARIO_DURATION_SECONDS,
     SCENARIO_EXECUTIONS_TOTAL, SCENARIO_STEPS_TOTAL, SCENARIO_STEP_DURATION_SECONDS,
+    SCENARIO_STEP_STATUS_CODES,
 };
 use crate::scenario::{Scenario, ScenarioContext, Step};
+use std::collections::HashMap;
 use std::time::Instant;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
+
+/// Cached variables from a single step, kept alive until `expires_at`.
+pub struct SessionEntry {
+    pub variables: HashMap<String, String>,
+    pub expires_at: Instant,
+}
+
+/// Per-worker session store: step name → cached result.
+///
+/// Lives for the lifetime of the worker (outside the scenario iteration loop)
+/// so extracted variables survive across iterations until their TTL expires.
+pub type SessionStore = HashMap<String, SessionEntry>;
 
 /// Result of executing a single step.
 #[derive(Debug)]
@@ -38,6 +52,9 @@ pub struct StepResult {
 
     /// Assertions that failed
     pub assertions_failed: usize,
+
+    /// True when the step result was served from the session cache (no HTTP request made).
+    pub cache_hit: bool,
 }
 
 /// Result of executing an entire scenario.
@@ -132,6 +149,7 @@ impl ScenarioExecutor {
         &self,
         scenario: &Scenario,
         context: &mut ScenarioContext,
+        session: &mut SessionStore,
     ) -> ScenarioResult {
         let scenario_start = Instant::now();
         let mut step_results = Vec::new();
@@ -155,7 +173,9 @@ impl ScenarioExecutor {
                 "Executing step"
             );
 
-            let step_result = self.execute_step(step, context).await;
+            let step_result = self
+                .execute_step(&scenario.name, step, context, session)
+                .await;
 
             let success = step_result.success;
             step_results.push(step_result);
@@ -232,12 +252,46 @@ impl ScenarioExecutor {
     }
 
     /// Execute a single step.
-    async fn execute_step(&self, step: &Step, context: &mut ScenarioContext) -> StepResult {
+    async fn execute_step(
+        &self,
+        scenario_name: &str,
+        step: &Step,
+        context: &mut ScenarioContext,
+        session: &mut SessionStore,
+    ) -> StepResult {
+        // ── Session cache check ────────────────────────────────────────────
+        if step.cache.is_some() {
+            if let Some(entry) = session.get(&step.name) {
+                if entry.expires_at > Instant::now() {
+                    for (name, value) in &entry.variables {
+                        context.set_variable(name.clone(), value.clone());
+                    }
+                    debug!(step = %step.name, "Session cache hit — skipping HTTP request");
+                    return StepResult {
+                        step_name: step.name.clone(),
+                        success: true,
+                        status_code: None,
+                        response_time_ms: 0,
+                        error: None,
+                        assertions_passed: 0,
+                        assertions_failed: 0,
+                        cache_hit: true,
+                    };
+                }
+                // Entry expired — evict it so we make a fresh request
+                session.remove(&step.name);
+            }
+        }
+
         let step_start = Instant::now();
 
         // Build the full URL with variable substitution
         let path = context.substitute_variables(&step.request.path);
-        let url = format!("{}{}", self.base_url, path);
+        let url = if path.starts_with("http://") || path.starts_with("https://") {
+            path
+        } else {
+            format!("{}{}", self.base_url, path)
+        };
 
         debug!(
             step = %step.name,
@@ -265,6 +319,7 @@ impl ScenarioExecutor {
                     error: Some(format!("Unsupported HTTP method: {}", method)),
                     assertions_passed: 0,
                     assertions_failed: 0,
+                    cache_hit: false,
                 };
             }
         };
@@ -316,15 +371,40 @@ impl ScenarioExecutor {
 
                             let count = extracted.len();
 
+                            // If this step has a cache config, keep a copy for the session store
+                            let for_session: Option<HashMap<String, String>> =
+                                if step.cache.is_some() {
+                                    Some(extracted.clone())
+                                } else {
+                                    None
+                                };
+
                             // Store extracted variables in context
-                            for (name, value) in extracted {
+                            for (name, value) in &extracted {
                                 debug!(
                                     step = %step.name,
                                     variable = %name,
                                     value = %value,
                                     "Stored extracted variable"
                                 );
-                                context.set_variable(name, value);
+                                context.set_variable(name.clone(), value.clone());
+                            }
+
+                            // Cache the extracted variables for future iterations
+                            if let (Some(cache_cfg), Some(vars)) = (&step.cache, for_session) {
+                                let expires_at = Instant::now() + cache_cfg.ttl;
+                                debug!(
+                                    step = %step.name,
+                                    ttl_secs = cache_cfg.ttl.as_secs(),
+                                    "Caching step result in session store"
+                                );
+                                session.insert(
+                                    step.name.clone(),
+                                    SessionEntry {
+                                        variables: vars,
+                                        expires_at,
+                                    },
+                                );
                             }
 
                             count
@@ -372,7 +452,7 @@ impl ScenarioExecutor {
                                 // Record assertion metrics
                                 let result_label = if result.passed { "passed" } else { "failed" };
                                 SCENARIO_ASSERTIONS_TOTAL
-                                    .with_label_values(&["scenario", &step.name, result_label])
+                                    .with_label_values(&[scenario_name, &step.name, result_label])
                                     .inc();
                             }
 
@@ -428,12 +508,17 @@ impl ScenarioExecutor {
                 // Record step metrics
                 let response_time_secs = response_time_ms as f64 / 1000.0;
                 SCENARIO_STEP_DURATION_SECONDS
-                    .with_label_values(&["scenario", &step.name])
+                    .with_label_values(&[scenario_name, &step.name])
                     .observe(response_time_secs);
+
+                let status_code_str = status.as_u16().to_string();
+                SCENARIO_STEP_STATUS_CODES
+                    .with_label_values(&[scenario_name, &step.name, &status_code_str])
+                    .inc();
 
                 let step_status = if success { "success" } else { "failed" };
                 SCENARIO_STEPS_TOTAL
-                    .with_label_values(&["scenario", &step.name, step_status])
+                    .with_label_values(&[scenario_name, &step.name, step_status])
                     .inc();
 
                 debug!(
@@ -453,6 +538,7 @@ impl ScenarioExecutor {
                     error: error_msg,
                     assertions_passed,
                     assertions_failed,
+                    cache_hit: false,
                 }
             }
             Err(e) => {
@@ -465,7 +551,7 @@ impl ScenarioExecutor {
 
                 // Record failed step metrics
                 SCENARIO_STEPS_TOTAL
-                    .with_label_values(&["scenario", &step.name, "failed"])
+                    .with_label_values(&[scenario_name, &step.name, "failed"])
                     .inc();
 
                 StepResult {
@@ -476,6 +562,7 @@ impl ScenarioExecutor {
                     error: Some(e.to_string()),
                     assertions_passed: 0,
                     assertions_failed: 0,
+                    cache_hit: false,
                 }
             }
         }
@@ -528,6 +615,7 @@ mod tests {
             error: None,
             assertions_passed: 2,
             assertions_failed: 0,
+            cache_hit: false,
         };
 
         assert!(result.success);

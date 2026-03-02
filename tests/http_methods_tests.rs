@@ -3,7 +3,7 @@
 //! These tests validate that GET, POST, PUT, PATCH, DELETE, HEAD, and OPTIONS
 //! methods work correctly in both single requests and multi-step scenarios.
 
-use rust_loadtest::executor::ScenarioExecutor;
+use rust_loadtest::executor::{ScenarioExecutor, SessionStore};
 use rust_loadtest::scenario::{RequestConfig, Scenario, ScenarioContext, Step};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -33,6 +33,7 @@ async fn test_get_request() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -41,7 +42,9 @@ async fn test_get_request() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(
         result.steps[0].status_code.is_some(),
@@ -73,6 +76,7 @@ async fn test_post_request() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -81,7 +85,9 @@ async fn test_post_request() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(
         result.steps[0].status_code.is_some(),
@@ -113,6 +119,7 @@ async fn test_put_request() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -121,7 +128,9 @@ async fn test_put_request() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // PUT may return 2xx/3xx or 4xx depending on endpoint implementation
     assert!(result.steps[0].status_code.is_some());
@@ -151,6 +160,7 @@ async fn test_patch_request() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -159,7 +169,9 @@ async fn test_patch_request() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // PATCH may return 2xx/3xx or 4xx depending on endpoint implementation
     assert!(result.steps[0].status_code.is_some());
@@ -185,6 +197,7 @@ async fn test_delete_request() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -193,7 +206,9 @@ async fn test_delete_request() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // DELETE may return 2xx/3xx or 4xx depending on endpoint implementation
     assert!(result.steps[0].status_code.is_some());
@@ -219,6 +234,7 @@ async fn test_head_request() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -227,7 +243,9 @@ async fn test_head_request() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // HEAD should return same status as GET but no body
     assert!(result.success, "HEAD request should succeed");
@@ -254,6 +272,7 @@ async fn test_options_request() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -262,7 +281,9 @@ async fn test_options_request() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // OPTIONS typically returns 200 or 204 with Allow header
     assert!(result.steps[0].status_code.is_some());
@@ -289,6 +310,7 @@ async fn test_mixed_methods_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -305,6 +327,7 @@ async fn test_mixed_methods_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -321,6 +344,7 @@ async fn test_mixed_methods_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -333,6 +357,7 @@ async fn test_mixed_methods_scenario() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -342,7 +367,9 @@ async fn test_mixed_methods_scenario() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     // All steps should execute (some may fail depending on API implementation)
     assert!(result.steps.len() >= 2, "Should execute multiple steps");
@@ -390,6 +417,7 @@ async fn test_case_insensitive_methods() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             }],
         };
@@ -398,7 +426,9 @@ async fn test_case_insensitive_methods() {
         let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
         let mut context = ScenarioContext::new();
 
-        let result = executor.execute(&scenario, &mut context).await;
+        let result = executor
+            .execute(&scenario, &mut context, &mut SessionStore::new())
+            .await;
 
         assert!(result.success, "{} should work (case-insensitive)", method);
     }
@@ -423,6 +453,7 @@ async fn test_rest_crud_flow() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -439,6 +470,7 @@ async fn test_rest_crud_flow() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -457,6 +489,7 @@ async fn test_rest_crud_flow() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -473,6 +506,7 @@ async fn test_rest_crud_flow() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -485,6 +519,7 @@ async fn test_rest_crud_flow() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -497,6 +532,7 @@ async fn test_rest_crud_flow() {
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -506,7 +542,9 @@ async fn test_rest_crud_flow() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     println!("✅ REST CRUD flow executed");
     println!("   Total steps: {}", result.steps.len());
@@ -546,6 +584,7 @@ async fn test_options_cors_preflight() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -554,7 +593,9 @@ async fn test_options_cors_preflight() {
     let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
     let mut context = ScenarioContext::new();
 
-    let result = executor.execute(&scenario, &mut context).await;
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
 
     assert!(result.steps[0].status_code.is_some());
 

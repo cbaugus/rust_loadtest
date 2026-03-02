@@ -4,7 +4,7 @@
 //! virtual users, and used for variable substitution in scenarios.
 
 use rust_loadtest::data_source::CsvDataSource;
-use rust_loadtest::executor::ScenarioExecutor;
+use rust_loadtest::executor::{ScenarioExecutor, SessionStore};
 use rust_loadtest::scenario::{Assertion, RequestConfig, Scenario, ScenarioContext, Step};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -147,6 +147,7 @@ async fn test_scenario_with_csv_data() {
             },
             extractions: vec![],
             assertions: vec![],
+            cache: None,
             think_time: None,
         }],
     };
@@ -160,7 +161,9 @@ async fn test_scenario_with_csv_data() {
         let row = ds.next_row().unwrap();
         context.load_data_row(&row);
 
-        let result = executor.execute(&scenario, &mut context).await;
+        let result = executor
+            .execute(&scenario, &mut context, &mut SessionStore::new())
+            .await;
 
         assert!(result.steps[0].status_code.is_some());
         println!(
@@ -191,6 +194,7 @@ async fn test_multiple_users_different_data() {
             },
             extractions: vec![],
             assertions: vec![Assertion::StatusCode(200)],
+            cache: None,
             think_time: None,
         }],
     };
@@ -209,7 +213,9 @@ async fn test_multiple_users_different_data() {
 
         context.load_data_row(&row);
 
-        let result = executor.execute(&scenario, &mut context).await;
+        let result = executor
+            .execute(&scenario, &mut context, &mut SessionStore::new())
+            .await;
 
         assert!(result.success, "Virtual user {} should succeed", i + 1);
         println!("  Virtual user {} used data: {}", i + 1, username);
@@ -246,6 +252,7 @@ dave,dave012,dave@company.com,manager"#;
                 },
                 extractions: vec![],
                 assertions: vec![Assertion::StatusCode(200)],
+                cache: None,
                 think_time: None,
             },
             Step {
@@ -258,6 +265,7 @@ dave,dave012,dave@company.com,manager"#;
                 },
                 extractions: vec![],
                 assertions: vec![],
+                cache: None,
                 think_time: None,
             },
         ],
@@ -275,7 +283,9 @@ dave,dave012,dave@company.com,manager"#;
 
         context.load_data_row(&row);
 
-        let result = executor.execute(&scenario, &mut context).await;
+        let result = executor
+            .execute(&scenario, &mut context, &mut SessionStore::new())
+            .await;
 
         assert!(result.success, "User {} should succeed", username);
         println!("  VU {} as {} (role: {})", i + 1, username, role);
