@@ -246,8 +246,11 @@ fn print_config_help() {
     eprintln!(
         "  CLUSTER_HEALTH_ADDR     - Health/config HTTP listen address (default: 0.0.0.0:8080)"
     );
+    eprintln!("  API_AUTH_TOKEN          - Bearer token required on POST /config and POST /stop");
+    eprintln!("                            (optional; when unset, endpoints are open)");
     eprintln!("    GET  /health          - Returns JSON with live node metrics");
     eprintln!("    POST /config          - Accepts a YAML config body to reconfigure workers");
+    eprintln!("    POST /stop            - Stops all workers and transitions node to idle");
     eprintln!();
     eprintln!("Logging configuration:");
     eprintln!("  RUST_LOG                - Log level: error, warn, info, debug, trace");
@@ -550,6 +553,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let region_for_http = config.cluster.region.clone();
         let live_metrics_for_http = live_metrics.clone();
         let config_tx_for_http = config_tx.clone();
+        let worker_pool_for_http = worker_pool.clone();
+        let test_state_for_http = test_state.clone();
+        let api_token_for_http = std::env::var("API_AUTH_TOKEN").ok();
 
         tokio::spawn(async move {
             let make_svc = make_service_fn(move |_conn| {
@@ -557,12 +563,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let region = region_for_http.clone();
                 let lm = live_metrics_for_http.clone();
                 let tx = config_tx_for_http.clone();
+                let wp = worker_pool_for_http.clone();
+                let ts = test_state_for_http.clone();
+                let token = api_token_for_http.clone();
                 async move {
                     Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
                         let node_id = node_id.clone();
                         let region = region.clone();
                         let lm = lm.clone();
                         let tx = tx.clone();
+                        let wp = wp.clone();
+                        let ts = ts.clone();
+                        let token = token.clone();
                         async move {
                             match (req.method(), req.uri().path()) {
                                 (&Method::GET, "/health") => {
@@ -595,6 +607,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     )
                                 }
                                 (&Method::POST, "/config") => {
+                                    if let Some(ref t) = token {
+                                        let auth = req
+                                            .headers()
+                                            .get("authorization")
+                                            .and_then(|v| v.to_str().ok())
+                                            .unwrap_or("");
+                                        if auth != format!("Bearer {}", t) {
+                                            return Ok(Response::builder()
+                                                .status(StatusCode::UNAUTHORIZED)
+                                                .body(Body::from("unauthorized"))
+                                                .unwrap());
+                                        }
+                                    }
                                     let body_bytes = hyper::body::to_bytes(req.into_body())
                                         .await
                                         .unwrap_or_default();
@@ -617,6 +642,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                                 .unwrap(),
                                         ),
                                     }
+                                }
+                                (&Method::POST, "/stop") => {
+                                    if let Some(ref t) = token {
+                                        let auth = req
+                                            .headers()
+                                            .get("authorization")
+                                            .and_then(|v| v.to_str().ok())
+                                            .unwrap_or("");
+                                        if auth != format!("Bearer {}", t) {
+                                            return Ok(Response::builder()
+                                                .status(StatusCode::UNAUTHORIZED)
+                                                .body(Body::from("unauthorized"))
+                                                .unwrap());
+                                        }
+                                    }
+                                    // Send stop signal to all workers.
+                                    {
+                                        let pool = wp.lock().await;
+                                        let _ = pool.stop_tx.send(true);
+                                    }
+                                    // Abort worker handles.
+                                    {
+                                        let mut pool = wp.lock().await;
+                                        for h in pool.handles.drain(..) {
+                                            h.abort();
+                                        }
+                                    }
+                                    // Transition node state to idle.
+                                    {
+                                        let mut state = ts.lock().unwrap();
+                                        state.node_state = "idle";
+                                        state.generation += 1;
+                                    }
+                                    let m = lm.lock().unwrap().clone();
+                                    let body = serde_json::json!({
+                                        "stopped": true,
+                                        "rps": m.rps,
+                                        "workers": m.workers,
+                                        "message": "test stopped"
+                                    })
+                                    .to_string();
+                                    Ok::<_, Infallible>(
+                                        Response::builder()
+                                            .status(StatusCode::OK)
+                                            .header("Content-Type", "application/json")
+                                            .body(Body::from(body))
+                                            .unwrap(),
+                                    )
                                 }
                                 _ => Ok::<_, Infallible>(
                                     Response::builder()
