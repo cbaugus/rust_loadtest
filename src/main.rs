@@ -317,6 +317,8 @@ struct TestState {
     node_state: &'static str, // "running" | "idle" | "standby"
     generation: u64,          // bumped on each new test; completion-watcher checks this
     standby: Option<StandbyRunConfig>,
+    /// Tenant identifier for the active test run. None when no tenant is set.
+    tenant: Option<String>,
 }
 
 /// Returns the current Unix timestamp in seconds.
@@ -400,6 +402,7 @@ fn spawn_completion_watcher(
                     percentile_tracking_enabled: sb.percentile_tracking_enabled,
                     percentile_sampling_rate: sb.percentile_sampling_rate,
                     region: sb.region.clone(),
+                    tenant: String::new(), // standby mode has no tenant
                     stop_rx: new_stop_rx.clone(),
                 };
                 tokio::spawn(run_worker(client.clone(), wc, new_start))
@@ -536,6 +539,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         node_state: "running",
         generation: 0,
         standby: None,
+        tenant: None,
     }));
 
     // ── Standalone health + config HTTP server ─────────────────────────────
@@ -579,10 +583,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                             match (req.method(), req.uri().path()) {
                                 (&Method::GET, "/health") => {
                                     let m = lm.lock().unwrap().clone();
+                                    let current_tenant =
+                                        ts.lock().unwrap().tenant.clone();
                                     let body = serde_json::json!({
                                         "status": "ok",
                                         "node_id": node_id,
                                         "region": region,
+                                        "tenant": current_tenant,
                                         "node_state": m.node_state,
                                         "rps": (m.rps * 100.0).round() / 100.0,
                                         "error_rate_pct": (m.error_rate_pct * 100.0).round() / 100.0,
@@ -657,6 +664,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                                 .unwrap());
                                         }
                                     }
+                                    // Optional JSON body: {"tenant": "acme"}.
+                                    // When present, only stop if the tenant matches the
+                                    // active test. Omit body to stop unconditionally.
+                                    let body_bytes =
+                                        hyper::body::to_bytes(req.into_body())
+                                            .await
+                                            .unwrap_or_default();
+                                    let stop_tenant: Option<String> =
+                                        if body_bytes.is_empty() {
+                                            None
+                                        } else {
+                                            serde_json::from_slice::<serde_json::Value>(
+                                                &body_bytes,
+                                            )
+                                            .ok()
+                                            .and_then(|v| {
+                                                v.get("tenant")
+                                                    .and_then(|t| t.as_str())
+                                                    .map(|s| s.to_string())
+                                            })
+                                        };
+                                    // Guard: if caller specifies a tenant, only stop
+                                    // if it matches the currently running test.
+                                    if let Some(ref filter) = stop_tenant {
+                                        let active =
+                                            ts.lock().unwrap().tenant.clone();
+                                        if active.as_deref() != Some(filter.as_str()) {
+                                            let body = serde_json::json!({
+                                                "stopped": false,
+                                                "message": "no active test for this tenant"
+                                            })
+                                            .to_string();
+                                            return Ok(Response::builder()
+                                                .status(StatusCode::CONFLICT)
+                                                .header("Content-Type", "application/json")
+                                                .body(Body::from(body))
+                                                .unwrap());
+                                        }
+                                    }
                                     // Send stop signal to all workers.
                                     {
                                         let pool = wp.lock().await;
@@ -673,11 +719,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     {
                                         let mut state = ts.lock().unwrap();
                                         state.node_state = "idle";
+                                        state.tenant = None;
                                         state.generation += 1;
                                     }
                                     let m = lm.lock().unwrap().clone();
                                     let body = serde_json::json!({
                                         "stopped": true,
+                                        "tenant": stop_tenant,
                                         "rps": m.rps,
                                         "workers": m.workers,
                                         "message": "test stopped"
@@ -811,6 +859,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                             .percentile_tracking_enabled,
                                         percentile_sampling_rate: new_cfg.percentile_sampling_rate,
                                         region: region_for_watcher.clone(),
+                                        tenant: new_tenant
+                                            .clone()
+                                            .unwrap_or_default(),
                                     };
                                     tokio::spawn(run_scenario_worker(
                                         new_client.clone(),
@@ -837,6 +888,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                             .percentile_tracking_enabled,
                                         percentile_sampling_rate: new_cfg.percentile_sampling_rate,
                                         region: region_for_watcher.clone(),
+                                        tenant: new_tenant.clone().unwrap_or_default(),
                                         stop_rx: new_stop_rx.clone(),
                                     };
                                     tokio::spawn(run_worker(new_client.clone(), wc, new_start))
@@ -859,6 +911,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                 percentile_tracking_enabled: new_cfg.percentile_tracking_enabled,
                                 percentile_sampling_rate: new_cfg.percentile_sampling_rate,
                                 region: region_for_watcher.clone(),
+                                tenant: new_tenant.clone().unwrap_or_default(),
                                 stop_rx: new_stop_rx.clone(),
                             };
                             tokio::spawn(run_worker(new_client.clone(), wc, new_start))
@@ -872,6 +925,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     state.handles = new_handles;
                 }
 
+                let new_tenant = yaml_cfg_parsed.metadata.tenant.clone();
                 let new_gen = {
                     let mut ts = test_state_for_watcher.lock().unwrap();
                     ts.start = new_start;
@@ -881,6 +935,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     ts.node_state = "running";
                     ts.generation += 1;
                     ts.standby = standby_cfg;
+                    ts.tenant = new_tenant.clone();
                     ts.generation
                 };
                 spawn_completion_watcher(
@@ -959,6 +1014,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let mut interval = time::interval(Duration::from_secs(1));
             let mut prev_requests: u64 = 0;
             let mut prev_errors: u64 = 0;
+            let mut prev_tenant: String = String::new();
             // CPU tracking (Linux only) — tracks utime+stime jiffies
             #[cfg(target_os = "linux")]
             let mut prev_cpu_ticks: Option<u64> = None;
@@ -967,14 +1023,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 interval.tick().await;
 
                 // ── Request counter (monotonic) ──────────────────────────
-                let curr_requests = REQUEST_TOTAL.with_label_values(&[&region]).get();
+                let tenant_str = test_state_for_updater
+                    .lock()
+                    .unwrap()
+                    .tenant
+                    .clone()
+                    .unwrap_or_default();
+                // Reset delta tracking when the active tenant changes so we
+                // don't compute a nonsensical RPS across test boundaries.
+                if tenant_str != prev_tenant {
+                    prev_requests = 0;
+                    prev_errors = 0;
+                    prev_tenant = tenant_str.clone();
+                }
+                let curr_requests =
+                    REQUEST_TOTAL.with_label_values(&[&region, &tenant_str]).get();
 
                 // ── Error counter: sum all known categories ───────────────
                 let curr_errors: u64 = ErrorCategory::all()
                     .iter()
                     .map(|cat| {
                         REQUEST_ERRORS_BY_CATEGORY
-                            .with_label_values(&[cat.label(), &region])
+                            .with_label_values(&[cat.label(), &region, &tenant_str])
                             .get()
                     })
                     .sum();
@@ -1175,6 +1245,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             percentile_tracking_enabled: config.percentile_tracking_enabled,
             percentile_sampling_rate: config.percentile_sampling_rate,
             region: config.cluster.region.clone(),
+            // No tenant when running from env-var config (no YAML submitted yet).
+            tenant: String::new(),
             // Graceful-stop signal (Issue #79). In cluster mode the
             // config-watcher fires this before replacing the worker pool.
             // In standalone mode it is never fired; workers self-terminate

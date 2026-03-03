@@ -62,6 +62,10 @@ pub struct YamlMetadata {
     pub author: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Optional tenant identifier for multi-tenant SaaS deployments.
+    /// When set, all metrics emitted by this test run include a `tenant` label
+    /// so per-tenant request counts can be queried from Prometheus.
+    pub tenant: Option<String>,
 }
 
 /// Global configuration settings.

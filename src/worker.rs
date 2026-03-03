@@ -51,6 +51,10 @@ pub struct WorkerConfig {
     /// In standalone mode this is "local"; in cluster mode it is the node's
     /// geographic region (e.g. "us-central1").
     pub region: String,
+    /// Optional tenant identifier. Empty string when no tenant is configured.
+    /// Attached as a `tenant` label to all request metrics so per-tenant
+    /// request counts can be queried from Prometheus for billing.
+    pub tenant: String,
     /// Graceful-stop signal (Issue #79).  When the sender fires `true` the
     /// worker finishes its current request and exits at the top of the next
     /// loop iteration so no in-flight request is aborted.
@@ -137,9 +141,9 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
 
         // Track metrics
         CONCURRENT_REQUESTS
-            .with_label_values(&[&config.region])
+            .with_label_values(&[&config.region, &config.tenant])
             .inc();
-        REQUEST_TOTAL.with_label_values(&[&config.region]).inc();
+        REQUEST_TOTAL.with_label_values(&[&config.region, &config.tenant]).inc();
 
         let request_start_time = time::Instant::now();
 
@@ -152,13 +156,13 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
                 // Use static strings to avoid a heap allocation on every request
                 let status_str = status_code_label(status);
                 REQUEST_STATUS_CODES
-                    .with_label_values(&[status_str, &config.region])
+                    .with_label_values(&[status_str, &config.region, &config.tenant])
                     .inc();
 
                 // Categorize HTTP errors (Issue #34)
                 if let Some(category) = ErrorCategory::from_status_code(status) {
                     REQUEST_ERRORS_BY_CATEGORY
-                        .with_label_values(&[category.label(), &config.region])
+                        .with_label_values(&[category.label(), &config.region, &config.tenant])
                         .inc();
                 }
 
@@ -179,13 +183,13 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             }
             Err(e) => {
                 REQUEST_STATUS_CODES
-                    .with_label_values(&["error", &config.region])
+                    .with_label_values(&["error", &config.region, &config.tenant])
                     .inc();
 
                 // Categorize request error (Issue #34)
                 let error_category = ErrorCategory::from_reqwest_error(&e);
                 REQUEST_ERRORS_BY_CATEGORY
-                    .with_label_values(&[error_category.label(), &config.region])
+                    .with_label_values(&[error_category.label(), &config.region, &config.tenant])
                     .inc();
 
                 error!(
@@ -201,10 +205,10 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
 
         let actual_latency_ms = request_start_time.elapsed().as_millis() as u64;
         REQUEST_DURATION_SECONDS
-            .with_label_values(&[&config.region])
+            .with_label_values(&[&config.region, &config.tenant])
             .observe(request_start_time.elapsed().as_secs_f64());
         CONCURRENT_REQUESTS
-            .with_label_values(&[&config.region])
+            .with_label_values(&[&config.region, &config.tenant])
             .dec();
 
         // Record latency in percentile tracker (Issue #33, #66, #70, #72)
@@ -310,6 +314,8 @@ pub struct ScenarioWorkerConfig {
     pub percentile_sampling_rate: u8,
     /// Region label attached to all metrics emitted by this worker (Issue #45).
     pub region: String,
+    /// Optional tenant identifier. Empty string when no tenant is configured.
+    pub tenant: String,
 }
 
 /// Runs a scenario-based worker task that executes multi-step scenarios according to the load model.
@@ -434,20 +440,20 @@ pub async fn run_scenario_worker(
             if step.cache_hit {
                 continue;
             }
-            REQUEST_TOTAL.with_label_values(&[&config.region]).inc();
+            REQUEST_TOTAL.with_label_values(&[&config.region, &config.tenant]).inc();
             if let Some(code) = step.status_code {
                 REQUEST_STATUS_CODES
-                    .with_label_values(&[status_code_label(code), &config.region])
+                    .with_label_values(&[status_code_label(code), &config.region, &config.tenant])
                     .inc();
             }
             REQUEST_DURATION_SECONDS
-                .with_label_values(&[&config.region])
+                .with_label_values(&[&config.region, &config.tenant])
                 .observe(step.response_time_ms as f64 / 1000.0);
         }
 
         // Record throughput (Issue #35)
         SCENARIO_REQUESTS_TOTAL
-            .with_label_values(&[&config.scenario.name])
+            .with_label_values(&[&config.scenario.name, &config.tenant])
             .inc();
         GLOBAL_THROUGHPUT_TRACKER.record(
             &config.scenario.name,
