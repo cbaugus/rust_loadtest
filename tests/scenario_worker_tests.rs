@@ -40,6 +40,7 @@ async fn test_scenario_worker_respects_duration() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
     };
 
     let client = reqwest::Client::new();
@@ -90,6 +91,7 @@ async fn test_scenario_worker_constant_load() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
     };
 
     let client = reqwest::Client::new();
@@ -146,6 +148,7 @@ async fn test_scenario_worker_with_think_time() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
     };
 
     let client = reqwest::Client::new();
