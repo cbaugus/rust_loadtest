@@ -583,8 +583,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                             match (req.method(), req.uri().path()) {
                                 (&Method::GET, "/health") => {
                                     let m = lm.lock().unwrap().clone();
-                                    let current_tenant =
-                                        ts.lock().unwrap().tenant.clone();
+                                    let current_tenant = ts.lock().unwrap().tenant.clone();
                                     let body = serde_json::json!({
                                         "status": "ok",
                                         "node_id": node_id,
@@ -688,8 +687,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     // Guard: if caller specifies a tenant, only stop
                                     // if it matches the currently running test.
                                     if let Some(ref filter) = stop_tenant {
-                                        let active =
-                                            ts.lock().unwrap().tenant.clone();
+                                        let active = ts.lock().unwrap().tenant.clone();
                                         if active.as_deref() != Some(filter.as_str()) {
                                             let body = serde_json::json!({
                                                 "stopped": false,
@@ -834,6 +832,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
                 let (new_stop_tx, new_stop_rx) = watch::channel(false);
                 let new_start = time::Instant::now();
+                let new_tenant = yaml_cfg_parsed.metadata.tenant.clone();
 
                 // If the YAML contains scenarios, use scenario workers; otherwise
                 // fall back to the legacy single-URL worker.
@@ -859,9 +858,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                             .percentile_tracking_enabled,
                                         percentile_sampling_rate: new_cfg.percentile_sampling_rate,
                                         region: region_for_watcher.clone(),
-                                        tenant: new_tenant
-                                            .clone()
-                                            .unwrap_or_default(),
+                                        tenant: new_tenant.clone().unwrap_or_default(),
                                     };
                                     tokio::spawn(run_scenario_worker(
                                         new_client.clone(),
@@ -925,7 +922,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     state.handles = new_handles;
                 }
 
-                let new_tenant = yaml_cfg_parsed.metadata.tenant.clone();
                 let new_gen = {
                     let mut ts = test_state_for_watcher.lock().unwrap();
                     ts.start = new_start;
@@ -1036,8 +1032,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     prev_errors = 0;
                     prev_tenant = tenant_str.clone();
                 }
-                let curr_requests =
-                    REQUEST_TOTAL.with_label_values(&[&region, &tenant_str]).get();
+                let curr_requests = REQUEST_TOTAL.with_label_values(&[&region, &tenant_str]).get();
 
                 // ── Error counter: sum all known categories ───────────────
                 let curr_errors: u64 = ErrorCategory::all()
