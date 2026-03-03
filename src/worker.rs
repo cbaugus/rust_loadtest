@@ -143,7 +143,9 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         CONCURRENT_REQUESTS
             .with_label_values(&[&config.region, &config.tenant])
             .inc();
-        REQUEST_TOTAL.with_label_values(&[&config.region, &config.tenant]).inc();
+        REQUEST_TOTAL
+            .with_label_values(&[&config.region, &config.tenant])
+            .inc();
 
         let request_start_time = time::Instant::now();
 
@@ -440,7 +442,9 @@ pub async fn run_scenario_worker(
             if step.cache_hit {
                 continue;
             }
-            REQUEST_TOTAL.with_label_values(&[&config.region, &config.tenant]).inc();
+            REQUEST_TOTAL
+                .with_label_values(&[&config.region, &config.tenant])
+                .inc();
             if let Some(code) = step.status_code {
                 REQUEST_STATUS_CODES
                     .with_label_values(&[status_code_label(code), &config.region, &config.tenant])

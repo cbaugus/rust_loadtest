@@ -666,24 +666,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     // Optional JSON body: {"tenant": "acme"}.
                                     // When present, only stop if the tenant matches the
                                     // active test. Omit body to stop unconditionally.
-                                    let body_bytes =
-                                        hyper::body::to_bytes(req.into_body())
-                                            .await
-                                            .unwrap_or_default();
-                                    let stop_tenant: Option<String> =
-                                        if body_bytes.is_empty() {
-                                            None
-                                        } else {
-                                            serde_json::from_slice::<serde_json::Value>(
-                                                &body_bytes,
-                                            )
+                                    let body_bytes = hyper::body::to_bytes(req.into_body())
+                                        .await
+                                        .unwrap_or_default();
+                                    let stop_tenant: Option<String> = if body_bytes.is_empty() {
+                                        None
+                                    } else {
+                                        serde_json::from_slice::<serde_json::Value>(&body_bytes)
                                             .ok()
                                             .and_then(|v| {
                                                 v.get("tenant")
                                                     .and_then(|t| t.as_str())
                                                     .map(|s| s.to_string())
                                             })
-                                        };
+                                    };
                                     // Guard: if caller specifies a tenant, only stop
                                     // if it matches the currently running test.
                                     if let Some(ref filter) = stop_tenant {
@@ -1032,7 +1028,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     prev_errors = 0;
                     prev_tenant = tenant_str.clone();
                 }
-                let curr_requests = REQUEST_TOTAL.with_label_values(&[&region, &tenant_str]).get();
+                let curr_requests = REQUEST_TOTAL
+                    .with_label_values(&[&region, &tenant_str])
+                    .get();
 
                 // ── Error counter: sum all known categories ───────────────
                 let curr_errors: u64 = ErrorCategory::all()
