@@ -21,18 +21,18 @@ fn init_metrics() {
 }
 
 fn get_total_requests() -> u64 {
-    REQUEST_TOTAL.with_label_values(&["local"]).get()
+    REQUEST_TOTAL.with_label_values(&["local", ""]).get()
 }
 
 fn get_status_code_count(code: &str) -> u64 {
     REQUEST_STATUS_CODES
-        .with_label_values(&[code, "local"])
+        .with_label_values(&[code, "local", ""])
         .get()
 }
 
 fn get_duration_count() -> u64 {
     REQUEST_DURATION_SECONDS
-        .with_label_values(&["local"])
+        .with_label_values(&["local", ""])
         .get_sample_count()
 }
 
@@ -355,7 +355,7 @@ async fn concurrent_requests_returns_to_zero_after_worker_finishes() {
     run_worker(client, config, Instant::now()).await;
 
     // After worker finishes, concurrent requests gauge should not be negative
-    let gauge = CONCURRENT_REQUESTS.with_label_values(&["local"]).get();
+    let gauge = CONCURRENT_REQUESTS.with_label_values(&["local", ""]).get();
     assert!(
         gauge >= 0.0,
         "concurrent requests gauge should not be negative, got {}",
