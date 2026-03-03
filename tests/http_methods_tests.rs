@@ -296,6 +296,32 @@ async fn test_options_request() {
 
 #[tokio::test]
 async fn test_mixed_methods_scenario() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/post"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path("/put"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    Mock::given(method("HEAD"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
     let scenario = Scenario {
         name: "Mixed HTTP Methods".to_string(),
         weight: 1.0,
@@ -364,20 +390,16 @@ async fn test_mixed_methods_scenario() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client);
     let mut context = ScenarioContext::new();
 
     let result = executor
         .execute(&scenario, &mut context, &mut SessionStore::new())
         .await;
 
-    // All steps should execute (some may fail depending on API implementation)
-    assert!(result.steps.len() >= 2, "Should execute multiple steps");
+    assert_eq!(result.steps.len(), 4, "All 4 steps should execute");
     assert!(result.steps[0].success, "GET should succeed");
-    assert!(
-        result.steps[3].success || result.steps.len() == 4,
-        "HEAD should execute"
-    );
+    assert!(result.steps[3].success, "HEAD should succeed");
 
     println!("✅ Mixed methods scenario works");
     println!("   Steps executed: {}", result.steps.len());
@@ -393,7 +415,23 @@ async fn test_mixed_methods_scenario() {
 
 #[tokio::test]
 async fn test_case_insensitive_methods() {
-    // Test that methods are case-insensitive
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/post"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    // Test that methods are case-insensitive (executor normalises to uppercase before sending)
     let test_cases: Vec<(&str, &str)> = vec![
         ("get", "/get"),
         ("Get", "/get"),
@@ -403,15 +441,15 @@ async fn test_case_insensitive_methods() {
         ("POST", "/post"),
     ];
 
-    for (method, path) in test_cases {
+    for (m, p) in test_cases {
         let scenario = Scenario {
-            name: format!("Case Test: {}", method),
+            name: format!("Case Test: {}", m),
             weight: 1.0,
             steps: vec![Step {
-                name: format!("{} request", method),
+                name: format!("{} request", m),
                 request: RequestConfig {
-                    method: method.to_string(),
-                    path: path.to_string(),
+                    method: m.to_string(),
+                    path: p.to_string(),
                     body: None,
                     headers: HashMap::new(),
                 },
@@ -423,14 +461,14 @@ async fn test_case_insensitive_methods() {
         };
 
         let client = create_test_client();
-        let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+        let executor = ScenarioExecutor::new(server.uri(), client);
         let mut context = ScenarioContext::new();
 
         let result = executor
             .execute(&scenario, &mut context, &mut SessionStore::new())
             .await;
 
-        assert!(result.success, "{} should work (case-insensitive)", method);
+        assert!(result.success, "{} should work (case-insensitive)", m);
     }
 
     println!("✅ HTTP methods are case-insensitive");
