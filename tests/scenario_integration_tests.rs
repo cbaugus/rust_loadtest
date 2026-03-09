@@ -499,5 +499,9 @@ async fn test_body_size_sends_correct_content_length() {
     // Verify wiremock received exactly one request with a 512-byte body
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].body.len(), 512, "body should be exactly 512 bytes");
+    assert_eq!(
+        requests[0].body.len(),
+        512,
+        "body should be exactly 512 bytes"
+    );
 }

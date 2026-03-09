@@ -26,7 +26,7 @@ use std::time::{Duration, Instant};
 ///                 path: "/products".to_string(),
 ///                 body: None,
 ///                 body_size: None,
-                 headers: HashMap::new(),
+///                 headers: HashMap::new(),
 ///             },
 ///             extractions: vec![],
 ///             assertions: vec![],
