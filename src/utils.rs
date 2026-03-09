@@ -58,6 +58,13 @@ pub fn parse_body_size(s: &str) -> Result<usize, String> {
     } else if let Some(v) = s.strip_suffix("KB") {
         (v, 1024usize)
     } else if let Some(v) = s.strip_suffix('B') {
+        // Reject units like "GB", "TB" — value_str must be purely numeric
+        if v.trim().chars().any(|c| !c.is_ascii_digit()) {
+            return Err(format!(
+                "Unknown body size unit in '{}'. Use 'B', 'KB', or 'MB'.",
+                s
+            ));
+        }
         (v, 1usize)
     } else {
         return Err(format!(
