@@ -66,12 +66,10 @@ pub fn parse_body_size(s: &str) -> Result<usize, String> {
         ));
     };
 
-    let value: usize = value_str.trim().parse().map_err(|_| {
-        format!(
-            "Invalid numeric value in body size: '{}'",
-            value_str.trim()
-        )
-    })?;
+    let value: usize = value_str
+        .trim()
+        .parse()
+        .map_err(|_| format!("Invalid numeric value in body size: '{}'", value_str.trim()))?;
 
     if value == 0 {
         return Err("Body size must be greater than zero".to_string());

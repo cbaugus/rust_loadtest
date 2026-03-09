@@ -176,8 +176,7 @@ pub struct RequestConfig {
     pub body_size: Option<usize>,
 
     /// Request headers (values can contain variable references)
-    pub body_size: None,
- headers: HashMap<String, String>,
+    pub headers: HashMap<String, String>,
 }
 
 /// Extract a variable from the response for use in subsequent steps.
