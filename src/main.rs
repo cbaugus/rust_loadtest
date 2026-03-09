@@ -248,6 +248,15 @@ fn print_config_help() {
     );
     eprintln!("  API_AUTH_TOKEN          - Bearer token required on POST /config and POST /stop");
     eprintln!("                            (optional; when unset, endpoints are open)");
+    eprintln!("  HEALTH_AUTH_ENABLED     - Set to 'true' to require Bearer token on GET /health");
+    eprintln!("                            (default: false — /health is open, /ready always open)");
+    eprintln!("  NODE_REGISTRY_URL       - Web app base URL for auto-registration (optional)");
+    eprintln!("  AUTO_REGISTER_PSK       - Pre-shared key for X-Auto-Register-PSK header");
+    eprintln!("  NODE_BASE_URL           - This node's reachable URL (e.g. http://10.0.1.5:8080)");
+    eprintln!("  NODE_NAME               - Human-readable node name (default: CLUSTER_NODE_ID)");
+    eprintln!("  NODE_TAGS               - JSON tags object (default: {{}})");
+    eprintln!("  NODE_REGISTRY_INTERVAL  - Heartbeat interval (default: 30s)");
+    eprintln!("    GET  /ready           - Returns {{\"ready\":true}} — no auth (Nomad/K8s probe)");
     eprintln!("    GET  /health          - Returns JSON with live node metrics");
     eprintln!("    POST /config          - Accepts a YAML config body to reconfigure workers");
     eprintln!("    POST /stop            - Stops all workers and transitions node to idle");
@@ -543,8 +552,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }));
 
     // ── Standalone health + config HTTP server ─────────────────────────────
+    // GET  /ready   → {"ready":true}  (no auth — safe for Nomad health checks)
     // GET  /health  → JSON with node identity and live metrics
+    //                 (requires Bearer token when HEALTH_AUTH_ENABLED=true)
     // POST /config  → accept YAML body, apply new config, restart workers
+    // POST /stop    → stop active test workers
     {
         let health_addr =
             std::env::var("CLUSTER_HEALTH_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -560,6 +572,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let worker_pool_for_http = worker_pool.clone();
         let test_state_for_http = test_state.clone();
         let api_token_for_http = std::env::var("API_AUTH_TOKEN").ok();
+        let health_auth_enabled_for_http = std::env::var("HEALTH_AUTH_ENABLED")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
 
         tokio::spawn(async move {
             let make_svc = make_service_fn(move |_conn| {
@@ -570,6 +585,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let wp = worker_pool_for_http.clone();
                 let ts = test_state_for_http.clone();
                 let token = api_token_for_http.clone();
+                let health_auth_enabled = health_auth_enabled_for_http;
                 async move {
                     Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
                         let node_id = node_id.clone();
@@ -581,7 +597,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         let token = token.clone();
                         async move {
                             match (req.method(), req.uri().path()) {
+                                // Unauthenticated liveness probe — safe for
+                                // Nomad / K8s health checks regardless of
+                                // HEALTH_AUTH_ENABLED.
+                                (&Method::GET, "/ready") => Ok::<_, Infallible>(
+                                    Response::builder()
+                                        .status(StatusCode::OK)
+                                        .header("Content-Type", "application/json")
+                                        .body(Body::from(r#"{"ready":true}"#))
+                                        .unwrap(),
+                                ),
                                 (&Method::GET, "/health") => {
+                                    if health_auth_enabled {
+                                        if let Some(ref t) = token {
+                                            let auth = req
+                                                .headers()
+                                                .get("authorization")
+                                                .and_then(|v| v.to_str().ok())
+                                                .unwrap_or("");
+                                            if auth != format!("Bearer {}", t) {
+                                                return Ok(Response::builder()
+                                                    .status(StatusCode::UNAUTHORIZED)
+                                                    .body(Body::from("unauthorized"))
+                                                    .unwrap());
+                                            }
+                                        }
+                                    }
                                     let m = lm.lock().unwrap().clone();
                                     let current_tenant = ts.lock().unwrap().tenant.clone();
                                     let body = serde_json::json!({
@@ -754,6 +795,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 error!(addr = %addr, "Failed to bind health/config HTTP server");
             }
         });
+    }
+
+    // ── Node auto-registration (Issue #89) ─────────────────────────────────
+    // Opt-in: all three vars must be set or registration is skipped silently.
+    if let Some(reg_cfg) = rust_loadtest::registry::RegistrationConfig::from_env(
+        &config.cluster.node_id,
+        &config.cluster.region,
+    ) {
+        info!(
+            registry_url = %reg_cfg.registry_url,
+            node = %reg_cfg.node_name,
+            interval_secs = reg_cfg.interval.as_secs(),
+            "Auto-registration enabled"
+        );
+        rust_loadtest::registry::spawn_registration_task(client.clone(), reg_cfg);
     }
 
     // ── Config-watcher / worker-pool reconfiguration ───────────────────────
