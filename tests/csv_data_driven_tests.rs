@@ -139,6 +139,7 @@ async fn test_scenario_with_csv_data() {
                 method: "POST".to_string(),
                 path: "/post".to_string(),
                 body: Some(r#"{"username": "${username}", "email": "${email}"}"#.to_string()),
+                body_size: None,
                 headers: {
                     let mut h = HashMap::new();
                     h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -190,6 +191,7 @@ async fn test_multiple_users_different_data() {
                 method: "GET".to_string(),
                 path: "/get".to_string(), // Simple GET endpoint
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
@@ -229,6 +231,23 @@ async fn test_multiple_users_different_data() {
 
 #[tokio::test]
 async fn test_realistic_user_pool() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/get"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/json"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
     // Simulate a realistic user pool with credentials
     let user_csv = r#"username,password,email,role
 alice,alice123,alice@company.com,admin
@@ -237,6 +256,7 @@ carol,carol789,carol@company.com,user
 dave,dave012,dave@company.com,manager"#;
 
     let ds = CsvDataSource::from_string(user_csv).unwrap();
+    let base_url = server.uri();
 
     let scenario = Scenario {
         name: "User Pool Test".to_string(),
@@ -248,6 +268,7 @@ dave,dave012,dave@company.com,manager"#;
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -261,6 +282,7 @@ dave,dave012,dave@company.com,manager"#;
                     method: "GET".to_string(),
                     path: "/json".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -274,7 +296,7 @@ dave,dave012,dave@company.com,manager"#;
     // Simulate 8 virtual users (2 full cycles through 4 users)
     for i in 0..8 {
         let client = create_test_client();
-        let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+        let executor = ScenarioExecutor::new(base_url.clone(), client);
 
         let mut context = ScenarioContext::new();
         let row = ds.next_row().unwrap();

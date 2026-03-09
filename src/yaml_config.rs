@@ -18,6 +18,7 @@ use crate::load_models::LoadModel;
 use crate::scenario::{
     Assertion, Extractor, RequestConfig, Scenario, Step, StepCache, VariableExtraction,
 };
+use crate::utils::parse_body_size;
 
 /// Errors that can occur when loading or parsing YAML configuration.
 #[derive(Error, Debug)]
@@ -62,6 +63,10 @@ pub struct YamlMetadata {
     pub author: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Optional tenant identifier for multi-tenant SaaS deployments.
+    /// When set, all metrics emitted by this test run include a `tenant` label
+    /// so per-tenant request counts can be queried from Prometheus.
+    pub tenant: Option<String>,
 }
 
 /// Global configuration settings.
@@ -315,6 +320,11 @@ pub struct YamlRequest {
     pub headers: Option<std::collections::HashMap<String, String>>,
 
     pub body: Option<String>,
+
+    /// Generate a synthetic body of this size instead of using `body`.
+    /// Mutually exclusive with `body`. Supports "512B", "512KB", "1MB".
+    #[serde(rename = "bodySize")]
+    pub body_size: Option<String>,
 }
 
 /// Extractor definition in YAML.
@@ -564,10 +574,33 @@ impl YamlConfig {
                     yaml_step.request.path.clone()
                 };
 
+                // Validate mutual exclusion of body and body_size
+                if yaml_step.request.body.is_some() && yaml_step.request.body_size.is_some() {
+                    return Err(YamlConfigError::Validation(format!(
+                        "Step '{}': 'body' and 'bodySize' are mutually exclusive — use one or the other",
+                        step_name
+                    )));
+                }
+
+                // Parse body_size string to bytes
+                let body_size = yaml_step
+                    .request
+                    .body_size
+                    .as_deref()
+                    .map(parse_body_size)
+                    .transpose()
+                    .map_err(|e| {
+                        YamlConfigError::Validation(format!(
+                            "Step '{}': invalid bodySize — {}",
+                            step_name, e
+                        ))
+                    })?;
+
                 let request = RequestConfig {
                     method: yaml_step.request.method.clone(),
                     path,
                     body: yaml_step.request.body.clone(),
+                    body_size,
                     headers,
                 };
 

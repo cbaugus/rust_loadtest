@@ -94,6 +94,7 @@ fn create_shopping_scenario() -> Scenario {
                     method: "GET".to_string(),
                     path: "/health".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -108,6 +109,7 @@ fn create_shopping_scenario() -> Scenario {
                     method: "GET".to_string(),
                     path: "/products?limit=10".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![
@@ -133,6 +135,7 @@ fn create_shopping_scenario() -> Scenario {
                     // ⭐ Variable substitution: ${product_id} is replaced with extracted value
                     path: "/products/${product_id}".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -157,6 +160,7 @@ fn create_shopping_scenario() -> Scenario {
                         }"#
                         .to_string(),
                     ),
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -187,6 +191,7 @@ fn create_shopping_scenario() -> Scenario {
                         }"#
                         .to_string(),
                     ),
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -212,6 +217,7 @@ fn create_shopping_scenario() -> Scenario {
                     method: "GET".to_string(),
                     path: "/cart".to_string(),
                     body: None,
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert(

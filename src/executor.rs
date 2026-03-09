@@ -12,6 +12,7 @@ use crate::metrics::{
     SCENARIO_STEP_STATUS_CODES,
 };
 use crate::scenario::{Scenario, ScenarioContext, Step};
+use rand::Rng;
 use std::collections::HashMap;
 use std::time::Instant;
 use tokio::time::sleep;
@@ -330,10 +331,16 @@ impl ScenarioExecutor {
             request_builder = request_builder.header(key, substituted_value);
         }
 
-        // Add body if present with variable substitution
+        // Add body: inline string (with variable substitution) or synthetic generated body
         if let Some(body) = &step.request.body {
             let substituted_body = context.substitute_variables(body);
             request_builder = request_builder.body(substituted_body);
+        } else if let Some(size) = step.request.body_size {
+            let synthetic: Vec<u8> = rand::thread_rng()
+                .sample_iter(&rand::distributions::Alphanumeric)
+                .take(size)
+                .collect();
+            request_builder = request_builder.body(synthetic);
         }
 
         // Execute the request

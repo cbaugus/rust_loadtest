@@ -17,21 +17,21 @@ lazy_static::lazy_static! {
         IntCounterVec::new(
             Opts::new("requests_total", "Total number of HTTP requests made")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["region"]
+            &["region", "tenant"]
         ).unwrap();
 
     pub static ref REQUEST_STATUS_CODES: IntCounterVec =
         IntCounterVec::new(
             Opts::new("requests_status_codes_total", "Number of HTTP requests by status code")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["status_code", "region"]
+            &["status_code", "region", "tenant"]
         ).unwrap();
 
     pub static ref CONCURRENT_REQUESTS: prometheus::GaugeVec =
         prometheus::GaugeVec::new(
             Opts::new("concurrent_requests", "Number of HTTP requests currently in flight")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["region"]
+            &["region", "tenant"]
         ).unwrap();
 
     pub static ref REQUEST_DURATION_SECONDS: HistogramVec =
@@ -40,7 +40,7 @@ lazy_static::lazy_static! {
                 "request_duration_seconds",
                 "HTTP request latencies in seconds."
             ).namespace(METRIC_NAMESPACE.as_str()),
-            &["region"]
+            &["region", "tenant"]
         ).unwrap();
 
     // === Scenario Metrics ===
@@ -103,7 +103,7 @@ lazy_static::lazy_static! {
         IntCounterVec::new(
             Opts::new("scenario_requests_total", "Total number of requests per scenario")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["scenario"]
+            &["scenario", "tenant"]
         ).unwrap();
 
     pub static ref SCENARIO_THROUGHPUT_RPS: prometheus::GaugeVec =
@@ -119,7 +119,7 @@ lazy_static::lazy_static! {
         IntCounterVec::new(
             Opts::new("request_errors_by_category", "Number of errors by category")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["category", "region"]
+            &["category", "region", "tenant"]
         ).unwrap();
 
     // === Connection Pool Metrics (Issue #36) ===

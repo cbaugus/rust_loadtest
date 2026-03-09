@@ -1,0 +1,90 @@
+# Large Payload / Upload Stress Test
+#
+# Tests how your endpoint handles large request bodies.
+# Uses `bodySize` to generate synthetic random data of the specified size
+# on every request — no need to inline large strings in YAML.
+#
+# Supported units: B, KB, MB
+#
+# `bodySize` and `body` are mutually exclusive per step.
+#
+# Quick Start:
+#   Edit baseUrl below, then POST this config to a running node:
+#
+#   curl -X POST http://<node>:8080/config \
+#     -H "Content-Type: application/x-yaml" \
+#     --data-binary @large-payload-test.yaml
+
+version: "1.0"
+
+metadata:
+  name: "Large Payload Upload Stress Test"
+  description: "Stress-test upload endpoints with synthetic large bodies"
+
+config:
+  baseUrl: "https://api.example.com"
+  workers: 20
+  duration: "10m"
+  timeout: "30s"
+  skipTlsVerify: false
+
+load:
+  model: "rps"
+  target: 50
+
+scenarios:
+  # ── Scenario 1: Raw 1 MB upload (no auth) ───────────────────────────────────
+  - name: "1MB upload"
+    weight: 50
+    steps:
+      - name: "POST 1MB body"
+        request:
+          method: "POST"
+          path: "/api/upload"
+          bodySize: "1MB"          # 1 048 576 random bytes per request
+          headers:
+            Content-Type: "application/octet-stream"
+        assertions:
+          - type: statusCode
+            expected: 200
+          - type: responseTime
+            max: "10s"
+
+  # ── Scenario 2: JWT login then 512 KB upload ─────────────────────────────────
+  - name: "Auth then 512KB upload"
+    weight: 50
+    steps:
+      - name: "Login — get JWT"
+        request:
+          method: "POST"
+          path: "/auth/login"
+          body: '{"username":"loadtest","password":"secret"}'
+          headers:
+            Content-Type: "application/json"
+        extract:
+          - type: jsonPath
+            name: "jwt_token"
+            jsonPath: "$.token"
+        cache:
+          ttl: "5m"                # reuse token for 5 min; re-login on expiry
+        assertions:
+          - type: statusCode
+            expected: 200
+
+      - name: "Upload 512KB with JWT"
+        request:
+          method: "POST"
+          path: "/api/upload"
+          bodySize: "512KB"        # 524 288 random bytes per request
+          headers:
+            Authorization: "Bearer ${jwt_token}"
+            Content-Type: "application/octet-stream"
+        assertions:
+          - type: statusCode
+            expected: 200
+          - type: responseTime
+            max: "5s"
+
+standby:
+  workers: 2
+  rps: 0

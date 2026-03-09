@@ -31,6 +31,7 @@ async fn test_jsonpath_extraction_from_products() {
                 method: "GET".to_string(),
                 path: "/json".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![
@@ -86,6 +87,7 @@ async fn test_extraction_and_reuse_in_next_step() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![VariableExtraction {
@@ -102,6 +104,7 @@ async fn test_extraction_and_reuse_in_next_step() {
                     method: "GET".to_string(),
                     path: "/get?origin=${origin_ip}".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -148,6 +151,7 @@ async fn test_header_extraction() {
                 method: "GET".to_string(),
                 path: "/get".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![VariableExtraction {
@@ -195,6 +199,7 @@ async fn test_multiple_extractions_in_single_step() {
                 method: "GET".to_string(),
                 path: "/json".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![
@@ -260,6 +265,7 @@ async fn test_shopping_flow_with_extraction() {
                     method: "GET".to_string(),
                     path: "/json".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![VariableExtraction {
@@ -282,6 +288,7 @@ async fn test_shopping_flow_with_extraction() {
                         }"#
                         .to_string(),
                     ),
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -302,6 +309,7 @@ async fn test_shopping_flow_with_extraction() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![VariableExtraction {
@@ -351,6 +359,7 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
                     method: "GET".to_string(),
                     path: "/json".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![
@@ -373,6 +382,7 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],

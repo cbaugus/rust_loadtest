@@ -35,6 +35,7 @@ async fn test_health_check_scenario() {
                 method: "GET".to_string(),
                 path: "/get".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
@@ -69,6 +70,7 @@ async fn test_product_browsing_scenario() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -82,6 +84,7 @@ async fn test_product_browsing_scenario() {
                     method: "GET".to_string(),
                     path: "/json".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -127,6 +130,7 @@ async fn test_variable_substitution() {
                 method: "GET".to_string(),
                 path: "/get?product=${product_id}".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
@@ -176,6 +180,7 @@ async fn test_multi_step_with_delays() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -189,6 +194,7 @@ async fn test_multi_step_with_delays() {
                     method: "GET".to_string(),
                     path: "/json".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -202,6 +208,7 @@ async fn test_multi_step_with_delays() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -245,6 +252,7 @@ async fn test_scenario_failure_handling() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -258,6 +266,7 @@ async fn test_scenario_failure_handling() {
                     method: "GET".to_string(),
                     path: "/status/404".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -271,6 +280,7 @@ async fn test_scenario_failure_handling() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -319,6 +329,7 @@ async fn test_timestamp_variable() {
                 method: "GET".to_string(),
                 path: "/get".to_string(),
                 body: None,
+                body_size: None,
                 headers: {
                     let mut headers = HashMap::new();
                     // Test timestamp in headers
@@ -364,6 +375,7 @@ async fn test_post_request_with_json_body() {
                     }"#
                     .to_string(),
                 ),
+                body_size: None,
                 headers: {
                     let mut headers = HashMap::new();
                     headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -405,6 +417,7 @@ async fn test_scenario_context_isolation() {
                 method: "GET".to_string(),
                 path: "/get".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
@@ -438,4 +451,57 @@ async fn test_scenario_context_isolation() {
     // Contexts should maintain their separate variables
     assert_eq!(context1.get_variable("test"), Some(&"value1".to_string()));
     assert_eq!(context2.get_variable("test"), Some(&"value2".to_string()));
+}
+
+/// Verify that `body_size` sends a synthetic body of exactly the requested size.
+#[tokio::test]
+async fn test_body_size_sends_correct_content_length() {
+    let server = MockServer::start().await;
+    let base_url = server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    let scenario = Scenario {
+        name: "body_size test".to_string(),
+        weight: 1.0,
+        steps: vec![Step {
+            name: "POST 512B".to_string(),
+            request: RequestConfig {
+                method: "POST".to_string(),
+                path: "/upload".to_string(),
+                body: None,
+                body_size: Some(512),
+                headers: HashMap::new(),
+            },
+            extractions: vec![],
+            assertions: vec![Assertion::StatusCode(200)],
+            cache: None,
+            think_time: None,
+        }],
+    };
+
+    let client = create_test_client();
+    let executor = ScenarioExecutor::new(base_url, client);
+    let mut context = ScenarioContext::new();
+
+    let result = executor
+        .execute(&scenario, &mut context, &mut SessionStore::new())
+        .await;
+
+    assert!(result.success, "body_size POST should succeed");
+    assert_eq!(result.steps.len(), 1);
+    assert!(result.steps[0].success);
+
+    // Verify wiremock received exactly one request with a 512-byte body
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].body.len(),
+        512,
+        "body should be exactly 512 bytes"
+    );
 }

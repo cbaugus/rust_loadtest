@@ -18,6 +18,7 @@ pub mod memory_guard;
 pub mod metrics;
 pub mod multi_scenario;
 pub mod percentiles;
+pub mod registry;
 pub mod scenario;
 pub mod throughput;
 pub mod utils;

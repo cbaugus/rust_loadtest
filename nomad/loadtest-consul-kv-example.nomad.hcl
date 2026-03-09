@@ -123,8 +123,11 @@ job "envoy-loadtest" {
       name = "load-health"
       tags = ["load-health"]
       port = "health"
+      # /ready is unauthenticated and always returns 200 — safe for Nomad probes
+      # even when HEALTH_AUTH_ENABLED=true protects the full /health endpoint.
       check {
-        type     = "tcp"
+        type     = "http"
+        path     = "/ready"
         port     = "health"
         interval = "10s"
         timeout  = "6s"
@@ -179,6 +182,22 @@ NUM_CONCURRENT_TASKS=300
 TEST_DURATION=2h
 LOAD_MODEL_TYPE=Rps
 TARGET_RPS=0
+
+# ── Security (Issue #91 / #92) ────────────────────────────────────────────────
+# Uncomment to protect POST /config and POST /stop with a bearer token:
+# API_AUTH_TOKEN=your-secret-token-here
+#
+# Uncomment to also protect GET /health (GET /ready is always open for Nomad):
+# HEALTH_AUTH_ENABLED=true
+
+# ── Node auto-registration with web app (Issue #89) ──────────────────────────
+# All three vars must be set to enable registration; missing any one is a no-op.
+# NODE_REGISTRY_URL=https://loadtest-control.example.com
+# AUTO_REGISTER_PSK=shared-secret-across-all-nodes
+# NODE_BASE_URL=http://{{env "attr.unique.network.ip-address"}}:8080
+# NODE_NAME={{env "node.unique.name"}}
+# NODE_TAGS={"env":"staging","datacenter":"{{env "node.datacenter"}}"}
+# NODE_REGISTRY_INTERVAL=30s
 
 EOH
       }

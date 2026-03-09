@@ -42,6 +42,7 @@ async fn test_cookies_persist_across_steps() {
                         }"#
                         .to_string(),
                     ),
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -59,6 +60,7 @@ async fn test_cookies_persist_across_steps() {
                     method: "GET".to_string(),
                     path: "/users/me".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(), // No manual auth header needed - cookies handle it
                 },
                 extractions: vec![],
@@ -122,6 +124,7 @@ async fn test_auth_flow_with_token_and_cookies() {
                         }"#
                         .to_string(),
                     ),
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -145,6 +148,7 @@ async fn test_auth_flow_with_token_and_cookies() {
                     method: "GET".to_string(),
                     path: "/users/me".to_string(),
                     body: None,
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         // Use extracted token in Authorization header
@@ -220,6 +224,7 @@ async fn test_cookie_isolation_between_clients() {
                     }"#
                     .to_string(),
                 ),
+                body_size: None,
                 headers: {
                     let mut headers = HashMap::new();
                     headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -276,6 +281,7 @@ async fn test_shopping_flow_with_session() {
                     method: "GET".to_string(),
                     path: "/products?limit=3".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![VariableExtraction {
@@ -299,6 +305,7 @@ async fn test_shopping_flow_with_session() {
                         }"#
                         .to_string(),
                     ),
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -325,6 +332,7 @@ async fn test_shopping_flow_with_session() {
                         }"#
                         .to_string(),
                     ),
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert("Content-Type".to_string(), "application/json".to_string());
@@ -343,6 +351,7 @@ async fn test_shopping_flow_with_session() {
                     method: "GET".to_string(),
                     path: "/cart".to_string(),
                     body: None,
+                    body_size: None,
                     headers: {
                         let mut headers = HashMap::new();
                         headers.insert("Authorization".to_string(), "Bearer ${token}".to_string());
@@ -403,6 +412,7 @@ async fn test_client_without_cookies_fails_session() {
                         }"#
                     .to_string(),
                 ),
+                body_size: None,
                 headers: {
                     let mut headers = HashMap::new();
                     headers.insert("Content-Type".to_string(), "application/json".to_string());

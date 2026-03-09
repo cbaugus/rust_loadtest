@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 ///                 method: "GET".to_string(),
 ///                 path: "/products".to_string(),
 ///                 body: None,
+///                 body_size: None,
 ///                 headers: HashMap::new(),
 ///             },
 ///             extractions: vec![],
@@ -170,6 +171,9 @@ pub struct RequestConfig {
 
     /// Optional request body (can contain variable references)
     pub body: Option<String>,
+
+    /// Generate a synthetic body of exactly this many bytes (mutually exclusive with `body`).
+    pub body_size: Option<usize>,
 
     /// Request headers (values can contain variable references)
     pub headers: HashMap<String, String>,
@@ -463,6 +467,7 @@ mod tests {
                     method: "GET".to_string(),
                     path: "/api/test".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],

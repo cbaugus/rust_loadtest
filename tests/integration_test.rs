@@ -21,18 +21,18 @@ fn init_metrics() {
 }
 
 fn get_total_requests() -> u64 {
-    REQUEST_TOTAL.with_label_values(&["local"]).get()
+    REQUEST_TOTAL.with_label_values(&["local", ""]).get()
 }
 
 fn get_status_code_count(code: &str) -> u64 {
     REQUEST_STATUS_CODES
-        .with_label_values(&[code, "local"])
+        .with_label_values(&[code, "local", ""])
         .get()
 }
 
 fn get_duration_count() -> u64 {
     REQUEST_DURATION_SECONDS
-        .with_label_values(&["local"])
+        .with_label_values(&["local", ""])
         .get_sample_count()
 }
 
@@ -64,6 +64,7 @@ async fn worker_sends_get_requests() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -105,6 +106,7 @@ async fn worker_sends_post_requests() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -142,6 +144,7 @@ async fn worker_sends_json_post_body() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -178,6 +181,7 @@ async fn worker_tracks_200_status_codes() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -218,6 +222,7 @@ async fn worker_tracks_404_status_codes() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -258,6 +263,7 @@ async fn worker_tracks_500_status_codes() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -300,6 +306,7 @@ async fn worker_records_request_duration() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -340,6 +347,7 @@ async fn concurrent_requests_returns_to_zero_after_worker_finishes() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -347,7 +355,7 @@ async fn concurrent_requests_returns_to_zero_after_worker_finishes() {
     run_worker(client, config, Instant::now()).await;
 
     // After worker finishes, concurrent requests gauge should not be negative
-    let gauge = CONCURRENT_REQUESTS.with_label_values(&["local"]).get();
+    let gauge = CONCURRENT_REQUESTS.with_label_values(&["local", ""]).get();
     assert!(
         gauge >= 0.0,
         "concurrent requests gauge should not be negative, got {}",
@@ -376,6 +384,7 @@ async fn worker_handles_connection_error_gracefully() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -420,6 +429,7 @@ async fn worker_respects_rps_rate_limit() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -461,6 +471,7 @@ async fn worker_stops_after_test_duration() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 
@@ -509,6 +520,7 @@ async fn worker_handles_slow_responses() {
         percentile_tracking_enabled: true,
         percentile_sampling_rate: 100,
         region: "local".to_string(),
+        tenant: String::new(),
         stop_rx: tokio::sync::watch::channel(false).1,
     };
 

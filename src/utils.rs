@@ -40,6 +40,51 @@ pub fn parse_duration_string(s: &str) -> Result<Duration, String> {
     }
 }
 
+/// Parses a body size string like "512B", "512KB", or "1MB" into bytes.
+///
+/// Supported units:
+/// - `B`  — bytes
+/// - `KB` — kibibytes (× 1 024)
+/// - `MB` — mebibytes (× 1 048 576)
+pub fn parse_body_size(s: &str) -> Result<usize, String> {
+    let s = s.trim();
+
+    if s.is_empty() {
+        return Err("Body size string cannot be empty".to_string());
+    }
+
+    let (value_str, multiplier) = if let Some(v) = s.strip_suffix("MB") {
+        (v, 1024 * 1024usize)
+    } else if let Some(v) = s.strip_suffix("KB") {
+        (v, 1024usize)
+    } else if let Some(v) = s.strip_suffix('B') {
+        // Reject units like "GB", "TB" — value_str must be purely numeric
+        if v.trim().chars().any(|c| !c.is_ascii_digit()) {
+            return Err(format!(
+                "Unknown body size unit in '{}'. Use 'B', 'KB', or 'MB'.",
+                s
+            ));
+        }
+        (v, 1usize)
+    } else {
+        return Err(format!(
+            "Unknown body size unit in '{}'. Use 'B', 'KB', or 'MB'.",
+            s
+        ));
+    };
+
+    let value: usize = value_str
+        .trim()
+        .parse()
+        .map_err(|_| format!("Invalid numeric value in body size: '{}'", value_str.trim()))?;
+
+    if value == 0 {
+        return Err("Body size must be greater than zero".to_string());
+    }
+
+    Ok(value * multiplier)
+}
+
 /// Parses a comma-separated header string with support for escaped commas.
 ///
 /// Use `\,` to include a literal comma in a header value.
@@ -277,5 +322,60 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], "Connection:keep-alive,close");
         assert_eq!(result[1], "Keep-Alive:timeout=5,max=1000,custom=value");
+    }
+
+    // --- parse_body_size tests ---
+
+    mod body_size {
+        use super::*;
+
+        #[test]
+        fn parse_bytes() {
+            assert_eq!(parse_body_size("128B").unwrap(), 128);
+        }
+
+        #[test]
+        fn parse_kilobytes() {
+            assert_eq!(parse_body_size("512KB").unwrap(), 512 * 1024);
+        }
+
+        #[test]
+        fn parse_megabytes() {
+            assert_eq!(parse_body_size("1MB").unwrap(), 1024 * 1024);
+        }
+
+        #[test]
+        fn parse_large_mb() {
+            assert_eq!(parse_body_size("10MB").unwrap(), 10 * 1024 * 1024);
+        }
+
+        #[test]
+        fn trims_whitespace() {
+            assert_eq!(parse_body_size("  256KB  ").unwrap(), 256 * 1024);
+        }
+
+        #[test]
+        fn zero_errors() {
+            let err = parse_body_size("0KB").unwrap_err();
+            assert!(err.contains("greater than zero"), "error was: {}", err);
+        }
+
+        #[test]
+        fn empty_errors() {
+            let err = parse_body_size("").unwrap_err();
+            assert!(err.contains("empty"), "error was: {}", err);
+        }
+
+        #[test]
+        fn unknown_unit_errors() {
+            let err = parse_body_size("1GB").unwrap_err();
+            assert!(err.contains("Unknown body size unit"), "error was: {}", err);
+        }
+
+        #[test]
+        fn invalid_number_errors() {
+            let err = parse_body_size("abcKB").unwrap_err();
+            assert!(err.contains("Invalid numeric"), "error was: {}", err);
+        }
     }
 }
