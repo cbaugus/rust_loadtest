@@ -199,9 +199,8 @@ fn run_migrate(args: &[String]) {
         .unwrap_or("config.yaml");
 
     let env = |k: &str| std::env::var(k).ok();
-    let env_or = |k: &str, default: &str| {
-        std::env::var(k).unwrap_or_else(|_| default.to_string())
-    };
+    let env_or =
+        |k: &str, default: &str| std::env::var(k).unwrap_or_else(|_| default.to_string());
 
     // ── Required ──────────────────────────────────────────────────────────────
     let target_url = match env("TARGET_URL") {
@@ -278,7 +277,10 @@ fn run_migrate(args: &[String]) {
     let load_section = if target_rps_line.is_empty() {
         format!("load:\n  model: \"{}\"", load_model_str)
     } else {
-        format!("load:\n  model: \"{}\"\n{}", load_model_str, target_rps_line)
+        format!(
+            "load:\n  model: \"{}\"\n{}",
+            load_model_str, target_rps_line
+        )
     };
 
     let yaml = format!(

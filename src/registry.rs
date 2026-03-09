@@ -49,13 +49,14 @@ impl RegistrationConfig {
         let node_base_url = match std::env::var("NODE_BASE_URL") {
             Ok(v) => v,
             Err(_) => {
-                warn!("NODE_REGISTRY_URL is set but NODE_BASE_URL is missing — skipping registration");
+                warn!(
+                    "NODE_REGISTRY_URL is set but NODE_BASE_URL is missing — skipping registration"
+                );
                 return None;
             }
         };
 
-        let node_name =
-            std::env::var("NODE_NAME").unwrap_or_else(|_| node_id.to_string());
+        let node_name = std::env::var("NODE_NAME").unwrap_or_else(|_| node_id.to_string());
 
         let tags = std::env::var("NODE_TAGS")
             .ok()
