@@ -48,10 +48,12 @@ scenarios:
 
       - name: "Call API with JWT"
         request:
-          method: "GET"
+          method: "POST"
           path: "http://ecom-test-target.service.consul:31362/users/me"  # full URL → host B
+          bodySize: "1MB"                   # 1 048 576 bytes of random data per request
           headers:
             Authorization: "Bearer ${jwt_token}"
+            Content-Type: "application/octet-stream"
         assertions:
           - type: statusCode
             expected: 200
