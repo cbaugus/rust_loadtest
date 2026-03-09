@@ -139,6 +139,7 @@ async fn test_scenario_with_csv_data() {
                 method: "POST".to_string(),
                 path: "/post".to_string(),
                 body: Some(r#"{"username": "${username}", "email": "${email}"}"#.to_string()),
+                body_size: None,
                 headers: {
                     let mut h = HashMap::new();
                     h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -190,6 +191,7 @@ async fn test_multiple_users_different_data() {
                 method: "GET".to_string(),
                 path: "/get".to_string(), // Simple GET endpoint
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
@@ -266,6 +268,7 @@ dave,dave012,dave@company.com,manager"#;
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -279,6 +282,7 @@ dave,dave012,dave@company.com,manager"#;
                     method: "GET".to_string(),
                     path: "/json".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],

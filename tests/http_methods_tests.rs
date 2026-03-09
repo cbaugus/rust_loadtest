@@ -29,6 +29,7 @@ async fn test_get_request() {
                 method: "GET".to_string(),
                 path: "/get".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
@@ -68,6 +69,7 @@ async fn test_post_request() {
                 method: "POST".to_string(),
                 path: "/post".to_string(),
                 body: Some(r#"{"test": "data"}"#.to_string()),
+                body_size: None,
                 headers: {
                     let mut h = HashMap::new();
                     h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -111,6 +113,7 @@ async fn test_put_request() {
                 method: "PUT".to_string(),
                 path: "/put".to_string(),
                 body: Some(r#"{"update": "data"}"#.to_string()),
+                body_size: None,
                 headers: {
                     let mut h = HashMap::new();
                     h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -152,6 +155,7 @@ async fn test_patch_request() {
                 method: "PATCH".to_string(),
                 path: "/patch".to_string(),
                 body: Some(r#"{"patch": "data"}"#.to_string()),
+                body_size: None,
                 headers: {
                     let mut h = HashMap::new();
                     h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -193,6 +197,7 @@ async fn test_delete_request() {
                 method: "DELETE".to_string(),
                 path: "/delete".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
@@ -230,6 +235,7 @@ async fn test_head_request() {
                 method: "HEAD".to_string(),
                 path: "/get".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
@@ -268,6 +274,7 @@ async fn test_options_request() {
                 method: "OPTIONS".to_string(),
                 path: "/get".to_string(),
                 body: None,
+                body_size: None,
                 headers: HashMap::new(),
             },
             extractions: vec![],
@@ -332,6 +339,7 @@ async fn test_mixed_methods_scenario() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -345,6 +353,7 @@ async fn test_mixed_methods_scenario() {
                     method: "POST".to_string(),
                     path: "/post".to_string(),
                     body: Some(r#"{"action": "check"}"#.to_string()),
+                    body_size: None,
                     headers: {
                         let mut h = HashMap::new();
                         h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -362,6 +371,7 @@ async fn test_mixed_methods_scenario() {
                     method: "PUT".to_string(),
                     path: "/put".to_string(),
                     body: Some(r#"{"action": "update"}"#.to_string()),
+                    body_size: None,
                     headers: {
                         let mut h = HashMap::new();
                         h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -379,6 +389,7 @@ async fn test_mixed_methods_scenario() {
                     method: "HEAD".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -451,6 +462,7 @@ async fn test_case_insensitive_methods() {
                     method: m.to_string(),
                     path: p.to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -487,6 +499,7 @@ async fn test_rest_crud_flow() {
                     method: "GET".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -500,6 +513,7 @@ async fn test_rest_crud_flow() {
                     method: "POST".to_string(),
                     path: "/post".to_string(),
                     body: Some(r#"{"name": "Test Item", "price": 99.99}"#.to_string()),
+                    body_size: None,
                     headers: {
                         let mut h = HashMap::new();
                         h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -519,6 +533,7 @@ async fn test_rest_crud_flow() {
                     body: Some(
                         r#"{"name": "Updated Item", "price": 149.99, "stock": 10}"#.to_string(),
                     ),
+                    body_size: None,
                     headers: {
                         let mut h = HashMap::new();
                         h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -536,6 +551,7 @@ async fn test_rest_crud_flow() {
                     method: "PATCH".to_string(),
                     path: "/patch".to_string(),
                     body: Some(r#"{"price": 129.99}"#.to_string()),
+                    body_size: None,
                     headers: {
                         let mut h = HashMap::new();
                         h.insert("Content-Type".to_string(), "application/json".to_string());
@@ -553,6 +569,7 @@ async fn test_rest_crud_flow() {
                     method: "HEAD".to_string(),
                     path: "/get".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -566,6 +583,7 @@ async fn test_rest_crud_flow() {
                     method: "DELETE".to_string(),
                     path: "/delete".to_string(),
                     body: None,
+                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
@@ -606,6 +624,7 @@ async fn test_options_cors_preflight() {
                 method: "OPTIONS".to_string(),
                 path: "/get".to_string(),
                 body: None,
+                body_size: None,
                 headers: {
                     let mut h = HashMap::new();
                     h.insert(
