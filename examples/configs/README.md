@@ -263,7 +263,39 @@ rust-loadtest --config graphql-api.yaml
 
 ---
 
-### 8. Spike Test (`spike-test.yaml`)
+### 8. Large Payload Test (`large-payload-test.yaml`)
+
+**Purpose**: Stress-test endpoints that accept large request bodies (uploads, multipart, binary ingestion)
+
+**Use Cases**:
+- Upload endpoint capacity testing
+- Request-body parser stress testing
+- Memory pressure under large payloads
+- Bandwidth / throughput validation
+
+**Key Features**:
+- `bodySize` field generates synthetic random data per request — no YAML bloat
+- Supports `B`, `KB`, `MB` units
+- Two scenarios: raw upload and JWT-authenticated upload
+- `bodySize` and `body` are mutually exclusive per step
+
+**Quick Start**:
+```bash
+# Edit baseUrl, then push config to a running node
+curl -X POST http://<node>:8080/config \
+  -H "Content-Type: application/x-yaml" \
+  --data-binary @large-payload-test.yaml
+```
+
+**Customize**:
+- `bodySize`: Change size (`"128KB"`, `"512KB"`, `"1MB"`)
+- `path`: Point to your upload endpoint
+- `target`: Adjust RPS (start low — large bodies use significant bandwidth)
+- Remove the auth scenario if your endpoint is unauthenticated
+
+---
+
+### 9. Spike Test (`spike-test.yaml`)
 
 **Purpose**: Sudden traffic spike test for resilience validation
 
@@ -310,6 +342,7 @@ rust-loadtest --config spike-test.yaml
 | Authenticated | Medium | 20m | 25 | 75 | Auth flows, token management |
 | Microservices | High | 30m | 40 | 20-150 | Distributed systems, multiple services |
 | GraphQL | Medium | 20m | 30 | 80 | GraphQL APIs, complex queries |
+| Large Payload | Medium | 10m | 20 | 50 | Upload endpoints, body-parser stress |
 | Spike Test | High | 30m | 150 | Burst | Resilience, auto-scaling |
 
 ## Customization Guide
@@ -383,7 +416,19 @@ thinkTime:
   max: "5s"
 ```
 
-#### 6. Add Custom Assertions
+#### 6. Send Large Synthetic Payloads
+```yaml
+steps:
+  - name: "Upload 1MB"
+    request:
+      method: "POST"
+      path: "/api/upload"
+      bodySize: "1MB"    # B, KB, or MB — mutually exclusive with `body`
+      headers:
+        Content-Type: "application/octet-stream"
+```
+
+#### 7. Add Custom Assertions
 ```yaml
 assertions:
   - statusCode: 200

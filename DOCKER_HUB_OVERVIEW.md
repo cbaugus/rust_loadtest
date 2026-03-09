@@ -217,6 +217,67 @@ Send JSON data with POST requests:
 -e JSON_PAYLOAD='{"key":"value","nested":{"data":"here"}}'
 ```
 
+### Large Payload / Upload Testing (`bodySize`)
+
+Stress-test upload endpoints or request-body parsing by sending a synthetic payload of a specified size on every request — no need to inline large strings in your config.
+
+Supported units: `B`, `KB`, `MB`
+
+```yaml
+scenarios:
+  - name: "Upload stress test"
+    weight: 100
+    steps:
+      - name: "POST 1MB body"
+        request:
+          method: "POST"
+          path: "/api/upload"
+          bodySize: "1MB"          # generates 1 048 576 random bytes per request
+          headers:
+            Content-Type: "application/octet-stream"
+        assertions:
+          - type: statusCode
+            expected: 200
+          - type: responseTime
+            max: "5s"
+```
+
+`bodySize` and `body` are mutually exclusive — use one or the other per step.
+
+**Combined with JWT auth (multi-step):**
+```yaml
+scenarios:
+  - name: "Auth then upload"
+    weight: 100
+    steps:
+      - name: "Login"
+        request:
+          method: "POST"
+          path: "/auth/login"
+          body: '{"username":"loadtest","password":"secret"}'
+          headers:
+            Content-Type: "application/json"
+        extract:
+          - type: jsonPath
+            name: "jwt_token"
+            jsonPath: "$.token"
+        assertions:
+          - type: statusCode
+            expected: 200
+
+      - name: "Upload 512KB"
+        request:
+          method: "POST"
+          path: "/api/upload"
+          bodySize: "512KB"
+          headers:
+            Authorization: "Bearer ${jwt_token}"
+            Content-Type: "application/octet-stream"
+        assertions:
+          - type: statusCode
+            expected: 200
+```
+
 ## Live Control API (port 8080)
 
 Every node exposes a lightweight HTTP API for real-time inspection and reconfiguration.
