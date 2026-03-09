@@ -1,0 +1,123 @@
+name: Weekly Docker Build
+
+# Rebuilds Docker images from main every Monday at 00:00 UTC so the
+# Chainguard base image picks up the latest OS security patches even
+# when no code changes have been pushed that week.
+#
+# Can also be triggered manually via the Actions UI.
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'   # Monday 00:00 UTC
+  workflow_dispatch:        # Manual trigger
+
+env:
+  IMAGE: cbaugus/rust_loadtest
+
+jobs:
+  weekly-build:
+    name: Build and push weekly Docker images
+    runs-on: ubuntu-latest
+    # Only run on main branch (schedule always targets default branch,
+    # but guard against accidental workflow_dispatch on a feature branch).
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate date and week tags
+        id: tags
+        run: |
+          echo "date=$(date +%Y-%m-%d)"          >> $GITHUB_OUTPUT
+          echo "week=$(date +weekly-%Y-%U)"      >> $GITHUB_OUTPUT
+
+      # ── Standard (Ubuntu) image ─────────────────────────────────────────────
+      - name: Build and push standard image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.date }}
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.week }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to:   type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+      # ── Chainguard (distroless) image ────────────────────────────────────────
+      - name: Build and push Chainguard image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.chainguard
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest-Chainguard
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.date }}-Chainguard
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.week }}-Chainguard
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache-chainguard
+          cache-to:   type=registry,ref=${{ env.IMAGE }}:buildcache-chainguard,mode=max
+
+      # ── SBOMs ────────────────────────────────────────────────────────────────
+      - name: Install Syft
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Generate SBOM — standard image
+        run: |
+          syft "docker:${{ env.IMAGE }}:${{ steps.tags.outputs.date }}" \
+            -o cyclonedx-json \
+            > sbom-standard-${{ steps.tags.outputs.date }}.json
+
+      - name: Generate SBOM — Chainguard image
+        run: |
+          syft "docker:${{ env.IMAGE }}:${{ steps.tags.outputs.date }}-Chainguard" \
+            -o cyclonedx-json \
+            > sbom-chainguard-${{ steps.tags.outputs.date }}.json
+
+      # ── Vulnerability scan ───────────────────────────────────────────────────
+      - name: Scan standard image (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ steps.tags.outputs.date }}
+          format: sarif
+          output: trivy-standard.sarif
+          severity: CRITICAL,HIGH
+        continue-on-error: true   # don't fail the build; results go to Security tab
+
+      - name: Scan Chainguard image (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ steps.tags.outputs.date }}-Chainguard
+          format: sarif
+          output: trivy-chainguard.sarif
+          severity: CRITICAL,HIGH
+        continue-on-error: true
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-standard.sarif
+        continue-on-error: true
+
+      # ── Upload artifacts ─────────────────────────────────────────────────────
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ steps.tags.outputs.date }}
+          path: |
+            sbom-standard-${{ steps.tags.outputs.date }}.json
+            sbom-chainguard-${{ steps.tags.outputs.date }}.json
+          retention-days: 90
