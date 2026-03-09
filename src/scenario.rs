@@ -468,7 +468,6 @@ mod tests {
                     path: "/api/test".to_string(),
                     body: None,
                     body_size: None,
-                    body_size: None,
                     headers: HashMap::new(),
                 },
                 extractions: vec![],
