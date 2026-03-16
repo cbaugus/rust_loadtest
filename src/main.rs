@@ -792,8 +792,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         });
 
         let node_id_for_http = config.cluster.node_id.clone();
-        let node_name_for_http = std::env::var("NODE_NAME")
-            .unwrap_or_else(|_| config.cluster.node_id.clone());
+        let node_name_for_http =
+            std::env::var("NODE_NAME").unwrap_or_else(|_| config.cluster.node_id.clone());
         let region_for_http = config.cluster.region.clone();
         let live_metrics_for_http = live_metrics.clone();
         let config_tx_for_http = config_tx.clone();
@@ -919,10 +919,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                             Ok::<_, Infallible>(
                                                 Response::builder()
                                                     .status(StatusCode::OK)
-                                                    .header(
-                                                        "Content-Type",
-                                                        "application/json",
-                                                    )
+                                                    .header("Content-Type", "application/json")
                                                     .body(Body::from(resp_body))
                                                     .unwrap(),
                                             )
@@ -1539,36 +1536,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let mut handles = Vec::new();
     if !ephemeral {
-    for i in 0..config.num_concurrent_tasks {
-        let worker_config = WorkerConfig {
-            task_id: i,
-            url: config.target_url.clone(),
-            request_type: config.request_type.clone(),
-            send_json: config.send_json,
-            json_payload: config.json_payload.clone(),
-            test_duration: config.test_duration,
-            load_model: config.load_model.clone(),
-            num_concurrent_tasks: config.num_concurrent_tasks,
-            percentile_tracking_enabled: config.percentile_tracking_enabled,
-            percentile_sampling_rate: config.percentile_sampling_rate,
-            region: config.cluster.region.clone(),
-            // No tenant when running from env-var config (no YAML submitted yet).
-            tenant: String::new(),
-            // Graceful-stop signal (Issue #79). In cluster mode the
-            // config-watcher fires this before replacing the worker pool.
-            // In standalone mode it is never fired; workers self-terminate
-            // via the test-duration check.
-            stop_rx: worker_stop_rx.clone(),
-        };
+        for i in 0..config.num_concurrent_tasks {
+            let worker_config = WorkerConfig {
+                task_id: i,
+                url: config.target_url.clone(),
+                request_type: config.request_type.clone(),
+                send_json: config.send_json,
+                json_payload: config.json_payload.clone(),
+                test_duration: config.test_duration,
+                load_model: config.load_model.clone(),
+                num_concurrent_tasks: config.num_concurrent_tasks,
+                percentile_tracking_enabled: config.percentile_tracking_enabled,
+                percentile_sampling_rate: config.percentile_sampling_rate,
+                region: config.cluster.region.clone(),
+                // No tenant when running from env-var config (no YAML submitted yet).
+                tenant: String::new(),
+                // Graceful-stop signal (Issue #79). In cluster mode the
+                // config-watcher fires this before replacing the worker pool.
+                // In standalone mode it is never fired; workers self-terminate
+                // via the test-duration check.
+                stop_rx: worker_stop_rx.clone(),
+            };
 
-        let client_clone = client.clone();
-        let start_time_clone = start_time;
+            let client_clone = client.clone();
+            let start_time_clone = start_time;
 
-        let handle = tokio::spawn(async move {
-            run_worker(client_clone, worker_config, start_time_clone).await;
-        });
-        handles.push(handle);
-    }
+            let handle = tokio::spawn(async move {
+                run_worker(client_clone, worker_config, start_time_clone).await;
+            });
+            handles.push(handle);
+        }
     } // end if !ephemeral (startup worker block)
 
     // Wait until the active test completes (state transitions out of
