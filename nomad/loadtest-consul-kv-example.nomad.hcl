@@ -156,7 +156,7 @@ job "envoy-loadtest" {
             gelf-address = "udp://gelf.service.consul:12201"
           }
         }
-        image      = "cbaugus/rust_loadtest:dev-43db789"
+        image      = "cbaugus/rust_loadtest:dev-c6d1e3e"
         force_pull = true
         ports = [
           "metrics",
@@ -198,6 +198,14 @@ TARGET_RPS=0
 # NODE_NAME={{env "node.unique.name"}}
 # NODE_TAGS={"env":"staging","datacenter":"{{env "node.datacenter"}}"}
 # NODE_REGISTRY_INTERVAL=30s
+
+# ── Ephemeral node / GCP one-shot (Issue #98) ────────────────────────────
+# EPHEMERAL=true starts the node in "ready" state (no startup workers).
+# Workers only launch after POST /config is received from the control plane.
+# On test completion the node transitions to "idle" (skips standby) and
+# executes SELF_DESTRUCT_CMD to delete the instance.
+# EPHEMERAL=true
+# SELF_DESTRUCT_CMD=shutdown -h now
 
 EOH
       }

@@ -410,6 +410,18 @@ fn print_config_help() {
     eprintln!("  NODE_NAME               - Human-readable node name (default: CLUSTER_NODE_ID)");
     eprintln!("  NODE_TAGS               - JSON tags object (default: {{}})");
     eprintln!("  NODE_REGISTRY_INTERVAL  - Heartbeat interval (default: 30s)");
+    eprintln!("Ephemeral node (GCP / one-shot) configuration:");
+    eprintln!("  EPHEMERAL               - Set to 'true' for ephemeral (one-time-use) nodes");
+    eprintln!("                            Node starts in 'ready' state, skips startup workers,");
+    eprintln!("                            and transitions to 'idle' (not standby) when test ends");
+    eprintln!("                            TARGET_URL is optional — set by POST /config");
+    eprintln!("                            (default: false — persistent node, existing behaviour)");
+    eprintln!(
+        "  SELF_DESTRUCT_CMD       - Shell command executed when node_state → 'idle'"
+    );
+    eprintln!("                            Example: \"shutdown -h now\"");
+    eprintln!("                            Example: \"gcloud compute instances delete $(hostname) --zone=...\"");
+    eprintln!("                            (default: unset — no-op)");
     eprintln!("    GET  /ready           - Returns {{\"ready\":true}} — no auth (Nomad/K8s probe)");
     eprintln!("    GET  /health          - Returns JSON with live node metrics");
     eprintln!("    POST /config          - Accepts a YAML config body to reconfigure workers");
@@ -506,6 +518,8 @@ fn spawn_completion_watcher(
     startup_standby: Arc<StandbyRunConfig>,
     generation: u64,
     duration: Duration,
+    ephemeral: bool,
+    self_destruct_cmd: Option<String>,
 ) {
     tokio::spawn(async move {
         tokio::time::sleep(duration).await;
@@ -516,12 +530,18 @@ fn spawn_completion_watcher(
             if ts.generation != generation {
                 return;
             }
-            ts.standby
-                .clone()
-                .unwrap_or_else(|| (*startup_standby).clone())
+            if ephemeral {
+                None // ephemeral nodes skip standby
+            } else {
+                Some(
+                    ts.standby
+                        .clone()
+                        .unwrap_or_else(|| (*startup_standby).clone()),
+                )
+            }
         };
 
-        // Drain current workers before switching to standby.
+        // Drain current workers.
         {
             let state = worker_pool.lock().await;
             let _ = state.stop_tx.send(true);
@@ -542,8 +562,37 @@ fn spawn_completion_watcher(
             }
         }
 
-        // Spawn standby workers — they run until a new POST /config fires stop.
+        // Ephemeral nodes: skip standby, transition to idle, fire self-destruct.
+        if ephemeral {
+            let applied = {
+                let mut ts = test_state.lock().unwrap();
+                if ts.generation == generation {
+                    ts.node_state = "idle";
+                    true
+                } else {
+                    false
+                }
+            };
+            if applied {
+                WORKERS_CONFIGURED_TOTAL.set(0.0);
+                info!("Test complete — ephemeral node transitioning to idle");
+                if let Some(cmd) = self_destruct_cmd {
+                    tokio::spawn(async move {
+                        info!(cmd = %cmd, "Executing self-destruct command");
+                        let _ = tokio::process::Command::new("sh")
+                            .arg("-c")
+                            .arg(&cmd)
+                            .status()
+                            .await;
+                    });
+                }
+            }
+            return;
+        }
+
+        // Persistent nodes: spawn standby workers — they run until a new POST /config fires stop.
         // Duration is set to ~1 year so workers don't self-terminate.
+        let sb = sb.unwrap(); // safe: only None when ephemeral, handled above
         let standby_duration = Duration::from_secs(365 * 24 * 3600);
         let (new_stop_tx, new_stop_rx) = watch::channel(false);
         let new_start = time::Instant::now();
@@ -619,6 +668,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Register Prometheus metrics
     register_metrics()?;
+
+    // ── Ephemeral-node config ──────────────────────────────────────────────────
+    // EPHEMERAL=true: node starts in "ready" state, skips startup workers, and
+    // transitions to "idle" (triggering SELF_DESTRUCT_CMD) when the test ends.
+    // Default: false (persistent node — existing behaviour unchanged).
+    let ephemeral = std::env::var("EPHEMERAL")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+    let self_destruct_cmd = std::env::var("SELF_DESTRUCT_CMD").ok();
+
+    // Ephemeral nodes receive their real TARGET_URL from POST /config.
+    // Set a placeholder so Config::from_env() doesn't fail at startup.
+    if ephemeral && std::env::var("TARGET_URL").is_err() {
+        // Safety: single-threaded at this point — no other threads started yet.
+        #[allow(deprecated)]
+        std::env::set_var("TARGET_URL", "http://localhost");
+    }
 
     // Load configuration from environment variables
     let config = match Config::from_env() {
@@ -707,7 +773,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         started_at_unix: unix_now(),
         duration: config.test_duration,
         yaml: None,
-        node_state: "running",
+        // Ephemeral nodes start in "ready" — waiting for first POST /config.
+        // Persistent nodes start in "running" immediately (workers launch below).
+        node_state: if ephemeral { "ready" } else { "running" },
         generation: 0,
         standby: None,
         tenant: None,
@@ -728,6 +796,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         });
 
         let node_id_for_http = config.cluster.node_id.clone();
+        let node_name_for_http = std::env::var("NODE_NAME")
+            .unwrap_or_else(|_| config.cluster.node_id.clone());
         let region_for_http = config.cluster.region.clone();
         let live_metrics_for_http = live_metrics.clone();
         let config_tx_for_http = config_tx.clone();
@@ -737,10 +807,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let health_auth_enabled_for_http = std::env::var("HEALTH_AUTH_ENABLED")
             .map(|v| v == "true" || v == "1")
             .unwrap_or(false);
+        let ephemeral_for_http = ephemeral;
 
         tokio::spawn(async move {
             let make_svc = make_service_fn(move |_conn| {
                 let node_id = node_id_for_http.clone();
+                let node_name = node_name_for_http.clone();
                 let region = region_for_http.clone();
                 let lm = live_metrics_for_http.clone();
                 let tx = config_tx_for_http.clone();
@@ -748,9 +820,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let ts = test_state_for_http.clone();
                 let token = api_token_for_http.clone();
                 let health_auth_enabled = health_auth_enabled_for_http;
+                let ephemeral = ephemeral_for_http;
                 async move {
                     Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
                         let node_id = node_id.clone();
+                        let node_name = node_name.clone();
                         let region = region.clone();
                         let lm = lm.clone();
                         let tx = tx.clone();
@@ -790,7 +864,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     let body = serde_json::json!({
                                         "status": "ok",
                                         "node_id": node_id,
+                                        "node_name": node_name,
                                         "region": region,
+                                        "ephemeral": ephemeral,
                                         "tenant": current_tenant,
                                         "node_state": m.node_state,
                                         "rps": (m.rps * 100.0).round() / 100.0,
@@ -837,10 +913,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     match serde_yaml::from_str::<YamlConfig>(&yaml) {
                                         Ok(_) => {
                                             let _ = tx.send(yaml);
+                                            let resp_body = serde_json::json!({
+                                                "status":    "accepted",
+                                                "node_id":   node_id,
+                                                "node_name": node_name,
+                                                "region":    region,
+                                            })
+                                            .to_string();
                                             Ok::<_, Infallible>(
                                                 Response::builder()
                                                     .status(StatusCode::OK)
-                                                    .body(Body::from("config accepted"))
+                                                    .header(
+                                                        "Content-Type",
+                                                        "application/json",
+                                                    )
+                                                    .body(Body::from(resp_body))
                                                     .unwrap(),
                                             )
                                         }
@@ -982,6 +1069,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let region_for_watcher = config.cluster.region.clone();
         let test_state_for_watcher = test_state.clone();
         let startup_standby_for_watcher = startup_standby.clone();
+        let ephemeral_for_watcher = ephemeral;
+        let self_destruct_cmd_for_watcher = self_destruct_cmd.clone();
         tokio::spawn(async move {
             while let Some(yaml) = config_rx.recv().await {
                 let (yaml_cfg_parsed, new_cfg) = match serde_yaml::from_str::<YamlConfig>(&yaml) {
@@ -1155,6 +1244,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     startup_standby_for_watcher.clone(),
                     new_gen,
                     new_cfg.test_duration,
+                    ephemeral_for_watcher,
+                    self_destruct_cmd_for_watcher.clone(),
                 );
 
                 WORKERS_CONFIGURED_TOTAL.set(new_cfg.num_concurrent_tasks as f64);
@@ -1424,25 +1515,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Main loop to run for a duration
     let start_time = time::Instant::now();
 
-    // Sync test_state to actual worker launch time and spawn the completion-watcher.
-    let startup_gen = {
-        let mut ts = test_state.lock().unwrap();
-        ts.start = start_time;
-        ts.started_at_unix = unix_now();
-        ts.node_state = "running";
-        ts.generation += 1;
-        ts.generation
-    };
-    spawn_completion_watcher(
-        test_state.clone(),
-        worker_pool.clone(),
-        client.clone(),
-        startup_standby.clone(),
-        startup_gen,
-        config.test_duration,
-    );
+    // ── Startup workers — persistent nodes only ────────────────────────────
+    // Ephemeral nodes skip this block: they start in "ready" and wait for
+    // POST /config before launching any workers.
+    if !ephemeral {
+        let startup_gen = {
+            let mut ts = test_state.lock().unwrap();
+            ts.start = start_time;
+            ts.started_at_unix = unix_now();
+            ts.node_state = "running";
+            ts.generation += 1;
+            ts.generation
+        };
+        spawn_completion_watcher(
+            test_state.clone(),
+            worker_pool.clone(),
+            client.clone(),
+            startup_standby.clone(),
+            startup_gen,
+            config.test_duration,
+            false,
+            None,
+        );
+    } else {
+        info!("Ephemeral node ready — waiting for POST /config to start workers");
+    }
 
     let mut handles = Vec::new();
+    if !ephemeral {
     for i in 0..config.num_concurrent_tasks {
         let worker_config = WorkerConfig {
             task_id: i,
@@ -1473,20 +1573,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         });
         handles.push(handle);
     }
+    } // end if !ephemeral (startup worker block)
 
-    // Wait for the first test to actually complete.
-    //
-    // Previously this was `sleep(config.test_duration)` which used the
-    // startup env-var duration and caused the process to exit early when a
-    // POST /config submitted a longer test (e.g. 72 h vs TEST_DURATION=2 h).
-    //
-    // `spawn_completion_watcher` is now the authoritative timer: it sleeps for
-    // whatever duration the *active* test requires (updated on every POST /config)
-    // and transitions `node_state` to "standby" when done.  We just poll until
-    // that transition happens.
+    // Wait until the active test completes (state transitions out of
+    // "running" or "ready").  Both persistent nodes (→ "standby") and
+    // ephemeral nodes (→ "idle") exit this loop when their test is done.
     loop {
         let state = test_state.lock().unwrap().node_state;
-        if state != "running" {
+        if state == "standby" || state == "idle" {
             break;
         }
         tokio::time::sleep(Duration::from_secs(10)).await;
@@ -1513,12 +1607,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("\n--- FINAL METRICS ---\n{}", final_metrics_output);
     info!("--- END OF FINAL METRICS ---");
 
-    // Keep the process alive in standby — workers, the health API, and the
-    // Prometheus metrics endpoint remain active until the container is stopped
-    // externally (SIGTERM from Nomad/Docker).  The final-scrape pause is no
-    // longer necessary because Prometheus continues scraping during standby.
-    info!("Standby mode active — process will remain alive until stopped externally");
-    tokio::time::sleep(Duration::from_secs(365 * 24 * 3600)).await;
+    if ephemeral {
+        // Ephemeral nodes exit cleanly — SELF_DESTRUCT_CMD (if set) handles
+        // the actual instance shutdown.  No standby workers are needed.
+        info!("Ephemeral node — test complete, process exiting");
+    } else {
+        // Persistent nodes: keep the process alive in standby — workers, the
+        // health API, and Prometheus remain active until stopped externally
+        // (SIGTERM from Nomad/Docker/K8s).
+        info!("Standby mode active — process will remain alive until stopped externally");
+        tokio::time::sleep(Duration::from_secs(365 * 24 * 3600)).await;
+    }
 
     Ok(())
 }
