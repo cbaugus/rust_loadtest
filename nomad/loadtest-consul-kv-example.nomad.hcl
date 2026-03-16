@@ -174,7 +174,12 @@ job "envoy-loadtest" {
 # runs at startup before the Raft cluster forms and before the leader can fetch
 # from Consul KV.  The values here are replaced cluster-wide as soon as the
 # leader commits the Consul KV config to the Raft log.
-RUST_LOG=rust_loadtest=warn
+RUST_LOG=rust_loadtest=warn,hyper=error,reqwest=error
+# ── Logging format (Issue #101) ───────────────────────────────────────────────
+# LOG_FORMAT=json emits one structured JSON object per line — required for
+# FluentBit to unpack fields into GCP Cloud Logging jsonPayload.
+# Omit or set to any other value for human-readable output (local dev).
+LOG_FORMAT=json
 TARGET_URL=http://dialtone.service.consul:5678
 REQUEST_TYPE=GET
 SKIP_TLS_VERIFY=true

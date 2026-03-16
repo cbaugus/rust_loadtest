@@ -144,6 +144,8 @@ docker run --rm \
 | `CLUSTER_NODE_ID` | No | hostname | Node identifier used in metrics labels |
 | `CLUSTER_REGION` | No | default | Region label used in metrics and health output |
 | `CLUSTER_HEALTH_ADDR` | No | 0.0.0.0:8080 | Bind address for the live control HTTP API |
+| `LOG_FORMAT` | No | pretty | Log output format: `json` for structured GCP/FluentBit logs, any other value for human-readable |
+| `RUST_LOG` | No | rust_loadtest=info | Log level filter (e.g. `rust_loadtest=warn,hyper=error,reqwest=error`) |
 
 ### Load Model Specific Variables
 
@@ -195,6 +197,30 @@ docker run --rm \
 openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt \
   -in original.key -out pkcs8.key
 ```
+
+## Structured Logging (GCP / FluentBit)
+
+Set `LOG_FORMAT=json` to emit one structured JSON object per log line instead of
+human-readable text. Required for FluentBit to unpack fields into GCP Cloud Logging
+`jsonPayload` so they are indexed, filterable, and priced as structured logs.
+
+```bash
+docker run --rm \
+  -e LOG_FORMAT=json \
+  -e RUST_LOG="rust_loadtest=warn,hyper=error,reqwest=error" \
+  -e TARGET_URL="https://api.example.com/endpoint" \
+  -e LOAD_MODEL_TYPE="Rps" \
+  -e TARGET_RPS="200" \
+  cbaugus/rust_loadtest:latest
+```
+
+**Example JSON log line:**
+```json
+{"timestamp":"2026-03-16T20:39:32.285Z","level":"WARN","target":"rust_loadtest::executor","fields":{"step":"GET /dashboard","status":404,"elapsed_ms":312}}
+```
+
+`RUST_LOG` accepts per-crate filters — setting `hyper=error,reqwest=error` suppresses
+HTTP client noise and significantly reduces log volume and cost.
 
 ## Advanced Features
 
