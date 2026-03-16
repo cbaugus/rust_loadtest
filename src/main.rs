@@ -523,7 +523,6 @@ fn spawn_completion_watcher(
     generation: u64,
     duration: Duration,
     ephemeral: bool,
-    self_destruct_cmd: Option<String>,
 ) {
     tokio::spawn(async move {
         tokio::time::sleep(duration).await;
@@ -1063,7 +1062,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let test_state_for_watcher = test_state.clone();
         let startup_standby_for_watcher = startup_standby.clone();
         let ephemeral_for_watcher = ephemeral;
-        let self_destruct_cmd_for_watcher = self_destruct_cmd.clone();
         tokio::spawn(async move {
             while let Some(yaml) = config_rx.recv().await {
                 let (yaml_cfg_parsed, new_cfg) = match serde_yaml::from_str::<YamlConfig>(&yaml) {
@@ -1238,7 +1236,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     new_gen,
                     new_cfg.test_duration,
                     ephemeral_for_watcher,
-                    self_destruct_cmd_for_watcher.clone(),
                 );
 
                 WORKERS_CONFIGURED_TOTAL.set(new_cfg.num_concurrent_tasks as f64);
@@ -1528,7 +1525,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             startup_gen,
             config.test_duration,
             false,
-            None,
         );
     } else {
         info!("Ephemeral node ready — waiting for POST /config to start workers");
