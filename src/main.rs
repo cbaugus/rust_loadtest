@@ -417,11 +417,15 @@ fn print_config_help() {
     eprintln!("                            TARGET_URL is optional — set by POST /config");
     eprintln!("                            (default: false — persistent node, existing behaviour)");
     eprintln!(
-        "  SELF_DESTRUCT_CMD       - Shell command executed when node_state → 'idle'"
+        "  SELF_DESTRUCT_CMD       - Shell command executed after scrape delay when node_state → 'idle'"
     );
     eprintln!("                            Example: \"shutdown -h now\"");
     eprintln!("                            Example: \"gcloud compute instances delete $(hostname) --zone=...\"");
     eprintln!("                            (default: unset — no-op)");
+    eprintln!("  EPHEMERAL_FINAL_SCRAPE_DELAY - How long to keep /metrics and /health alive");
+    eprintln!("                            after transitioning to 'idle' before firing");
+    eprintln!("                            SELF_DESTRUCT_CMD.  Gives GMP time to scrape");
+    eprintln!("                            final totals.  (default: 60s)");
     eprintln!("    GET  /ready           - Returns {{\"ready\":true}} — no auth (Nomad/K8s probe)");
     eprintln!("    GET  /health          - Returns JSON with live node metrics");
     eprintln!("    POST /config          - Accepts a YAML config body to reconfigure workers");
@@ -562,30 +566,16 @@ fn spawn_completion_watcher(
             }
         }
 
-        // Ephemeral nodes: skip standby, transition to idle, fire self-destruct.
+        // Ephemeral nodes: skip standby, transition to idle.
+        // The scrape-delay and SELF_DESTRUCT_CMD are handled in main() so
+        // the metrics endpoint stays live for the full EPHEMERAL_FINAL_SCRAPE_DELAY
+        // before the process exits.
         if ephemeral {
-            let applied = {
-                let mut ts = test_state.lock().unwrap();
-                if ts.generation == generation {
-                    ts.node_state = "idle";
-                    true
-                } else {
-                    false
-                }
-            };
-            if applied {
+            let mut ts = test_state.lock().unwrap();
+            if ts.generation == generation {
+                ts.node_state = "idle";
                 WORKERS_CONFIGURED_TOTAL.set(0.0);
                 info!("Test complete — ephemeral node transitioning to idle");
-                if let Some(cmd) = self_destruct_cmd {
-                    tokio::spawn(async move {
-                        info!(cmd = %cmd, "Executing self-destruct command");
-                        let _ = tokio::process::Command::new("sh")
-                            .arg("-c")
-                            .arg(&cmd)
-                            .status()
-                            .await;
-                    });
-                }
             }
             return;
         }
@@ -677,6 +667,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
     let self_destruct_cmd = std::env::var("SELF_DESTRUCT_CMD").ok();
+    // How long to keep /metrics and /health alive after transitioning to "idle"
+    // before firing SELF_DESTRUCT_CMD.  Gives GMP at least one full scrape cycle.
+    let ephemeral_scrape_delay = std::env::var("EPHEMERAL_FINAL_SCRAPE_DELAY")
+        .ok()
+        .and_then(|s| rust_loadtest::utils::parse_duration_string(&s).ok())
+        .unwrap_or(Duration::from_secs(60));
 
     // Ephemeral nodes receive their real TARGET_URL from POST /config.
     // Set a placeholder so Config::from_env() doesn't fail at startup.
@@ -1608,9 +1604,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("--- END OF FINAL METRICS ---");
 
     if ephemeral {
-        // Ephemeral nodes exit cleanly — SELF_DESTRUCT_CMD (if set) handles
-        // the actual instance shutdown.  No standby workers are needed.
-        info!("Ephemeral node — test complete, process exiting");
+        // Keep /metrics and /health alive for EPHEMERAL_FINAL_SCRAPE_DELAY so
+        // GMP (or any Prometheus) can complete a final scrape of the test totals
+        // before the instance is destroyed.
+        info!(
+            delay_secs = ephemeral_scrape_delay.as_secs(),
+            "Ephemeral node idle — holding for final Prometheus scrape"
+        );
+        tokio::time::sleep(ephemeral_scrape_delay).await;
+
+        // Fire self-destruct command (e.g. "shutdown -h now" or gcloud delete).
+        // This is the last thing the process does — the VM terminates itself.
+        if let Some(ref cmd) = self_destruct_cmd {
+            info!(cmd = %cmd, "Executing self-destruct command");
+            let _ = tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .status()
+                .await;
+        }
+
+        info!("Ephemeral node — process exiting");
     } else {
         // Persistent nodes: keep the process alive in standby — workers, the
         // health API, and Prometheus remain active until stopped externally

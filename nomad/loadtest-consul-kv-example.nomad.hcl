@@ -205,6 +205,7 @@ TARGET_RPS=0
 # On test completion the node transitions to "idle" (skips standby) and
 # executes SELF_DESTRUCT_CMD to delete the instance.
 # EPHEMERAL=true
+# EPHEMERAL_FINAL_SCRAPE_DELAY=60s
 # SELF_DESTRUCT_CMD=shutdown -h now
 
 EOH
