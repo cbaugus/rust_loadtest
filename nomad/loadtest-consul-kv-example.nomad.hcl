@@ -188,6 +188,11 @@ TEST_DURATION=2h
 LOAD_MODEL_TYPE=Rps
 TARGET_RPS=0
 
+# ── Tenant label ─────────────────────────────────────────────────────────────
+# Applied to all Prometheus metrics emitted by this node from startup.
+# Overridden per-test by metadata.tenant in a POST /config YAML body.
+# TENANT=acme
+
 # ── Security (Issue #91 / #92) ────────────────────────────────────────────────
 # Uncomment to protect POST /config and POST /stop with a bearer token:
 # API_AUTH_TOKEN=your-secret-token-here

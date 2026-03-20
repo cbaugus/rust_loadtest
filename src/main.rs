@@ -673,6 +673,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .and_then(|s| rust_loadtest::utils::parse_duration_string(&s).ok())
         .unwrap_or(Duration::from_secs(60));
 
+    // Tenant label applied to all Prometheus metrics for this node.
+    // Overridden per-test by the `metadata.tenant` field in a POSTed YAML config.
+    let startup_tenant = std::env::var("TENANT").unwrap_or_default();
+
     // Ephemeral nodes receive their real TARGET_URL from POST /config.
     // Set a placeholder so Config::from_env() doesn't fail at startup.
     if ephemeral && std::env::var("TARGET_URL").is_err() {
@@ -773,7 +777,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         node_state: if ephemeral { "ready" } else { "running" },
         generation: 0,
         standby: None,
-        tenant: None,
+        tenant: if startup_tenant.is_empty() { None } else { Some(startup_tenant.clone()) },
     }));
 
     // ── Standalone health + config HTTP server ─────────────────────────────
@@ -1545,8 +1549,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 percentile_tracking_enabled: config.percentile_tracking_enabled,
                 percentile_sampling_rate: config.percentile_sampling_rate,
                 region: config.cluster.region.clone(),
-                // No tenant when running from env-var config (no YAML submitted yet).
-                tenant: String::new(),
+                // Tenant from TENANT env var; overridden by metadata.tenant in POST /config.
+                tenant: startup_tenant.clone(),
                 // Graceful-stop signal (Issue #79). In cluster mode the
                 // config-watcher fires this before replacing the worker pool.
                 // In standalone mode it is never fired; workers self-terminate
