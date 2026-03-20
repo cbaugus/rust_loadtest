@@ -777,7 +777,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         node_state: if ephemeral { "ready" } else { "running" },
         generation: 0,
         standby: None,
-        tenant: if startup_tenant.is_empty() { None } else { Some(startup_tenant.clone()) },
+        tenant: if startup_tenant.is_empty() {
+            None
+        } else {
+            Some(startup_tenant.clone())
+        },
     }));
 
     // ── Standalone health + config HTTP server ─────────────────────────────
