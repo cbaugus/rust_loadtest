@@ -21,7 +21,9 @@ fn init_metrics() {
 }
 
 fn get_total_requests() -> u64 {
-    REQUEST_TOTAL.with_label_values(&["local", "", "test-node", "run-0"]).get()
+    REQUEST_TOTAL
+        .with_label_values(&["local", "", "test-node", "run-0"])
+        .get()
 }
 
 fn get_status_code_count(code: &str) -> u64 {
@@ -371,7 +373,9 @@ async fn concurrent_requests_returns_to_zero_after_worker_finishes() {
     run_worker(client, config, Instant::now()).await;
 
     // After worker finishes, concurrent requests gauge should not be negative
-    let gauge = CONCURRENT_REQUESTS.with_label_values(&["local", "", "test-node", "run-0"]).get();
+    let gauge = CONCURRENT_REQUESTS
+        .with_label_values(&["local", "", "test-node", "run-0"])
+        .get();
     assert!(
         gauge >= 0.0,
         "concurrent requests gauge should not be negative, got {}",
