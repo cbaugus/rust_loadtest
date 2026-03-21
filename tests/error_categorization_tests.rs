@@ -189,7 +189,12 @@ async fn test_404_error_categorization() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -235,7 +240,12 @@ async fn test_timeout_error_categorization() {
         .build()
         .expect("Failed to create client");
 
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -275,6 +285,8 @@ async fn test_network_error_categorization() {
     let executor = ScenarioExecutor::new(
         "https://invalid-host-that-does-not-exist-12345.com".to_string(),
         client,
+        "test-node".to_string(),
+        "run-0".to_string(),
     );
     let mut context = ScenarioContext::new();
 
@@ -328,7 +340,12 @@ async fn test_mixed_error_types_in_scenario() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor

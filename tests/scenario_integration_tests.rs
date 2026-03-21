@@ -46,7 +46,12 @@ async fn test_health_check_scenario() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -96,7 +101,12 @@ async fn test_product_browsing_scenario() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -141,7 +151,12 @@ async fn test_variable_substitution() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
 
     let result = executor
         .execute(&scenario, &mut context, &mut SessionStore::new())
@@ -220,7 +235,12 @@ async fn test_multi_step_with_delays() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let start = std::time::Instant::now();
@@ -292,7 +312,12 @@ async fn test_scenario_failure_handling() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -345,7 +370,12 @@ async fn test_timestamp_variable() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -390,7 +420,12 @@ async fn test_post_request_with_json_body() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -428,7 +463,12 @@ async fn test_scenario_context_isolation() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
 
     // Execute scenario twice with different contexts
     let mut context1 = ScenarioContext::new();
@@ -485,7 +525,12 @@ async fn test_body_size_sends_correct_content_length() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(base_url, client);
+    let executor = ScenarioExecutor::new(
+        base_url,
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor

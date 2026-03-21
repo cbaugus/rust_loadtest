@@ -52,7 +52,12 @@ async fn test_status_code_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -98,7 +103,12 @@ async fn test_status_code_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -144,7 +154,12 @@ async fn test_response_time_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -191,7 +206,12 @@ async fn test_response_time_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -243,7 +263,12 @@ async fn test_json_path_assertion_existence() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -292,7 +317,12 @@ async fn test_json_path_assertion_value_match() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -341,7 +371,12 @@ async fn test_json_path_assertion_value_mismatch() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -390,7 +425,12 @@ async fn test_body_contains_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -436,7 +476,12 @@ async fn test_body_contains_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -484,7 +529,12 @@ async fn test_body_matches_regex_assertion() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -527,7 +577,12 @@ async fn test_header_exists_assertion_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -571,7 +626,12 @@ async fn test_header_exists_assertion_fail() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -628,7 +688,12 @@ async fn test_multiple_assertions_all_pass() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -680,7 +745,12 @@ async fn test_multiple_assertions_mixed_results() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -764,7 +834,12 @@ async fn test_multi_step_assertion_stops_on_failure() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(
+        server.uri(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -859,7 +934,12 @@ async fn test_realistic_e_commerce_flow_with_assertions() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(ECOM_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(
+        ECOM_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
     let mut context = ScenarioContext::new();
 
     let result = executor

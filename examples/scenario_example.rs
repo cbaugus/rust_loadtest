@@ -28,7 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create scenario executor
     let base_url = "https://ecom.edge.baugus-lab.com".to_string();
-    let executor = ScenarioExecutor::new(base_url, client);
+    let executor =
+        ScenarioExecutor::new(base_url, client, "local".to_string(), "run-0".to_string());
 
     // Execute the scenario
     let mut context = ScenarioContext::new();
