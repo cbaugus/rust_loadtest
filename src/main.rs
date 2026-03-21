@@ -1055,8 +1055,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!(
             registry_url = %reg_cfg.registry_url,
             node = %reg_cfg.node_name,
-            interval_secs = reg_cfg.interval.as_secs(),
-            "Auto-registration enabled"
+            "Auto-registration enabled — registering once at startup"
         );
         rust_loadtest::registry::spawn_registration_task(client.clone(), reg_cfg);
     }
