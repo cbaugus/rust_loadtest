@@ -178,7 +178,12 @@ async fn test_scenario_throughput_tracking() {
     // Execute scenario 5 times
     for _ in 0..5 {
         let client = create_test_client();
-        let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
+        let executor = ScenarioExecutor::new(
+            BASE_URL.to_string(),
+            client,
+            "test-node".to_string(),
+            "run-0".to_string(),
+        );
         let mut context = ScenarioContext::new();
 
         let result = executor
@@ -259,7 +264,12 @@ async fn test_multiple_scenarios_different_throughput() {
     // Execute fast scenario 3 times
     for _ in 0..3 {
         let client = create_test_client();
-        let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
+        let executor = ScenarioExecutor::new(
+            BASE_URL.to_string(),
+            client,
+            "test-node".to_string(),
+            "run-0".to_string(),
+        );
         let mut context = ScenarioContext::new();
 
         let result = executor
@@ -274,7 +284,12 @@ async fn test_multiple_scenarios_different_throughput() {
     // Execute slow scenario 2 times
     for _ in 0..2 {
         let client = create_test_client();
-        let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
+        let executor = ScenarioExecutor::new(
+            BASE_URL.to_string(),
+            client,
+            "test-node".to_string(),
+            "run-0".to_string(),
+        );
         let mut context = ScenarioContext::new();
 
         let result = executor

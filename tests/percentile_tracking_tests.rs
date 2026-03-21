@@ -256,7 +256,12 @@ async fn test_scenario_percentile_tracking() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
+    let executor = ScenarioExecutor::new(
+        BASE_URL.to_string(),
+        client,
+        "test-node".to_string(),
+        "run-0".to_string(),
+    );
 
     // Execute scenario multiple times
     for _ in 0..5 {

@@ -148,10 +148,20 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
 
         // Track metrics
         CONCURRENT_REQUESTS
-            .with_label_values(&[&config.region, &config.tenant, &config.node_id, &config.run_id])
+            .with_label_values(&[
+                &config.region,
+                &config.tenant,
+                &config.node_id,
+                &config.run_id,
+            ])
             .inc();
         REQUEST_TOTAL
-            .with_label_values(&[&config.region, &config.tenant, &config.node_id, &config.run_id])
+            .with_label_values(&[
+                &config.region,
+                &config.tenant,
+                &config.node_id,
+                &config.run_id,
+            ])
             .inc();
 
         let request_start_time = time::Instant::now();
@@ -238,10 +248,20 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
 
         let actual_latency_ms = request_start_time.elapsed().as_millis() as u64;
         REQUEST_DURATION_SECONDS
-            .with_label_values(&[&config.region, &config.tenant, &config.node_id, &config.run_id])
+            .with_label_values(&[
+                &config.region,
+                &config.tenant,
+                &config.node_id,
+                &config.run_id,
+            ])
             .observe(request_start_time.elapsed().as_secs_f64());
         CONCURRENT_REQUESTS
-            .with_label_values(&[&config.region, &config.tenant, &config.node_id, &config.run_id])
+            .with_label_values(&[
+                &config.region,
+                &config.tenant,
+                &config.node_id,
+                &config.run_id,
+            ])
             .dec();
 
         // Record latency in percentile tracker (Issue #33, #66, #70, #72)
