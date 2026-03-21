@@ -15,7 +15,7 @@
 //! warning is logged.
 
 use reqwest::Client;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Configuration for auto-registration, built from environment variables.
 pub struct RegistrationConfig {
