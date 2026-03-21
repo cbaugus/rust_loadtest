@@ -207,7 +207,6 @@ TARGET_RPS=0
 # NODE_BASE_URL=http://{{env "attr.unique.network.ip-address"}}:8080
 # NODE_NAME={{env "node.unique.name"}}
 # NODE_TAGS={"env":"staging","datacenter":"{{env "node.datacenter"}}"}
-# NODE_REGISTRY_INTERVAL=30s
 
 # ── Ephemeral node / GCP one-shot (Issue #98) ────────────────────────────
 # EPHEMERAL=true starts the node in "ready" state (no startup workers).

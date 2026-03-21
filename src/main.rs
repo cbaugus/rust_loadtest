@@ -409,7 +409,7 @@ fn print_config_help() {
     eprintln!("  NODE_BASE_URL           - This node's reachable URL (e.g. http://10.0.1.5:8080)");
     eprintln!("  NODE_NAME               - Human-readable node name (default: CLUSTER_NODE_ID)");
     eprintln!("  NODE_TAGS               - JSON tags object (default: {{}})");
-    eprintln!("  NODE_REGISTRY_INTERVAL  - Heartbeat interval (default: 30s)");
+    eprintln!("  NODE_REGISTRY_INTERVAL  - DEPRECATED: ignored. Control plane polls GET /health");
     eprintln!("Ephemeral node (GCP / one-shot) configuration:");
     eprintln!("  EPHEMERAL               - Set to 'true' for ephemeral (one-time-use) nodes");
     eprintln!("                            Node starts in 'ready' state, skips startup workers,");

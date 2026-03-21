@@ -1,17 +1,21 @@
 //! Node auto-registration with the web app registry (Issue #89).
 //!
 //! When `NODE_REGISTRY_URL`, `AUTO_REGISTER_PSK`, and `NODE_BASE_URL` are all
-//! set, the node POSTs its identity to the web app at startup and re-registers
-//! at a configurable interval (heartbeat) to keep its record alive.
+//! set, the node POSTs its identity to the web app **once at startup**.
+//!
+//! The control plane is expected to poll each node's `GET /health` endpoint
+//! on its own schedule to track liveness and runtime metrics (webload-gui#82).
+//! Periodic re-registration from the node side is no longer needed and has
+//! been removed (Issue #104).
 //!
 //! If any of the three required env vars is missing, registration is silently
 //! skipped — the node operates exactly as before (fully backwards-compatible).
+//!
+//! `NODE_REGISTRY_INTERVAL` is **deprecated** — if set it is ignored and a
+//! warning is logged.
 
 use reqwest::Client;
-use std::time::Duration;
-use tracing::{error, info, warn};
-
-use crate::utils::parse_duration_string;
+use tracing::{info, warn, error};
 
 /// Configuration for auto-registration, built from environment variables.
 pub struct RegistrationConfig {
@@ -27,8 +31,6 @@ pub struct RegistrationConfig {
     pub region: String,
     /// Arbitrary JSON tags, e.g. `{"env":"staging","rack":"A"}`.
     pub tags: serde_json::Value,
-    /// How often to re-register (heartbeat). Default: 30 s.
-    pub interval: Duration,
 }
 
 impl RegistrationConfig {
@@ -56,17 +58,22 @@ impl RegistrationConfig {
             }
         };
 
+        // NODE_REGISTRY_INTERVAL is deprecated — the control plane now polls
+        // GET /health instead of relying on node-side heartbeats (Issue #104).
+        if std::env::var("NODE_REGISTRY_INTERVAL").is_ok() {
+            warn!(
+                "NODE_REGISTRY_INTERVAL is deprecated and ignored — \
+                 the control plane polls GET /health for liveness (webload-gui#82). \
+                 Remove this variable from your configuration."
+            );
+        }
+
         let node_name = std::env::var("NODE_NAME").unwrap_or_else(|_| node_id.to_string());
 
         let tags = std::env::var("NODE_TAGS")
             .ok()
             .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
             .unwrap_or_else(|| serde_json::json!({}));
-
-        let interval = std::env::var("NODE_REGISTRY_INTERVAL")
-            .ok()
-            .and_then(|s| parse_duration_string(&s).ok())
-            .unwrap_or(Duration::from_secs(30));
 
         Some(Self {
             registry_url,
@@ -75,7 +82,6 @@ impl RegistrationConfig {
             node_name,
             region: region.to_string(),
             tags,
-            interval,
         })
     }
 }
@@ -129,19 +135,10 @@ pub async fn register_once(client: &Client, cfg: &RegistrationConfig) -> bool {
     }
 }
 
-/// Spawn a background task that registers immediately then re-registers at
-/// `cfg.interval`.  All failures are logged; the task never crashes the node.
+/// Register the node with the web app once at startup.
+/// The control plane polls `GET /health` for ongoing liveness (webload-gui#82).
 pub fn spawn_registration_task(client: Client, cfg: RegistrationConfig) {
     tokio::spawn(async move {
-        // Register immediately on startup.
         register_once(&client, &cfg).await;
-
-        // Heartbeat loop — keeps the node alive in the registry.
-        let mut ticker = tokio::time::interval(cfg.interval);
-        ticker.tick().await; // first tick fires immediately; skip it
-        loop {
-            ticker.tick().await;
-            register_once(&client, &cfg).await;
-        }
     });
 }
