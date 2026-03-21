@@ -51,7 +51,7 @@ async fn test_jsonpath_extraction_from_products() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -116,7 +116,7 @@ async fn test_extraction_and_reuse_in_next_step() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -165,7 +165,7 @@ async fn test_header_extraction() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -223,7 +223,7 @@ async fn test_multiple_extractions_in_single_step() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -324,7 +324,7 @@ async fn test_shopping_flow_with_extraction() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -394,7 +394,7 @@ async fn test_extraction_failure_doesnt_stop_scenario() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor

@@ -40,7 +40,7 @@ async fn test_get_request() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -84,7 +84,7 @@ async fn test_post_request() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -128,7 +128,7 @@ async fn test_put_request() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -170,7 +170,7 @@ async fn test_patch_request() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -208,7 +208,7 @@ async fn test_delete_request() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -246,7 +246,7 @@ async fn test_head_request() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -285,7 +285,7 @@ async fn test_options_request() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -401,7 +401,7 @@ async fn test_mixed_methods_scenario() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -473,7 +473,7 @@ async fn test_case_insensitive_methods() {
         };
 
         let client = create_test_client();
-        let executor = ScenarioExecutor::new(server.uri(), client);
+        let executor = ScenarioExecutor::new(server.uri(), client, "test-node".to_string(), "run-0".to_string());
         let mut context = ScenarioContext::new();
 
         let result = executor
@@ -595,7 +595,7 @@ async fn test_rest_crud_flow() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -647,7 +647,7 @@ async fn test_options_cors_preflight() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor

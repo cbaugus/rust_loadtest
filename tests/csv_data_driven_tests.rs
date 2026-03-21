@@ -156,7 +156,7 @@ async fn test_scenario_with_csv_data() {
     // Execute scenario twice with different data rows
     for i in 0..2 {
         let client = create_test_client();
-        let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+        let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
 
         let mut context = ScenarioContext::new();
         let row = ds.next_row().unwrap();
@@ -206,7 +206,7 @@ async fn test_multiple_users_different_data() {
 
     for i in 0..3 {
         let client = create_test_client();
-        let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+        let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
 
         let mut context = ScenarioContext::new();
         let row = ds.next_row().unwrap();
@@ -296,7 +296,7 @@ dave,dave012,dave@company.com,manager"#;
     // Simulate 8 virtual users (2 full cycles through 4 users)
     for i in 0..8 {
         let client = create_test_client();
-        let executor = ScenarioExecutor::new(base_url.clone(), client);
+        let executor = ScenarioExecutor::new(base_url.clone(), client, "test-node".to_string(), "run-0".to_string());
 
         let mut context = ScenarioContext::new();
         let row = ds.next_row().unwrap();

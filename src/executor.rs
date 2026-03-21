@@ -107,6 +107,12 @@ pub struct ScenarioExecutor {
     /// HTTP client for making requests
     /// Should have cookie_store(true) enabled for session management
     client: reqwest::Client,
+
+    /// Node identifier attached to all metrics (Issue #106).
+    node_id: String,
+
+    /// Run identifier attached to all metrics (Issue #106).
+    run_id: String,
 }
 
 impl ScenarioExecutor {
@@ -116,23 +122,15 @@ impl ScenarioExecutor {
     /// * `base_url` - Base URL for all requests in the scenario
     /// * `client` - HTTP client to use for requests. Should have `cookie_store(true)`
     ///   enabled for automatic cookie and session management.
-    ///
-    /// # Example
-    /// ```rust
-    /// use rust_loadtest::executor::ScenarioExecutor;
-    ///
-    /// let client = reqwest::Client::builder()
-    ///     .cookie_store(true)  // Enable cookies
-    ///     .build()
-    ///     .unwrap();
-    ///
-    /// let executor = ScenarioExecutor::new(
-    ///     "https://api.example.com".to_string(),
-    ///     client
-    /// );
-    /// ```
-    pub fn new(base_url: String, client: reqwest::Client) -> Self {
-        Self { base_url, client }
+    /// * `node_id` - Node identifier attached to all metrics (Issue #106)
+    /// * `run_id` - Run identifier attached to all metrics (Issue #106)
+    pub fn new(base_url: String, client: reqwest::Client, node_id: String, run_id: String) -> Self {
+        Self {
+            base_url,
+            client,
+            node_id,
+            run_id,
+        }
     }
 
     /// Execute a scenario with the given context.
@@ -224,12 +222,12 @@ impl ScenarioExecutor {
         // Record scenario metrics
         CONCURRENT_SCENARIOS.dec();
         SCENARIO_DURATION_SECONDS
-            .with_label_values(&[&scenario.name])
+            .with_label_values(&[&scenario.name, &self.node_id, &self.run_id])
             .observe(total_time_secs);
 
         let status = if all_success { "success" } else { "failed" };
         SCENARIO_EXECUTIONS_TOTAL
-            .with_label_values(&[&scenario.name, status])
+            .with_label_values(&[&scenario.name, status, &self.node_id, &self.run_id])
             .inc();
 
         if all_success {
@@ -459,7 +457,13 @@ impl ScenarioExecutor {
                                 // Record assertion metrics
                                 let result_label = if result.passed { "passed" } else { "failed" };
                                 SCENARIO_ASSERTIONS_TOTAL
-                                    .with_label_values(&[scenario_name, &step.name, result_label])
+                                    .with_label_values(&[
+                                        scenario_name,
+                                        &step.name,
+                                        result_label,
+                                        &self.node_id,
+                                        &self.run_id,
+                                    ])
                                     .inc();
                             }
 
@@ -515,17 +519,29 @@ impl ScenarioExecutor {
                 // Record step metrics
                 let response_time_secs = response_time_ms as f64 / 1000.0;
                 SCENARIO_STEP_DURATION_SECONDS
-                    .with_label_values(&[scenario_name, &step.name])
+                    .with_label_values(&[scenario_name, &step.name, &self.node_id, &self.run_id])
                     .observe(response_time_secs);
 
                 let status_code_str = status.as_u16().to_string();
                 SCENARIO_STEP_STATUS_CODES
-                    .with_label_values(&[scenario_name, &step.name, &status_code_str])
+                    .with_label_values(&[
+                        scenario_name,
+                        &step.name,
+                        &status_code_str,
+                        &self.node_id,
+                        &self.run_id,
+                    ])
                     .inc();
 
                 let step_status = if success { "success" } else { "failed" };
                 SCENARIO_STEPS_TOTAL
-                    .with_label_values(&[scenario_name, &step.name, step_status])
+                    .with_label_values(&[
+                        scenario_name,
+                        &step.name,
+                        step_status,
+                        &self.node_id,
+                        &self.run_id,
+                    ])
                     .inc();
 
                 debug!(
@@ -558,7 +574,13 @@ impl ScenarioExecutor {
 
                 // Record failed step metrics
                 SCENARIO_STEPS_TOTAL
-                    .with_label_values(&[scenario_name, &step.name, "failed"])
+                    .with_label_values(&[
+                        scenario_name,
+                        &step.name,
+                        "failed",
+                        &self.node_id,
+                        &self.run_id,
+                    ])
                     .inc();
 
                 StepResult {
@@ -633,7 +655,12 @@ mod tests {
     #[tokio::test]
     async fn test_executor_creation() {
         let client = reqwest::Client::new();
-        let executor = ScenarioExecutor::new("https://example.com".to_string(), client);
+        let executor = ScenarioExecutor::new(
+            "https://example.com".to_string(),
+            client,
+            "test-node".to_string(),
+            "run-0".to_string(),
+        );
 
         assert_eq!(executor.base_url, "https://example.com");
     }

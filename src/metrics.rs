@@ -17,21 +17,21 @@ lazy_static::lazy_static! {
         IntCounterVec::new(
             Opts::new("requests_total", "Total number of HTTP requests made")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["region", "tenant"]
+            &["region", "tenant", "node_id", "run_id"]
         ).unwrap();
 
     pub static ref REQUEST_STATUS_CODES: IntCounterVec =
         IntCounterVec::new(
             Opts::new("requests_status_codes_total", "Number of HTTP requests by status code")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["status_code", "region", "tenant"]
+            &["status_code", "region", "tenant", "node_id", "run_id"]
         ).unwrap();
 
     pub static ref CONCURRENT_REQUESTS: prometheus::GaugeVec =
         prometheus::GaugeVec::new(
             Opts::new("concurrent_requests", "Number of HTTP requests currently in flight")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["region", "tenant"]
+            &["region", "tenant", "node_id", "run_id"]
         ).unwrap();
 
     pub static ref REQUEST_DURATION_SECONDS: HistogramVec =
@@ -40,7 +40,7 @@ lazy_static::lazy_static! {
                 "request_duration_seconds",
                 "HTTP request latencies in seconds."
             ).namespace(METRIC_NAMESPACE.as_str()),
-            &["region", "tenant"]
+            &["region", "tenant", "node_id", "run_id"]
         ).unwrap();
 
     // === Scenario Metrics ===
@@ -49,7 +49,7 @@ lazy_static::lazy_static! {
         IntCounterVec::new(
             Opts::new("scenario_executions_total", "Total number of scenario executions")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["scenario", "status"]  // status: success, failed
+            &["scenario", "status", "node_id", "run_id"]  // status: success, failed
         ).unwrap();
 
     pub static ref SCENARIO_DURATION_SECONDS: HistogramVec =
@@ -58,14 +58,14 @@ lazy_static::lazy_static! {
                 "scenario_duration_seconds",
                 "Scenario execution duration in seconds"
             ).namespace(METRIC_NAMESPACE.as_str()),
-            &["scenario"]
+            &["scenario", "node_id", "run_id"]
         ).unwrap();
 
     pub static ref SCENARIO_STEPS_TOTAL: IntCounterVec =
         IntCounterVec::new(
             Opts::new("scenario_steps_total", "Total number of scenario steps executed")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["scenario", "step", "status"]  // status: success, failed
+            &["scenario", "step", "status", "node_id", "run_id"]  // status: success, failed
         ).unwrap();
 
     pub static ref SCENARIO_STEP_DURATION_SECONDS: HistogramVec =
@@ -74,21 +74,21 @@ lazy_static::lazy_static! {
                 "scenario_step_duration_seconds",
                 "Scenario step duration in seconds"
             ).namespace(METRIC_NAMESPACE.as_str()),
-            &["scenario", "step"]
+            &["scenario", "step", "node_id", "run_id"]
         ).unwrap();
 
     pub static ref SCENARIO_STEP_STATUS_CODES: IntCounterVec =
         IntCounterVec::new(
             Opts::new("scenario_step_status_codes_total", "HTTP status codes per scenario step")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["scenario", "step", "status_code"]
+            &["scenario", "step", "status_code", "node_id", "run_id"]
         ).unwrap();
 
     pub static ref SCENARIO_ASSERTIONS_TOTAL: IntCounterVec =
         IntCounterVec::new(
             Opts::new("scenario_assertions_total", "Total number of scenario assertions")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["scenario", "step", "result"]  // result: passed, failed
+            &["scenario", "step", "result", "node_id", "run_id"]  // result: passed, failed
         ).unwrap();
 
     pub static ref CONCURRENT_SCENARIOS: Gauge =
@@ -103,7 +103,7 @@ lazy_static::lazy_static! {
         IntCounterVec::new(
             Opts::new("scenario_requests_total", "Total number of requests per scenario")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["scenario", "tenant"]
+            &["scenario", "tenant", "node_id", "run_id"]
         ).unwrap();
 
     pub static ref SCENARIO_THROUGHPUT_RPS: prometheus::GaugeVec =
@@ -119,7 +119,7 @@ lazy_static::lazy_static! {
         IntCounterVec::new(
             Opts::new("request_errors_by_category", "Number of errors by category")
                 .namespace(METRIC_NAMESPACE.as_str()),
-            &["category", "region", "tenant"]
+            &["category", "region", "tenant", "node_id", "run_id"]
         ).unwrap();
 
     // === Connection Pool Metrics (Issue #36) ===

@@ -72,7 +72,7 @@ async fn test_cookies_persist_across_steps() {
     };
 
     let client = create_cookie_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -168,7 +168,7 @@ async fn test_auth_flow_with_token_and_cookies() {
     };
 
     let client = create_cookie_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -242,8 +242,8 @@ async fn test_cookie_isolation_between_clients() {
     let client1 = create_cookie_client();
     let client2 = create_cookie_client();
 
-    let executor1 = ScenarioExecutor::new(BASE_URL.to_string(), client1);
-    let executor2 = ScenarioExecutor::new(BASE_URL.to_string(), client2);
+    let executor1 = ScenarioExecutor::new(BASE_URL.to_string(), client1, "test-node".to_string(), "run-0".to_string());
+    let executor2 = ScenarioExecutor::new(BASE_URL.to_string(), client2, "test-node".to_string(), "run-0".to_string());
 
     let mut context1 = ScenarioContext::new();
     let mut context2 = ScenarioContext::new();
@@ -367,7 +367,7 @@ async fn test_shopping_flow_with_session() {
     };
 
     let client = create_cookie_client();
-    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client);
+    let executor = ScenarioExecutor::new(BASE_URL.to_string(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let result = executor
@@ -435,8 +435,8 @@ async fn test_client_without_cookies_fails_session() {
     // Client WITH cookies
     let client_with_cookies = create_cookie_client();
 
-    let executor_no_cookies = ScenarioExecutor::new(BASE_URL.to_string(), client_no_cookies);
-    let executor_with_cookies = ScenarioExecutor::new(BASE_URL.to_string(), client_with_cookies);
+    let executor_no_cookies = ScenarioExecutor::new(BASE_URL.to_string(), client_no_cookies, "test-node".to_string(), "run-0".to_string());
+    let executor_with_cookies = ScenarioExecutor::new(BASE_URL.to_string(), client_with_cookies, "test-node".to_string(), "run-0".to_string());
 
     let mut context_no_cookies = ScenarioContext::new();
     let mut context_with_cookies = ScenarioContext::new();

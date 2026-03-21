@@ -67,6 +67,11 @@ pub struct YamlMetadata {
     /// When set, all metrics emitted by this test run include a `tenant` label
     /// so per-tenant request counts can be queried from Prometheus.
     pub tenant: Option<String>,
+    /// Optional run identifier.  Auto-generated from the current Unix timestamp
+    /// if absent.  Included as a `run_id` label on all request and scenario
+    /// metrics so multiple sequential tests on the same node can be distinguished
+    /// in Prometheus (Issue #106).
+    pub run_id: Option<String>,
 }
 
 /// Global configuration settings.

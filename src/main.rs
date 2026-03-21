@@ -485,6 +485,7 @@ struct StandbyRunConfig {
     percentile_tracking_enabled: bool,
     percentile_sampling_rate: u8,
     region: String,
+    node_id: String,
 }
 
 /// Tracks the active test run — shared between the config-watcher and metrics updater.
@@ -498,6 +499,10 @@ struct TestState {
     standby: Option<StandbyRunConfig>,
     /// Tenant identifier for the active test run. None when no tenant is set.
     tenant: Option<String>,
+    /// Run identifier (Issue #106). Unique per test dispatch; auto-generated at
+    /// startup and reset on each POST /config from `metadata.run_id` or a new
+    /// Unix-timestamp value.
+    run_id: String,
 }
 
 /// Returns the current Unix timestamp in seconds.
@@ -604,6 +609,8 @@ fn spawn_completion_watcher(
                     percentile_sampling_rate: sb.percentile_sampling_rate,
                     region: sb.region.clone(),
                     tenant: String::new(), // standby mode has no tenant
+                    node_id: sb.node_id.clone(),
+                    run_id: String::new(), // standby mode has no run_id
                     stop_rx: new_stop_rx.clone(),
                 };
                 tokio::spawn(run_worker(client.clone(), wc, new_start))
@@ -720,6 +727,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         percentile_tracking_enabled: config.percentile_tracking_enabled,
         percentile_sampling_rate: config.percentile_sampling_rate,
         region: config.cluster.region.clone(),
+        node_id: config.cluster.node_id.clone(),
     });
 
     // Start the Prometheus metrics HTTP server
@@ -782,6 +790,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         } else {
             Some(startup_tenant.clone())
         },
+        run_id: format!("run-{}", unix_now()),
     }));
 
     // ── Standalone health + config HTTP server ─────────────────────────────
@@ -863,7 +872,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         }
                                     }
                                     let m = lm.lock().unwrap().clone();
-                                    let current_tenant = ts.lock().unwrap().tenant.clone();
+                                    let (current_tenant, current_run_id) = {
+                                        let st = ts.lock().unwrap();
+                                        (st.tenant.clone(), st.run_id.clone())
+                                    };
                                     let body = serde_json::json!({
                                         "status": "ok",
                                         "node_id": node_id,
@@ -871,6 +883,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         "region": region,
                                         "ephemeral": ephemeral,
                                         "tenant": current_tenant,
+                                        "run_id": current_run_id,
                                         "node_state": m.node_state,
                                         "rps": (m.rps * 100.0).round() / 100.0,
                                         "error_rate_pct": (m.error_rate_pct * 100.0).round() / 100.0,
@@ -1066,6 +1079,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let pool_for_watcher = worker_pool.clone();
         let client_for_watcher = client.clone();
         let region_for_watcher = config.cluster.region.clone();
+        let node_id_for_watcher = config.cluster.node_id.clone();
         let test_state_for_watcher = test_state.clone();
         let startup_standby_for_watcher = startup_standby.clone();
         let ephemeral_for_watcher = ephemeral;
@@ -1096,6 +1110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     percentile_tracking_enabled: new_cfg.percentile_tracking_enabled,
                     percentile_sampling_rate: new_cfg.percentile_sampling_rate,
                     region: region_for_watcher.clone(),
+                    node_id: node_id_for_watcher.clone(),
                 });
 
                 info!(
@@ -1134,6 +1149,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let (new_stop_tx, new_stop_rx) = watch::channel(false);
                 let new_start = time::Instant::now();
                 let new_tenant = yaml_cfg_parsed.metadata.tenant.clone();
+                let new_run_id = yaml_cfg_parsed
+                    .metadata
+                    .run_id
+                    .clone()
+                    .unwrap_or_else(|| format!("run-{}", unix_now()));
 
                 // If the YAML contains scenarios, use scenario workers; otherwise
                 // fall back to the legacy single-URL worker.
@@ -1160,6 +1180,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         percentile_sampling_rate: new_cfg.percentile_sampling_rate,
                                         region: region_for_watcher.clone(),
                                         tenant: new_tenant.clone().unwrap_or_default(),
+                                        node_id: node_id_for_watcher.clone(),
+                                        run_id: new_run_id.clone(),
                                     };
                                     tokio::spawn(run_scenario_worker(
                                         new_client.clone(),
@@ -1187,6 +1209,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         percentile_sampling_rate: new_cfg.percentile_sampling_rate,
                                         region: region_for_watcher.clone(),
                                         tenant: new_tenant.clone().unwrap_or_default(),
+                                        node_id: node_id_for_watcher.clone(),
+                                        run_id: new_run_id.clone(),
                                         stop_rx: new_stop_rx.clone(),
                                     };
                                     tokio::spawn(run_worker(new_client.clone(), wc, new_start))
@@ -1210,6 +1234,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                 percentile_sampling_rate: new_cfg.percentile_sampling_rate,
                                 region: region_for_watcher.clone(),
                                 tenant: new_tenant.clone().unwrap_or_default(),
+                                node_id: node_id_for_watcher.clone(),
+                                run_id: new_run_id.clone(),
                                 stop_rx: new_stop_rx.clone(),
                             };
                             tokio::spawn(run_worker(new_client.clone(), wc, new_start))
@@ -1233,6 +1259,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     ts.generation += 1;
                     ts.standby = standby_cfg;
                     ts.tenant = new_tenant.clone();
+                    ts.run_id = new_run_id.clone();
                     ts.generation
                 };
                 spawn_completion_watcher(
@@ -1308,11 +1335,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let live_metrics_for_updater = live_metrics.clone();
         let test_state_for_updater = test_state.clone();
         let region = config.cluster.region.clone();
+        let node_id_for_updater = config.cluster.node_id.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(1));
             let mut prev_requests: u64 = 0;
             let mut prev_errors: u64 = 0;
-            let mut prev_tenant: String = String::new();
+            let mut prev_run_id: String = String::new();
             // CPU tracking (Linux only) — tracks utime+stime jiffies
             #[cfg(target_os = "linux")]
             let mut prev_cpu_ticks: Option<u64> = None;
@@ -1321,21 +1349,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 interval.tick().await;
 
                 // ── Request counter (monotonic) ──────────────────────────
-                let tenant_str = test_state_for_updater
-                    .lock()
-                    .unwrap()
-                    .tenant
-                    .clone()
-                    .unwrap_or_default();
-                // Reset delta tracking when the active tenant changes so we
+                let (tenant_str, run_id_str) = {
+                    let ts = test_state_for_updater.lock().unwrap();
+                    (ts.tenant.clone().unwrap_or_default(), ts.run_id.clone())
+                };
+                // Reset delta tracking when the active run changes so we
                 // don't compute a nonsensical RPS across test boundaries.
-                if tenant_str != prev_tenant {
+                if run_id_str != prev_run_id {
                     prev_requests = 0;
                     prev_errors = 0;
-                    prev_tenant = tenant_str.clone();
+                    prev_run_id = run_id_str.clone();
                 }
                 let curr_requests = REQUEST_TOTAL
-                    .with_label_values(&[&region, &tenant_str])
+                    .with_label_values(&[&region, &tenant_str, &node_id_for_updater, &run_id_str])
                     .get();
 
                 // ── Error counter: sum all known categories ───────────────
@@ -1343,7 +1369,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     .iter()
                     .map(|cat| {
                         REQUEST_ERRORS_BY_CATEGORY
-                            .with_label_values(&[cat.label(), &region, &tenant_str])
+                            .with_label_values(&[
+                                cat.label(),
+                                &region,
+                                &tenant_str,
+                                &node_id_for_updater,
+                                &run_id_str,
+                            ])
                             .get()
                     })
                     .sum();
@@ -1554,6 +1586,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 region: config.cluster.region.clone(),
                 // Tenant from TENANT env var; overridden by metadata.tenant in POST /config.
                 tenant: startup_tenant.clone(),
+                node_id: config.cluster.node_id.clone(),
+                run_id: test_state.lock().unwrap().run_id.clone(),
                 // Graceful-stop signal (Issue #79). In cluster mode the
                 // config-watcher fires this before replacing the worker pool.
                 // In standalone mode it is never fired; workers self-terminate

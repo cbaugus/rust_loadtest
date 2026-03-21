@@ -75,7 +75,7 @@ async fn test_fixed_think_time() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
@@ -164,7 +164,7 @@ async fn test_random_think_time() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client, "test-node".to_string(), "run-0".to_string());
 
     // Run multiple times to test randomness
     let mut durations = Vec::new();
@@ -257,7 +257,7 @@ async fn test_multiple_think_times() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
@@ -337,7 +337,7 @@ async fn test_no_think_time() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();
@@ -425,7 +425,7 @@ async fn test_realistic_user_behavior() {
     };
 
     let client = create_test_client();
-    let executor = ScenarioExecutor::new(server.uri(), client);
+    let executor = ScenarioExecutor::new(server.uri(), client, "test-node".to_string(), "run-0".to_string());
     let mut context = ScenarioContext::new();
 
     let start = Instant::now();

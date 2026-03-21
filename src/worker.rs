@@ -55,6 +55,13 @@ pub struct WorkerConfig {
     /// Attached as a `tenant` label to all request metrics so per-tenant
     /// request counts can be queried from Prometheus for billing.
     pub tenant: String,
+    /// Node identifier (Issue #106). Attached as a `node_id` label to all
+    /// request metrics so metrics can be filtered per node in Prometheus.
+    pub node_id: String,
+    /// Run identifier (Issue #106). Unique per test dispatch; auto-generated
+    /// if absent from the YAML `metadata.run_id` field.  Attached as a
+    /// `run_id` label so sequential tests on the same node can be isolated.
+    pub run_id: String,
     /// Graceful-stop signal (Issue #79).  When the sender fires `true` the
     /// worker finishes its current request and exits at the top of the next
     /// loop iteration so no in-flight request is aborted.
@@ -141,10 +148,10 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
 
         // Track metrics
         CONCURRENT_REQUESTS
-            .with_label_values(&[&config.region, &config.tenant])
+            .with_label_values(&[&config.region, &config.tenant, &config.node_id, &config.run_id])
             .inc();
         REQUEST_TOTAL
-            .with_label_values(&[&config.region, &config.tenant])
+            .with_label_values(&[&config.region, &config.tenant, &config.node_id, &config.run_id])
             .inc();
 
         let request_start_time = time::Instant::now();
@@ -158,13 +165,25 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
                 // Use static strings to avoid a heap allocation on every request
                 let status_str = status_code_label(status);
                 REQUEST_STATUS_CODES
-                    .with_label_values(&[status_str, &config.region, &config.tenant])
+                    .with_label_values(&[
+                        status_str,
+                        &config.region,
+                        &config.tenant,
+                        &config.node_id,
+                        &config.run_id,
+                    ])
                     .inc();
 
                 // Categorize HTTP errors (Issue #34)
                 if let Some(category) = ErrorCategory::from_status_code(status) {
                     REQUEST_ERRORS_BY_CATEGORY
-                        .with_label_values(&[category.label(), &config.region, &config.tenant])
+                        .with_label_values(&[
+                            category.label(),
+                            &config.region,
+                            &config.tenant,
+                            &config.node_id,
+                            &config.run_id,
+                        ])
                         .inc();
                 }
 
@@ -185,13 +204,25 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             }
             Err(e) => {
                 REQUEST_STATUS_CODES
-                    .with_label_values(&["error", &config.region, &config.tenant])
+                    .with_label_values(&[
+                        "error",
+                        &config.region,
+                        &config.tenant,
+                        &config.node_id,
+                        &config.run_id,
+                    ])
                     .inc();
 
                 // Categorize request error (Issue #34)
                 let error_category = ErrorCategory::from_reqwest_error(&e);
                 REQUEST_ERRORS_BY_CATEGORY
-                    .with_label_values(&[error_category.label(), &config.region, &config.tenant])
+                    .with_label_values(&[
+                        error_category.label(),
+                        &config.region,
+                        &config.tenant,
+                        &config.node_id,
+                        &config.run_id,
+                    ])
                     .inc();
 
                 error!(
@@ -207,10 +238,10 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
 
         let actual_latency_ms = request_start_time.elapsed().as_millis() as u64;
         REQUEST_DURATION_SECONDS
-            .with_label_values(&[&config.region, &config.tenant])
+            .with_label_values(&[&config.region, &config.tenant, &config.node_id, &config.run_id])
             .observe(request_start_time.elapsed().as_secs_f64());
         CONCURRENT_REQUESTS
-            .with_label_values(&[&config.region, &config.tenant])
+            .with_label_values(&[&config.region, &config.tenant, &config.node_id, &config.run_id])
             .dec();
 
         // Record latency in percentile tracker (Issue #33, #66, #70, #72)
@@ -318,6 +349,10 @@ pub struct ScenarioWorkerConfig {
     pub region: String,
     /// Optional tenant identifier. Empty string when no tenant is configured.
     pub tenant: String,
+    /// Node identifier (Issue #106).
+    pub node_id: String,
+    /// Run identifier (Issue #106). Unique per test dispatch.
+    pub run_id: String,
 }
 
 /// Runs a scenario-based worker task that executes multi-step scenarios according to the load model.
@@ -400,7 +435,12 @@ pub async fn run_scenario_worker(
             .unwrap_or_else(|_| reqwest::Client::new());
 
         // Create executor with isolated client
-        let executor = ScenarioExecutor::new(config.base_url.clone(), client);
+        let executor = ScenarioExecutor::new(
+            config.base_url.clone(),
+            client,
+            config.node_id.clone(),
+            config.run_id.clone(),
+        );
 
         // Create new context for this scenario execution
         let mut context = ScenarioContext::new();
@@ -443,21 +483,42 @@ pub async fn run_scenario_worker(
                 continue;
             }
             REQUEST_TOTAL
-                .with_label_values(&[&config.region, &config.tenant])
+                .with_label_values(&[
+                    &config.region,
+                    &config.tenant,
+                    &config.node_id,
+                    &config.run_id,
+                ])
                 .inc();
             if let Some(code) = step.status_code {
                 REQUEST_STATUS_CODES
-                    .with_label_values(&[status_code_label(code), &config.region, &config.tenant])
+                    .with_label_values(&[
+                        status_code_label(code),
+                        &config.region,
+                        &config.tenant,
+                        &config.node_id,
+                        &config.run_id,
+                    ])
                     .inc();
             }
             REQUEST_DURATION_SECONDS
-                .with_label_values(&[&config.region, &config.tenant])
+                .with_label_values(&[
+                    &config.region,
+                    &config.tenant,
+                    &config.node_id,
+                    &config.run_id,
+                ])
                 .observe(step.response_time_ms as f64 / 1000.0);
         }
 
         // Record throughput (Issue #35)
         SCENARIO_REQUESTS_TOTAL
-            .with_label_values(&[&config.scenario.name, &config.tenant])
+            .with_label_values(&[
+                &config.scenario.name,
+                &config.tenant,
+                &config.node_id,
+                &config.run_id,
+            ])
             .inc();
         GLOBAL_THROUGHPUT_TRACKER.record(
             &config.scenario.name,

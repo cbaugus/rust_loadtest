@@ -42,6 +42,8 @@ async fn test_scenario_worker_respects_duration() {
         percentile_sampling_rate: 100,
         region: "local".to_string(),
         tenant: String::new(),
+        node_id: "test-node".to_string(),
+        run_id: "run-0".to_string(),
     };
 
     let client = reqwest::Client::new();
@@ -94,6 +96,8 @@ async fn test_scenario_worker_constant_load() {
         percentile_sampling_rate: 100,
         region: "local".to_string(),
         tenant: String::new(),
+        node_id: "test-node".to_string(),
+        run_id: "run-0".to_string(),
     };
 
     let client = reqwest::Client::new();
@@ -153,6 +157,8 @@ async fn test_scenario_worker_with_think_time() {
         percentile_sampling_rate: 100,
         region: "local".to_string(),
         tenant: String::new(),
+        node_id: "test-node".to_string(),
+        run_id: "run-0".to_string(),
     };
 
     let client = reqwest::Client::new();
