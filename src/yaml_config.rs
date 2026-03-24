@@ -722,6 +722,7 @@ impl Default for YamlConfig {
                 duration: YamlDuration::Seconds(60),
                 skip_tls_verify: false,
                 custom_headers: None,
+                resolve_target_addr: None,
             },
             load: YamlLoadModel::Concurrent,
             scenarios: vec![],
