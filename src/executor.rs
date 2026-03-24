@@ -289,7 +289,9 @@ impl ScenarioExecutor {
         let url = if path.starts_with("http://") || path.starts_with("https://") {
             path
         } else {
-            format!("{}{}", self.base_url, path)
+            let base = self.base_url.trim_end_matches('/');
+            let p = path.trim_start_matches('/');
+            format!("{}/{}", base, p)
         };
 
         debug!(

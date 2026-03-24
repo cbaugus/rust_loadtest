@@ -199,8 +199,10 @@ impl Config {
             None
         };
 
-        // Optional fields from env vars only (not in YAML yet)
-        let resolve_target_addr = env::var("RESOLVE_TARGET_ADDR").ok();
+        // RESOLVE_TARGET_ADDR: env var wins; fall back to YAML resolveTargetAddr
+        let resolve_target_addr = env::var("RESOLVE_TARGET_ADDR")
+            .ok()
+            .or_else(|| yaml_config.config.resolve_target_addr.clone());
         let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
 
@@ -292,7 +294,9 @@ impl Config {
         } else {
             None
         };
-        let resolve_target_addr = env::var("RESOLVE_TARGET_ADDR").ok();
+        let resolve_target_addr = env::var("RESOLVE_TARGET_ADDR")
+            .ok()
+            .or_else(|| yaml_config.config.resolve_target_addr.clone());
         let client_cert_path = env::var("CLIENT_CERT_PATH").ok();
         let client_key_path = env::var("CLIENT_KEY_PATH").ok();
         let percentile_tracking_enabled = env_bool("PERCENTILE_TRACKING_ENABLED", true);
