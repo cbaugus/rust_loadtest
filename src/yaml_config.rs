@@ -93,6 +93,12 @@ pub struct YamlGlobalConfig {
 
     #[serde(rename = "customHeaders")]
     pub custom_headers: Option<String>,
+
+    /// DNS override: force hostname to resolve to a specific IP.
+    /// Format: "hostname:ip:port"  e.g. "api.example.com:1.2.3.4:443"
+    /// Equivalent to the RESOLVE_TARGET_ADDR env var; env var takes precedence.
+    #[serde(rename = "resolveTargetAddr")]
+    pub resolve_target_addr: Option<String>,
 }
 
 fn default_timeout() -> YamlDuration {
