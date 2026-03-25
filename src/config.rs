@@ -719,6 +719,7 @@ impl Config {
             client_key_path: self.client_key_path.clone(),
             custom_headers: self.custom_headers.clone(),
             pool_config: Some(crate::connection_pool::PoolConfig::from_env()),
+            cookie_store: false,
         }
     }
 

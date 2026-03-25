@@ -20,6 +20,7 @@ fn should_sample(rate: u8) -> bool {
     counter % 100 < rate as u64
 }
 
+use crate::client::{build_client, ClientConfig};
 use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::errors::ErrorCategory;
 use crate::executor::{ScenarioExecutor, SessionStore};
@@ -142,6 +143,8 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             // immediately next iteration (Concurrent) or we set a long pause (0 RPS).
             if current_target_rps == 0.0 {
                 next_fire = now + Duration::from_secs(3600);
+                // rps=0 means idle standby — skip request entirely and wait for the next cycle.
+                continue;
             }
             // For Concurrent (f64::MAX), next_fire stays in the past → fires immediately.
         }
@@ -373,6 +376,10 @@ pub struct ScenarioWorkerConfig {
     pub node_id: String,
     /// Run identifier (Issue #106). Unique per test dispatch.
     pub run_id: String,
+    /// Skip TLS certificate verification (propagated from global config).
+    pub skip_tls_verify: bool,
+    /// DNS override string in `hostname:ip:port` format (propagated from global config).
+    pub resolve_target_addr: Option<String>,
 }
 
 /// Runs a scenario-based worker task that executes multi-step scenarios according to the load model.
@@ -382,13 +389,10 @@ pub struct ScenarioWorkerConfig {
 ///
 /// # Cookie and Session Management
 ///
-/// For proper session isolation, each scenario execution gets its own cookie-enabled
-/// HTTP client. This ensures cookies from one virtual user don't leak to another.
-pub async fn run_scenario_worker(
-    _client: reqwest::Client, // Ignored - we create per-execution clients
-    config: ScenarioWorkerConfig,
-    start_time: Instant,
-) {
+/// Each scenario execution gets its own cookie-enabled HTTP client built from the
+/// worker config (DNS override, TLS settings). This ensures cookies from one virtual
+/// user don't leak to another while preserving global client settings.
+pub async fn run_scenario_worker(config: ScenarioWorkerConfig, start_time: Instant) {
     debug!(
         task_id = config.task_id,
         scenario = %config.scenario.name,
@@ -415,6 +419,23 @@ pub async fn run_scenario_worker(
     // Steps with `cache: { ttl }` store their extracted variables here so
     // subsequent iterations skip the HTTP request until the TTL expires.
     let mut session = SessionStore::new();
+
+    // Build the HTTP client once per worker with DNS override, TLS, and cookie store enabled.
+    // Building once avoids log flooding and expensive reconstruction on every loop iteration.
+    let worker_client = build_client(&ClientConfig {
+        skip_tls_verify: config.skip_tls_verify,
+        resolve_target_addr: config.resolve_target_addr.clone(),
+        client_cert_path: None,
+        client_key_path: None,
+        custom_headers: None,
+        pool_config: None,
+        cookie_store: true,
+    })
+    .map(|r| r.client)
+    .unwrap_or_else(|e| {
+        error!(error = %e, "Failed to build scenario worker client; falling back to default");
+        reqwest::Client::new()
+    });
 
     loop {
         time::sleep_until(next_fire).await;
@@ -444,20 +465,14 @@ pub async fn run_scenario_worker(
             next_fire += Duration::from_millis(cycle_ms);
         } else if current_target_sps == 0.0 {
             next_fire = now + Duration::from_secs(3600);
+            // rps=0 means idle standby — skip scenario execution entirely and wait for the next cycle.
+            continue;
         }
 
-        // Create new cookie-enabled client for this virtual user
-        // This ensures cookie isolation between scenario executions
-        let client = reqwest::Client::builder()
-            .cookie_store(true) // Enable automatic cookie management
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
-
-        // Create executor with isolated client
+        // Create executor with the worker's configured client
         let executor = ScenarioExecutor::new(
             config.base_url.clone(),
-            client,
+            worker_client.clone(),
             config.node_id.clone(),
             config.run_id.clone(),
         );

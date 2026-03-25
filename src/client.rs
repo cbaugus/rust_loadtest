@@ -15,6 +15,8 @@ pub struct ClientConfig {
     pub client_key_path: Option<String>,
     pub custom_headers: Option<String>,
     pub pool_config: Option<PoolConfig>,
+    /// Enable per-request cookie jar (required for scenario session isolation).
+    pub cookie_store: bool,
 }
 
 /// Result of building the client, includes parsed headers for logging.
@@ -59,6 +61,11 @@ pub fn build_client(
         "Connection pool configured: max_idle_per_host={}, idle_timeout={:?}",
         pool_config.max_idle_per_host, pool_config.idle_timeout
     );
+
+    // Cookie store for session isolation (scenario workers)
+    if config.cookie_store {
+        client_builder = client_builder.cookie_store(true);
+    }
 
     // Build client with TLS settings
     let client = if config.skip_tls_verify {
