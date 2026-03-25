@@ -714,12 +714,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Startup standby config: fallback when a test YAML has no `standby:` block.
     // Nodes auto-revert to their startup state (typically TARGET_RPS=0) after a test ends.
     let startup_standby: Arc<StandbyRunConfig> = Arc::new(StandbyRunConfig {
-        workers: config.num_concurrent_tasks,
-        rps: if let LoadModel::Rps { target_rps } = &config.load_model {
-            *target_rps
-        } else {
-            0.0
-        },
+        workers: 2,
+        rps: 0.0,
         url: config.target_url.clone(),
         request_type: config.request_type.clone(),
         send_json: config.send_json,
@@ -1474,7 +1470,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         (None, None, None)
                     };
                     (
-                        remaining as i64,
+                        (remaining as i64).max(0),
                         ts.yaml.clone(),
                         ts.node_state.to_string(),
                         started_at,

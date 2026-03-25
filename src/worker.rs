@@ -142,6 +142,8 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             // immediately next iteration (Concurrent) or we set a long pause (0 RPS).
             if current_target_rps == 0.0 {
                 next_fire = now + Duration::from_secs(3600);
+                // rps=0 means idle standby — skip request entirely and wait for the next cycle.
+                continue;
             }
             // For Concurrent (f64::MAX), next_fire stays in the past → fires immediately.
         }
@@ -444,6 +446,8 @@ pub async fn run_scenario_worker(
             next_fire += Duration::from_millis(cycle_ms);
         } else if current_target_sps == 0.0 {
             next_fire = now + Duration::from_secs(3600);
+            // rps=0 means idle standby — skip scenario execution entirely and wait for the next cycle.
+            continue;
         }
 
         // Create new cookie-enabled client for this virtual user
