@@ -44,14 +44,15 @@ async fn test_scenario_worker_respects_duration() {
         tenant: String::new(),
         node_id: "test-node".to_string(),
         run_id: "run-0".to_string(),
+        skip_tls_verify: false,
+        resolve_target_addr: None,
     };
 
-    let client = reqwest::Client::new();
     let start_time = Instant::now();
 
     // Run worker
     let worker_start = Instant::now();
-    run_scenario_worker(client, config, start_time).await;
+    run_scenario_worker(config, start_time).await;
     let worker_duration = worker_start.elapsed();
 
     // Worker should stop after ~2 seconds
@@ -98,12 +99,13 @@ async fn test_scenario_worker_constant_load() {
         tenant: String::new(),
         node_id: "test-node".to_string(),
         run_id: "run-0".to_string(),
+        skip_tls_verify: false,
+        resolve_target_addr: None,
     };
 
-    let client = reqwest::Client::new();
     let start_time = Instant::now();
 
-    run_scenario_worker(client, config, start_time).await;
+    run_scenario_worker(config, start_time).await;
 
     // Just verify it completes without panicking
     // Actual scenario count would need metrics tracking to verify
@@ -159,13 +161,14 @@ async fn test_scenario_worker_with_think_time() {
         tenant: String::new(),
         node_id: "test-node".to_string(),
         run_id: "run-0".to_string(),
+        skip_tls_verify: false,
+        resolve_target_addr: None,
     };
 
-    let client = reqwest::Client::new();
     let start_time = Instant::now();
 
     let worker_start = Instant::now();
-    run_scenario_worker(client, config, start_time).await;
+    run_scenario_worker(config, start_time).await;
     let worker_duration = worker_start.elapsed();
 
     // Should take at least 2 seconds (test duration)
