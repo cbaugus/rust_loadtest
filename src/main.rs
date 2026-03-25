@@ -1186,9 +1186,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                         node_id: node_id_for_watcher.clone(),
                                         run_id: new_run_id.clone(),
                                         skip_tls_verify: new_cfg.skip_tls_verify,
-                                        resolve_target_addr: new_cfg
-                                            .resolve_target_addr
-                                            .clone(),
+                                        resolve_target_addr: new_cfg.resolve_target_addr.clone(),
                                     };
                                     tokio::spawn(run_scenario_worker(sc, new_start))
                                 })
