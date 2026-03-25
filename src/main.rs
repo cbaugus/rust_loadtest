@@ -1116,6 +1116,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     "Config submitted via POST /config — draining worker pool"
                 );
 
+                // Bump generation first — invalidates any in-flight completion watcher
+                // so it exits at Check 2 rather than re-spawning standby workers on top
+                // of the workers we are about to start.
+                {
+                    let mut ts = test_state_for_watcher.lock().unwrap();
+                    ts.generation += 1;
+                }
                 // Signal graceful stop (workers exit after current request).
                 {
                     let state = pool_for_watcher.lock().await;
