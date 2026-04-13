@@ -5,6 +5,7 @@
 //! and metrics tracking.
 
 use crate::assertions;
+use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::extractor;
 use crate::metrics::{
     CONCURRENT_SCENARIOS, SCENARIO_ASSERTIONS_TOTAL, SCENARIO_DURATION_SECONDS,
@@ -347,6 +348,7 @@ impl ScenarioExecutor {
         let response_result = request_builder.send().await;
 
         let response_time_ms = step_start.elapsed().as_millis() as u64;
+        GLOBAL_POOL_STATS.record_request(response_time_ms);
 
         match response_result {
             Ok(response) => {

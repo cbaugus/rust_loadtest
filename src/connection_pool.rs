@@ -8,6 +8,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::debug;
 
+use crate::metrics::{
+    CONNECTION_POOL_LIKELY_NEW, CONNECTION_POOL_LIKELY_REUSED, CONNECTION_POOL_REQUESTS_TOTAL,
+    CONNECTION_POOL_REUSE_RATE,
+};
+
 /// Connection pool configuration.
 #[derive(Debug, Clone)]
 pub struct PoolConfig {
@@ -212,6 +217,7 @@ impl PoolStatsTracker {
         let mut stats = self.stats.lock().unwrap();
 
         stats.total_requests += 1;
+        CONNECTION_POOL_REQUESTS_TOTAL.inc();
 
         // Track timing
         if stats.first_request.is_none() {
@@ -224,6 +230,7 @@ impl PoolStatsTracker {
         // Slow requests likely established new connections (TLS handshake adds ~50-100ms)
         if latency_ms >= self.new_connection_threshold_ms {
             stats.likely_new_connections += 1;
+            CONNECTION_POOL_LIKELY_NEW.inc();
             debug!(
                 latency_ms = latency_ms,
                 threshold = self.new_connection_threshold_ms,
@@ -231,12 +238,17 @@ impl PoolStatsTracker {
             );
         } else {
             stats.likely_reused_connections += 1;
+            CONNECTION_POOL_LIKELY_REUSED.inc();
             debug!(
                 latency_ms = latency_ms,
                 threshold = self.new_connection_threshold_ms,
                 "Request latency suggests reused connection"
             );
         }
+
+        // Update reuse rate gauge
+        let reuse_rate = stats.reuse_rate();
+        CONNECTION_POOL_REUSE_RATE.set(reuse_rate);
     }
 
     /// Get current connection statistics.
