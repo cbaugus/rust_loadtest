@@ -237,11 +237,17 @@ impl PoolStatsTracker {
         if latency_ms >= threshold {
             stats.likely_new_connections += 1;
             CONNECTION_POOL_LIKELY_NEW.inc();
-            debug!(latency_ms, threshold, "Request latency suggests new connection");
+            debug!(
+                latency_ms,
+                threshold, "Request latency suggests new connection"
+            );
         } else {
             stats.likely_reused_connections += 1;
             CONNECTION_POOL_LIKELY_REUSED.inc();
-            debug!(latency_ms, threshold, "Request latency suggests reused connection");
+            debug!(
+                latency_ms,
+                threshold, "Request latency suggests reused connection"
+            );
         }
 
         // Update reuse rate gauge

@@ -238,7 +238,11 @@ impl Config {
 
         let (pool_max_idle_per_host, pool_idle_timeout_secs, pool_new_connection_threshold_ms) =
             match &yaml_config.config.pool {
-                Some(p) => (p.max_idle_per_host, p.idle_timeout_secs, p.new_connection_threshold_ms),
+                Some(p) => (
+                    p.max_idle_per_host,
+                    p.idle_timeout_secs,
+                    p.new_connection_threshold_ms,
+                ),
                 None => (None, None, None),
             };
 
@@ -335,7 +339,11 @@ impl Config {
 
         let (pool_max_idle_per_host, pool_idle_timeout_secs, pool_new_connection_threshold_ms) =
             match &yaml_config.config.pool {
-                Some(p) => (p.max_idle_per_host, p.idle_timeout_secs, p.new_connection_threshold_ms),
+                Some(p) => (
+                    p.max_idle_per_host,
+                    p.idle_timeout_secs,
+                    p.new_connection_threshold_ms,
+                ),
                 None => (None, None, None),
             };
 
