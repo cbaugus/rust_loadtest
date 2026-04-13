@@ -99,6 +99,25 @@ pub struct YamlGlobalConfig {
     /// Equivalent to the RESOLVE_TARGET_ADDR env var; env var takes precedence.
     #[serde(rename = "resolveTargetAddr")]
     pub resolve_target_addr: Option<String>,
+
+    /// Connection pool settings.  When omitted the pool uses env-var defaults
+    /// (`POOL_MAX_IDLE_PER_HOST`, `POOL_IDLE_TIMEOUT_SECS`).
+    #[serde(default)]
+    pub pool: Option<YamlPoolConfig>,
+}
+
+/// Connection pool tuning exposed via YAML.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct YamlPoolConfig {
+    /// Maximum idle connections kept per host (default: 32).
+    /// Set to 0 to force a new connection for every request.
+    #[serde(rename = "maxIdlePerHost")]
+    pub max_idle_per_host: Option<usize>,
+
+    /// Seconds an idle connection stays in the pool before cleanup (default: 30).
+    /// Set to 0 to immediately close connections after each request.
+    #[serde(rename = "idleTimeoutSecs")]
+    pub idle_timeout_secs: Option<u64>,
 }
 
 fn default_timeout() -> YamlDuration {
@@ -723,6 +742,7 @@ impl Default for YamlConfig {
                 skip_tls_verify: false,
                 custom_headers: None,
                 resolve_target_addr: None,
+                pool: None,
             },
             load: YamlLoadModel::Concurrent,
             scenarios: vec![],

@@ -96,6 +96,11 @@ pub struct Config {
 
     // Cluster configuration (Issue #45)
     pub cluster: ClusterConfig,
+
+    // Connection pool overrides from YAML (Issue #114).
+    // When Some, these override env-var defaults when building the HTTP client.
+    pub pool_max_idle_per_host: Option<usize>,
+    pub pool_idle_timeout_secs: Option<u64>,
 }
 
 /// Helper to get a required environment variable.
@@ -230,6 +235,11 @@ impl Config {
         let auto_disable_percentiles_on_warning =
             env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
+        let (pool_max_idle_per_host, pool_idle_timeout_secs) = match &yaml_config.config.pool {
+            Some(p) => (p.max_idle_per_host, p.idle_timeout_secs),
+            None => (None, None),
+        };
+
         let config = Config {
             target_url,
             request_type,
@@ -251,6 +261,8 @@ impl Config {
             memory_critical_threshold_percent,
             auto_disable_percentiles_on_warning,
             cluster: ClusterConfig::from_env(),
+            pool_max_idle_per_host,
+            pool_idle_timeout_secs,
         };
 
         config.validate()?;
@@ -318,6 +330,11 @@ impl Config {
         let auto_disable_percentiles_on_warning =
             env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
+        let (pool_max_idle_per_host, pool_idle_timeout_secs) = match &yaml_config.config.pool {
+            Some(p) => (p.max_idle_per_host, p.idle_timeout_secs),
+            None => (None, None),
+        };
+
         let config = Config {
             target_url,
             request_type,
@@ -339,6 +356,8 @@ impl Config {
             memory_critical_threshold_percent,
             auto_disable_percentiles_on_warning,
             cluster: ClusterConfig::from_env(),
+            pool_max_idle_per_host,
+            pool_idle_timeout_secs,
         };
 
         config.validate()?;
@@ -504,6 +523,8 @@ impl Config {
             memory_critical_threshold_percent,
             auto_disable_percentiles_on_warning,
             cluster: ClusterConfig::from_env(),
+            pool_max_idle_per_host: None,
+            pool_idle_timeout_secs: None,
         };
 
         config.validate()?;
@@ -707,18 +728,27 @@ impl Config {
             memory_critical_threshold_percent: 90.0,
             auto_disable_percentiles_on_warning: true,
             cluster: ClusterConfig::for_testing(),
+            pool_max_idle_per_host: None,
+            pool_idle_timeout_secs: None,
         }
     }
 
     /// Creates a ClientConfig from this Config.
     pub fn to_client_config(&self) -> ClientConfig {
+        let mut pool = crate::connection_pool::PoolConfig::from_env();
+        if let Some(v) = self.pool_max_idle_per_host {
+            pool.max_idle_per_host = v;
+        }
+        if let Some(v) = self.pool_idle_timeout_secs {
+            pool.idle_timeout = Duration::from_secs(v);
+        }
         ClientConfig {
             skip_tls_verify: self.skip_tls_verify,
             resolve_target_addr: self.resolve_target_addr.clone(),
             client_cert_path: self.client_cert_path.clone(),
             client_key_path: self.client_key_path.clone(),
             custom_headers: self.custom_headers.clone(),
-            pool_config: Some(crate::connection_pool::PoolConfig::from_env()),
+            pool_config: Some(pool),
             cookie_store: false,
         }
     }
