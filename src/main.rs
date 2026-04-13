@@ -1137,7 +1137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 }
 
                 // Apply pool stats threshold from YAML and reset counters for new test.
-                if let Some(threshold_ms) = new_cfg.pool_new_connection_threshold_ms {
+                if let Some(threshold_ms) = new_cfg.pool_metrics_reuse_threshold_ms {
                     GLOBAL_POOL_STATS.set_threshold_ms(threshold_ms);
                 }
                 GLOBAL_POOL_STATS.reset();

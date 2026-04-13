@@ -101,7 +101,7 @@ pub struct Config {
     // When Some, these override env-var defaults when building the HTTP client.
     pub pool_max_idle_per_host: Option<usize>,
     pub pool_idle_timeout_secs: Option<u64>,
-    pub pool_new_connection_threshold_ms: Option<u64>,
+    pub pool_metrics_reuse_threshold_ms: Option<u64>,
 }
 
 /// Helper to get a required environment variable.
@@ -241,7 +241,7 @@ impl Config {
                 Some(p) => (
                     p.max_idle_per_host,
                     p.idle_timeout_secs,
-                    p.new_connection_threshold_ms,
+                    p.metrics_reuse_threshold_ms,
                 ),
                 None => (None, None, None),
             };
@@ -269,7 +269,7 @@ impl Config {
             cluster: ClusterConfig::from_env(),
             pool_max_idle_per_host,
             pool_idle_timeout_secs,
-            pool_new_connection_threshold_ms,
+            pool_metrics_reuse_threshold_ms,
         };
 
         config.validate()?;
@@ -342,7 +342,7 @@ impl Config {
                 Some(p) => (
                     p.max_idle_per_host,
                     p.idle_timeout_secs,
-                    p.new_connection_threshold_ms,
+                    p.metrics_reuse_threshold_ms,
                 ),
                 None => (None, None, None),
             };
@@ -370,7 +370,7 @@ impl Config {
             cluster: ClusterConfig::from_env(),
             pool_max_idle_per_host,
             pool_idle_timeout_secs,
-            pool_new_connection_threshold_ms,
+            pool_metrics_reuse_threshold_ms,
         };
 
         config.validate()?;
@@ -538,7 +538,7 @@ impl Config {
             cluster: ClusterConfig::from_env(),
             pool_max_idle_per_host: None,
             pool_idle_timeout_secs: None,
-            pool_new_connection_threshold_ms: None,
+            pool_metrics_reuse_threshold_ms: None,
         };
 
         config.validate()?;
@@ -744,7 +744,7 @@ impl Config {
             cluster: ClusterConfig::for_testing(),
             pool_max_idle_per_host: None,
             pool_idle_timeout_secs: None,
-            pool_new_connection_threshold_ms: None,
+            pool_metrics_reuse_threshold_ms: None,
         }
     }
 
