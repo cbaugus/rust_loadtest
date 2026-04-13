@@ -236,7 +236,7 @@ impl Config {
         let auto_disable_percentiles_on_warning =
             env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
-        let (pool_max_idle_per_host, pool_idle_timeout_secs, pool_new_connection_threshold_ms) =
+        let (pool_max_idle_per_host, pool_idle_timeout_secs, pool_metrics_reuse_threshold_ms) =
             match &yaml_config.config.pool {
                 Some(p) => (
                     p.max_idle_per_host,
@@ -337,7 +337,7 @@ impl Config {
         let auto_disable_percentiles_on_warning =
             env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
-        let (pool_max_idle_per_host, pool_idle_timeout_secs, pool_new_connection_threshold_ms) =
+        let (pool_max_idle_per_host, pool_idle_timeout_secs, pool_metrics_reuse_threshold_ms) =
             match &yaml_config.config.pool {
                 Some(p) => (
                     p.max_idle_per_host,
