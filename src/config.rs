@@ -235,11 +235,10 @@ impl Config {
         let auto_disable_percentiles_on_warning =
             env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
-        let (pool_max_idle_per_host, pool_idle_timeout_secs) =
-            match &yaml_config.config.pool {
-                Some(p) => (p.max_idle_per_host, p.idle_timeout_secs),
-                None => (None, None),
-            };
+        let (pool_max_idle_per_host, pool_idle_timeout_secs) = match &yaml_config.config.pool {
+            Some(p) => (p.max_idle_per_host, p.idle_timeout_secs),
+            None => (None, None),
+        };
 
         let config = Config {
             target_url,
@@ -331,11 +330,10 @@ impl Config {
         let auto_disable_percentiles_on_warning =
             env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
-        let (pool_max_idle_per_host, pool_idle_timeout_secs) =
-            match &yaml_config.config.pool {
-                Some(p) => (p.max_idle_per_host, p.idle_timeout_secs),
-                None => (None, None),
-            };
+        let (pool_max_idle_per_host, pool_idle_timeout_secs) = match &yaml_config.config.pool {
+            Some(p) => (p.max_idle_per_host, p.idle_timeout_secs),
+            None => (None, None),
+        };
 
         let config = Config {
             target_url,
