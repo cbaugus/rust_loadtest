@@ -1136,6 +1136,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     h.abort();
                 }
 
+                // Apply pool stats threshold from YAML and reset counters for new test.
+                if let Some(threshold_ms) = new_cfg.pool_metrics_reuse_threshold_ms {
+                    GLOBAL_POOL_STATS.set_threshold_ms(threshold_ms);
+                }
+                GLOBAL_POOL_STATS.reset();
+
                 // Rebuild HTTP client in case TLS/pool config changed.
                 let new_client =
                     match rust_loadtest::client::build_client(&new_cfg.to_client_config()) {

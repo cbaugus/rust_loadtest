@@ -191,7 +191,7 @@ pub struct PoolStatsTracker {
 
     /// Threshold for considering a connection "likely new" (milliseconds)
     /// Requests slower than this are likely establishing new connections
-    new_connection_threshold_ms: u64,
+    new_connection_threshold_ms: Arc<Mutex<u64>>,
 }
 
 impl PoolStatsTracker {
@@ -203,8 +203,13 @@ impl PoolStatsTracker {
     pub fn new(new_connection_threshold_ms: u64) -> Self {
         Self {
             stats: Arc::new(Mutex::new(ConnectionStats::default())),
-            new_connection_threshold_ms,
+            new_connection_threshold_ms: Arc::new(Mutex::new(new_connection_threshold_ms)),
         }
+    }
+
+    /// Update the latency threshold used to classify new vs reused connections.
+    pub fn set_threshold_ms(&self, threshold_ms: u64) {
+        *self.new_connection_threshold_ms.lock().unwrap() = threshold_ms;
     }
 
     /// Record a request with timing information.
@@ -214,6 +219,7 @@ impl PoolStatsTracker {
     /// may have established a new connection (including TLS handshake).
     pub fn record_request(&self, latency_ms: u64) {
         let now = Instant::now();
+        let threshold = *self.new_connection_threshold_ms.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
 
         stats.total_requests += 1;
@@ -228,21 +234,19 @@ impl PoolStatsTracker {
         // Infer connection type based on latency
         // Fast requests (<threshold) likely reused connections
         // Slow requests likely established new connections (TLS handshake adds ~50-100ms)
-        if latency_ms >= self.new_connection_threshold_ms {
+        if latency_ms >= threshold {
             stats.likely_new_connections += 1;
             CONNECTION_POOL_LIKELY_NEW.inc();
             debug!(
-                latency_ms = latency_ms,
-                threshold = self.new_connection_threshold_ms,
-                "Request latency suggests new connection"
+                latency_ms,
+                threshold, "Request latency suggests new connection"
             );
         } else {
             stats.likely_reused_connections += 1;
             CONNECTION_POOL_LIKELY_REUSED.inc();
             debug!(
-                latency_ms = latency_ms,
-                threshold = self.new_connection_threshold_ms,
-                "Request latency suggests reused connection"
+                latency_ms,
+                threshold, "Request latency suggests reused connection"
             );
         }
 
