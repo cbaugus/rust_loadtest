@@ -263,7 +263,6 @@ impl Config {
             cluster: ClusterConfig::from_env(),
             pool_max_idle_per_host,
             pool_idle_timeout_secs,
-
         };
 
         config.validate()?;
@@ -359,7 +358,6 @@ impl Config {
             cluster: ClusterConfig::from_env(),
             pool_max_idle_per_host,
             pool_idle_timeout_secs,
-
         };
 
         config.validate()?;
@@ -527,7 +525,6 @@ impl Config {
             cluster: ClusterConfig::from_env(),
             pool_max_idle_per_host: None,
             pool_idle_timeout_secs: None,
-
         };
 
         config.validate()?;
@@ -733,7 +730,6 @@ impl Config {
             cluster: ClusterConfig::for_testing(),
             pool_max_idle_per_host: None,
             pool_idle_timeout_secs: None,
-
         }
     }
 

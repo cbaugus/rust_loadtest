@@ -7,13 +7,13 @@
 use crate::assertions;
 use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::extractor;
-use hyper_util::client::legacy::connect::HttpInfo;
 use crate::metrics::{
     CONCURRENT_SCENARIOS, SCENARIO_ASSERTIONS_TOTAL, SCENARIO_DURATION_SECONDS,
     SCENARIO_EXECUTIONS_TOTAL, SCENARIO_STEPS_TOTAL, SCENARIO_STEP_DURATION_SECONDS,
     SCENARIO_STEP_STATUS_CODES,
 };
 use crate::scenario::{Scenario, ScenarioContext, Step};
+use hyper_util::client::legacy::connect::HttpInfo;
 use rand::Rng;
 use std::collections::HashMap;
 use std::time::Instant;

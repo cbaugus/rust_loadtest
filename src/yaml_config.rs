@@ -118,7 +118,6 @@ pub struct YamlPoolConfig {
     /// Set to 0 to immediately close connections after each request.
     #[serde(rename = "idleTimeoutSecs")]
     pub idle_timeout_secs: Option<u64>,
-
 }
 
 fn default_timeout() -> YamlDuration {

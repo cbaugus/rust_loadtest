@@ -23,7 +23,6 @@ fn should_sample(rate: u8) -> bool {
 use crate::client::{build_client, ClientConfig};
 use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::errors::ErrorCategory;
-use hyper_util::client::legacy::connect::HttpInfo;
 use crate::executor::{ScenarioExecutor, SessionStore};
 use crate::load_models::LoadModel;
 use crate::memory_guard::is_percentile_tracking_active;
@@ -36,6 +35,7 @@ use crate::percentiles::{
 };
 use crate::scenario::{Scenario, ScenarioContext};
 use crate::throughput::GLOBAL_THROUGHPUT_TRACKER;
+use hyper_util::client::legacy::connect::HttpInfo;
 
 /// Configuration for a worker task.
 pub struct WorkerConfig {

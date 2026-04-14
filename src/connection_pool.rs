@@ -231,10 +231,7 @@ impl PoolStatsTracker {
             } else {
                 stats.reused_connections += 1;
                 CONNECTION_POOL_REUSED_TOTAL.inc();
-                debug!(
-                    local_port = port,
-                    "Reused TCP connection (seen local port)"
-                );
+                debug!(local_port = port, "Reused TCP connection (seen local port)");
             }
             CONNECTION_POOL_REUSE_RATE.set(stats.reuse_rate());
         }
