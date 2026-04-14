@@ -235,8 +235,7 @@ fn test_pool_stats_concurrent_access() {
     for thread_id in 0..5u16 {
         let tracker_clone = Arc::clone(&tracker);
         let handle = thread::spawn(move || {
-            let addr: SocketAddr =
-                format!("127.0.0.1:{}", 50000 + thread_id).parse().unwrap();
+            let addr: SocketAddr = format!("127.0.0.1:{}", 50000 + thread_id).parse().unwrap();
             for _ in 0..20 {
                 tracker_clone.record_request(Some(addr));
             }
