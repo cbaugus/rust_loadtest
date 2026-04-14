@@ -35,6 +35,7 @@ use crate::percentiles::{
 };
 use crate::scenario::{Scenario, ScenarioContext};
 use crate::throughput::GLOBAL_THROUGHPUT_TRACKER;
+use hyper_util::client::legacy::connect::HttpInfo;
 
 /// Configuration for a worker task.
 pub struct WorkerConfig {
@@ -172,8 +173,14 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         // Build and send request
         let req = build_request(&client, &config);
 
+        let mut local_addr = None;
         match req.send().await {
             Ok(mut response) => {
+                local_addr = response
+                    .extensions()
+                    .get::<HttpInfo>()
+                    .map(|info| info.local_addr());
+
                 let status = response.status().as_u16();
                 // Use static strings to avoid a heap allocation on every request
                 let status_str = status_code_label(status);
@@ -276,8 +283,8 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             GLOBAL_REQUEST_PERCENTILES.record_ms(actual_latency_ms);
         }
 
-        // Record connection pool statistics (Issue #36)
-        GLOBAL_POOL_STATS.record_request(actual_latency_ms);
+        // Record connection pool statistics (Issue #36, #119)
+        GLOBAL_POOL_STATS.record_request(local_addr);
 
         // No explicit sleep here — sleep_until(next_fire) at the top of the next
         // iteration handles all timing with sub-millisecond precision.

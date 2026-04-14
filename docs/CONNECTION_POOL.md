@@ -52,14 +52,12 @@ config:
   pool:
     maxIdlePerHost: 32
     idleTimeoutSecs: 30
-    metricsReuseThresholdMs: 100
 ```
 
-| Field                    | Default | Description                                      |
-|--------------------------|---------|--------------------------------------------------|
-| `maxIdlePerHost`         | `32`    | Max idle connections per host. Set to `0` to disable pooling. |
-| `idleTimeoutSecs`        | `30`    | Seconds before idle connections are closed. Set to `0` to close immediately. |
-| `metricsReuseThresholdMs`| `100`   | Latency threshold (ms) for the Prometheus metrics heuristic. Does **not** affect actual connection behavior — only how metrics classify requests as "new" vs "reused". |
+| Field            | Default | Description                                                          |
+|------------------|---------|----------------------------------------------------------------------|
+| `maxIdlePerHost` | `32`    | Max idle connections per host. Set to `0` to disable pooling.        |
+| `idleTimeoutSecs`| `30`    | Seconds before idle connections are closed. Set to `0` to close immediately. |
 
 ## Use Case: Force New Connection Per Request
 
@@ -180,41 +178,29 @@ will transparently open a new connection when this happens.
 
 ## Monitoring Connection Reuse
 
-Prometheus metrics are available on port 9090:
+Prometheus metrics are available on port 9090. Connection tracking uses
+**local TCP port comparison** — each response's local socket address is
+checked. A new local port means a new TCP connection was established.
+Same port means the connection was reused from the pool. This is
+deterministic and accurate at any RPS.
 
-| Metric                                  | Type       | Description                              |
-|-----------------------------------------|------------|------------------------------------------|
-| `connection_pool_likely_new_total`      | Counter    | Requests classified as new connections   |
-| `connection_pool_likely_reused_total`   | Counter    | Requests classified as reused connections|
-| `connection_pool_reuse_rate_percent`    | Gauge      | Current reuse percentage                 |
-| `connection_pool_requests_total`        | Counter    | Total requests tracked                   |
-| `connection_pool_max_idle_per_host`     | Gauge      | Configured max idle setting              |
-| `connection_pool_idle_timeout_seconds`  | Gauge      | Configured idle timeout setting          |
-
-### Important: Metrics Are Heuristic-Based
-
-The "new" vs "reused" classification uses a **latency heuristic**, not actual
-connection state (reqwest does not expose this). Requests slower than
-`metricsReuseThresholdMs` (default: 100ms) are classified as "likely new
-connection" because a TLS handshake typically adds 50-150ms.
-
-This means:
-
-- Fast targets where TLS completes in <100ms will **undercount** new connections
-- Slow targets where reused requests take >100ms will **overcount** new connections
-
-Tune `metricsReuseThresholdMs` in the YAML to match your target's typical TLS
-handshake time for more accurate classification. For definitive connection
-tracking, check server-side access logs.
+| Metric                              | Type    | Description                              |
+|-------------------------------------|---------|------------------------------------------|
+| `connection_pool_new_total`         | Counter | Requests that used a new TCP connection  |
+| `connection_pool_reused_total`      | Counter | Requests that reused a pooled connection |
+| `connection_pool_reuse_rate_percent`| Gauge   | Current reuse percentage                 |
+| `connection_pool_requests_total`    | Counter | Total requests tracked                   |
+| `connection_pool_max_idle_per_host` | Gauge   | Configured max idle setting              |
+| `connection_pool_idle_timeout_seconds`| Gauge | Configured idle timeout setting          |
 
 ### Grafana Queries
 
 **New vs reused connections over time (time series panel):**
 
-| Query                                           | Legend   |
-|-------------------------------------------------|----------|
-| `rate(connection_pool_likely_reused_total[1m])` | Reused   |
-| `rate(connection_pool_likely_new_total[1m])`    | New      |
+| Query                                      | Legend | Color |
+|--------------------------------------------|--------|-------|
+| `rate(connection_pool_reused_total[1m])`   | Reused | Green |
+| `rate(connection_pool_new_total[1m])`      | New    | Red   |
 
 **Reuse rate (single stat panel):**
 
@@ -225,5 +211,5 @@ connection_pool_reuse_rate_percent
 **Percentage of new connections (single stat panel):**
 
 ```promql
-connection_pool_likely_new_total / connection_pool_requests_total * 100
+connection_pool_new_total / connection_pool_requests_total * 100
 ```
