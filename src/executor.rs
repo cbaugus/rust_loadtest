@@ -13,6 +13,7 @@ use crate::metrics::{
     SCENARIO_STEP_STATUS_CODES,
 };
 use crate::scenario::{Scenario, ScenarioContext, Step};
+use hyper_util::client::legacy::connect::HttpInfo;
 use rand::Rng;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -348,10 +349,15 @@ impl ScenarioExecutor {
         let response_result = request_builder.send().await;
 
         let response_time_ms = step_start.elapsed().as_millis() as u64;
-        GLOBAL_POOL_STATS.record_request(response_time_ms);
 
         match response_result {
             Ok(response) => {
+                let local_addr = response
+                    .extensions()
+                    .get::<HttpInfo>()
+                    .map(|info| info.local_addr());
+                GLOBAL_POOL_STATS.record_request(local_addr);
+
                 let status = response.status();
                 let headers = response.headers().clone();
 
@@ -569,6 +575,7 @@ impl ScenarioExecutor {
                 }
             }
             Err(e) => {
+                GLOBAL_POOL_STATS.record_request(None);
                 error!(
                     step = %step.name,
                     error = %e,

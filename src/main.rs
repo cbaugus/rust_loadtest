@@ -175,9 +175,8 @@ fn print_pool_report() {
             info!("     Check: pool configuration, connection timeouts, load patterns.");
         }
 
-        info!("\nNote: Connection classification is based on latency patterns:");
-        info!("  - Fast requests (<100ms) likely reused pooled connections");
-        info!("  - Slow requests (≥100ms) likely established new connections (TLS handshake)");
+        info!("\nNote: Connection classification is based on local TCP port tracking.");
+        info!("  A new local port = new TCP connection. Same port = reused.");
     } else {
         info!("\nNo connection pool data collected.\n");
     }
@@ -1136,10 +1135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     h.abort();
                 }
 
-                // Apply pool stats threshold from YAML and reset counters for new test.
-                if let Some(threshold_ms) = new_cfg.pool_metrics_reuse_threshold_ms {
-                    GLOBAL_POOL_STATS.set_threshold_ms(threshold_ms);
-                }
+                // Reset pool stats counters for new test.
                 GLOBAL_POOL_STATS.reset();
 
                 // Rebuild HTTP client in case TLS/pool config changed.

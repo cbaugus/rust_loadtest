@@ -142,21 +142,21 @@ lazy_static::lazy_static! {
                 .namespace(METRIC_NAMESPACE.as_str())
         ).unwrap();
 
-    pub static ref CONNECTION_POOL_LIKELY_REUSED: IntCounter =
+    pub static ref CONNECTION_POOL_NEW_TOTAL: IntCounter =
         IntCounter::with_opts(
-            Opts::new("connection_pool_likely_reused_total", "Requests that likely reused existing connections")
+            Opts::new("connection_pool_new_total", "Requests that used a new TCP connection (by local port)")
                 .namespace(METRIC_NAMESPACE.as_str())
         ).unwrap();
 
-    pub static ref CONNECTION_POOL_LIKELY_NEW: IntCounter =
+    pub static ref CONNECTION_POOL_REUSED_TOTAL: IntCounter =
         IntCounter::with_opts(
-            Opts::new("connection_pool_likely_new_total", "Requests that likely established new connections")
+            Opts::new("connection_pool_reused_total", "Requests that reused an existing TCP connection (by local port)")
                 .namespace(METRIC_NAMESPACE.as_str())
         ).unwrap();
 
     pub static ref CONNECTION_POOL_REUSE_RATE: Gauge =
         Gauge::with_opts(
-            Opts::new("connection_pool_reuse_rate_percent", "Percentage of requests reusing connections")
+            Opts::new("connection_pool_reuse_rate_percent", "Accurate reuse percentage based on local port tracking")
                 .namespace(METRIC_NAMESPACE.as_str())
         ).unwrap();
 
@@ -295,8 +295,8 @@ pub fn register_metrics() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     prometheus::default_registry()
         .register(Box::new(CONNECTION_POOL_IDLE_TIMEOUT_SECONDS.clone()))?;
     prometheus::default_registry().register(Box::new(CONNECTION_POOL_REQUESTS_TOTAL.clone()))?;
-    prometheus::default_registry().register(Box::new(CONNECTION_POOL_LIKELY_REUSED.clone()))?;
-    prometheus::default_registry().register(Box::new(CONNECTION_POOL_LIKELY_NEW.clone()))?;
+    prometheus::default_registry().register(Box::new(CONNECTION_POOL_NEW_TOTAL.clone()))?;
+    prometheus::default_registry().register(Box::new(CONNECTION_POOL_REUSED_TOTAL.clone()))?;
     prometheus::default_registry().register(Box::new(CONNECTION_POOL_REUSE_RATE.clone()))?;
 
     // Memory usage metrics
