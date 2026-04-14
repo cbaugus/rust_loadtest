@@ -101,7 +101,6 @@ pub struct Config {
     // When Some, these override env-var defaults when building the HTTP client.
     pub pool_max_idle_per_host: Option<usize>,
     pub pool_idle_timeout_secs: Option<u64>,
-    pub pool_metrics_reuse_threshold_ms: Option<u64>,
 }
 
 /// Helper to get a required environment variable.
@@ -236,15 +235,10 @@ impl Config {
         let auto_disable_percentiles_on_warning =
             env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
-        let (pool_max_idle_per_host, pool_idle_timeout_secs, pool_metrics_reuse_threshold_ms) =
-            match &yaml_config.config.pool {
-                Some(p) => (
-                    p.max_idle_per_host,
-                    p.idle_timeout_secs,
-                    p.metrics_reuse_threshold_ms,
-                ),
-                None => (None, None, None),
-            };
+        let (pool_max_idle_per_host, pool_idle_timeout_secs) = match &yaml_config.config.pool {
+            Some(p) => (p.max_idle_per_host, p.idle_timeout_secs),
+            None => (None, None),
+        };
 
         let config = Config {
             target_url,
@@ -269,7 +263,7 @@ impl Config {
             cluster: ClusterConfig::from_env(),
             pool_max_idle_per_host,
             pool_idle_timeout_secs,
-            pool_metrics_reuse_threshold_ms,
+
         };
 
         config.validate()?;
@@ -337,15 +331,10 @@ impl Config {
         let auto_disable_percentiles_on_warning =
             env_bool("AUTO_DISABLE_PERCENTILES_ON_WARNING", true);
 
-        let (pool_max_idle_per_host, pool_idle_timeout_secs, pool_metrics_reuse_threshold_ms) =
-            match &yaml_config.config.pool {
-                Some(p) => (
-                    p.max_idle_per_host,
-                    p.idle_timeout_secs,
-                    p.metrics_reuse_threshold_ms,
-                ),
-                None => (None, None, None),
-            };
+        let (pool_max_idle_per_host, pool_idle_timeout_secs) = match &yaml_config.config.pool {
+            Some(p) => (p.max_idle_per_host, p.idle_timeout_secs),
+            None => (None, None),
+        };
 
         let config = Config {
             target_url,
@@ -370,7 +359,7 @@ impl Config {
             cluster: ClusterConfig::from_env(),
             pool_max_idle_per_host,
             pool_idle_timeout_secs,
-            pool_metrics_reuse_threshold_ms,
+
         };
 
         config.validate()?;
@@ -538,7 +527,7 @@ impl Config {
             cluster: ClusterConfig::from_env(),
             pool_max_idle_per_host: None,
             pool_idle_timeout_secs: None,
-            pool_metrics_reuse_threshold_ms: None,
+
         };
 
         config.validate()?;
@@ -744,7 +733,7 @@ impl Config {
             cluster: ClusterConfig::for_testing(),
             pool_max_idle_per_host: None,
             pool_idle_timeout_secs: None,
-            pool_metrics_reuse_threshold_ms: None,
+
         }
     }
 

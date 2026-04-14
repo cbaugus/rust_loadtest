@@ -1,15 +1,18 @@
 //! Connection pool configuration and monitoring.
 //!
-//! This module provides connection pool statistics tracking and configuration.
-//! Since reqwest doesn't expose internal pool metrics, we track connection
-//! behavior patterns and configuration to provide insights into pool utilization.
+//! Tracks connection reuse accurately using local TCP port comparison
+//! (Issue #119).  Each response's local SocketAddr is extracted from hyper's
+//! HttpInfo extension — a new local port means a new TCP connection, same
+//! port means the connection was reused from the pool.
 
+use std::collections::HashSet;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::debug;
 
 use crate::metrics::{
-    CONNECTION_POOL_LIKELY_NEW, CONNECTION_POOL_LIKELY_REUSED, CONNECTION_POOL_REQUESTS_TOTAL,
+    CONNECTION_POOL_NEW_TOTAL, CONNECTION_POOL_REQUESTS_TOTAL, CONNECTION_POOL_REUSED_TOTAL,
     CONNECTION_POOL_REUSE_RATE,
 };
 
@@ -36,10 +39,10 @@ impl Default for PoolConfig {
     fn default() -> Self {
         Self {
             max_idle_per_host: 32,
-            idle_timeout: Duration::from_secs(30), // Reduced from 90s to free kernel buffers sooner
+            idle_timeout: Duration::from_secs(30),
             tcp_keepalive: Some(Duration::from_secs(60)),
-            tcp_nodelay: true, // Disable Nagle for lower latency at high RPS
-            request_timeout: Duration::from_secs(30), // Prevent hung connections accumulating memory
+            tcp_nodelay: true,
+            request_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -129,11 +132,11 @@ pub struct ConnectionStats {
     /// Total requests made
     pub total_requests: u64,
 
-    /// Requests that likely used a new connection (slow initial handshake)
-    pub likely_new_connections: u64,
+    /// Requests that used a new TCP connection (by local port)
+    pub new_connections: u64,
 
-    /// Requests that likely reused a connection (fast, no TLS handshake)
-    pub likely_reused_connections: u64,
+    /// Requests that reused a pooled TCP connection (by local port)
+    pub reused_connections: u64,
 
     /// First request timestamp (for rate calculations)
     pub first_request: Option<Instant>,
@@ -145,18 +148,20 @@ pub struct ConnectionStats {
 impl ConnectionStats {
     /// Calculate the connection reuse rate.
     pub fn reuse_rate(&self) -> f64 {
-        if self.total_requests == 0 {
+        let tracked = self.new_connections + self.reused_connections;
+        if tracked == 0 {
             return 0.0;
         }
-        (self.likely_reused_connections as f64 / self.total_requests as f64) * 100.0
+        (self.reused_connections as f64 / tracked as f64) * 100.0
     }
 
     /// Calculate the new connection rate.
     pub fn new_connection_rate(&self) -> f64 {
-        if self.total_requests == 0 {
+        let tracked = self.new_connections + self.reused_connections;
+        if tracked == 0 {
             return 0.0;
         }
-        (self.likely_new_connections as f64 / self.total_requests as f64) * 100.0
+        (self.new_connections as f64 / tracked as f64) * 100.0
     }
 
     /// Get the duration over which requests were tracked.
@@ -172,9 +177,9 @@ impl ConnectionStats {
         format!(
             "Total: {}, Reused: {} ({:.1}%), New: {} ({:.1}%)",
             self.total_requests,
-            self.likely_reused_connections,
+            self.reused_connections,
             self.reuse_rate(),
-            self.likely_new_connections,
+            self.new_connections,
             self.new_connection_rate()
         )
     }
@@ -182,77 +187,57 @@ impl ConnectionStats {
 
 /// Tracker for connection pool statistics.
 ///
-/// This tracker monitors connection behavior patterns to provide insights
-/// into connection reuse. It uses timing heuristics to infer whether a
-/// connection was likely reused or newly established.
+/// Uses local TCP port tracking to deterministically identify new vs reused
+/// connections. A new local port = new TCP connection. Same port = reused.
 #[derive(Clone)]
 pub struct PoolStatsTracker {
     stats: Arc<Mutex<ConnectionStats>>,
-
-    /// Threshold for considering a connection "likely new" (milliseconds)
-    /// Requests slower than this are likely establishing new connections
-    new_connection_threshold_ms: Arc<Mutex<u64>>,
+    seen_ports: Arc<Mutex<HashSet<u16>>>,
 }
 
 impl PoolStatsTracker {
     /// Create a new pool statistics tracker.
-    ///
-    /// # Arguments
-    /// * `new_connection_threshold_ms` - Latency threshold (ms) above which we
-    ///   consider a connection likely new (includes TLS handshake time)
-    pub fn new(new_connection_threshold_ms: u64) -> Self {
+    pub fn new() -> Self {
         Self {
             stats: Arc::new(Mutex::new(ConnectionStats::default())),
-            new_connection_threshold_ms: Arc::new(Mutex::new(new_connection_threshold_ms)),
+            seen_ports: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
-    /// Update the latency threshold used to classify new vs reused connections.
-    pub fn set_threshold_ms(&self, threshold_ms: u64) {
-        *self.new_connection_threshold_ms.lock().unwrap() = threshold_ms;
-    }
-
-    /// Record a request with timing information.
+    /// Record a request with its local socket address for connection tracking.
     ///
-    /// Uses latency to infer connection reuse. Requests with very low latency
-    /// (<50ms typically) likely reused an existing connection. Slower requests
-    /// may have established a new connection (including TLS handshake).
-    pub fn record_request(&self, latency_ms: u64) {
+    /// `local_addr` is obtained from `response.extensions().get::<HttpInfo>()`.
+    /// When `None` (e.g. request failed before a connection was established),
+    /// only the total request counter is incremented.
+    pub fn record_request(&self, local_addr: Option<SocketAddr>) {
         let now = Instant::now();
-        let threshold = *self.new_connection_threshold_ms.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
 
         stats.total_requests += 1;
         CONNECTION_POOL_REQUESTS_TOTAL.inc();
 
-        // Track timing
         if stats.first_request.is_none() {
             stats.first_request = Some(now);
         }
         stats.last_request = Some(now);
 
-        // Infer connection type based on latency
-        // Fast requests (<threshold) likely reused connections
-        // Slow requests likely established new connections (TLS handshake adds ~50-100ms)
-        if latency_ms >= threshold {
-            stats.likely_new_connections += 1;
-            CONNECTION_POOL_LIKELY_NEW.inc();
-            debug!(
-                latency_ms,
-                threshold, "Request latency suggests new connection"
-            );
-        } else {
-            stats.likely_reused_connections += 1;
-            CONNECTION_POOL_LIKELY_REUSED.inc();
-            debug!(
-                latency_ms,
-                threshold, "Request latency suggests reused connection"
-            );
+        if let Some(addr) = local_addr {
+            let port = addr.port();
+            let mut ports = self.seen_ports.lock().unwrap();
+            if ports.insert(port) {
+                stats.new_connections += 1;
+                CONNECTION_POOL_NEW_TOTAL.inc();
+                debug!(local_port = port, "New TCP connection (new local port)");
+            } else {
+                stats.reused_connections += 1;
+                CONNECTION_POOL_REUSED_TOTAL.inc();
+                debug!(
+                    local_port = port,
+                    "Reused TCP connection (seen local port)"
+                );
+            }
+            CONNECTION_POOL_REUSE_RATE.set(stats.reuse_rate());
         }
-
-        // Update reuse rate gauge
-        let reuse_rate = stats.reuse_rate();
-        CONNECTION_POOL_REUSE_RATE.set(reuse_rate);
     }
 
     /// Get current connection statistics.
@@ -264,14 +249,14 @@ impl PoolStatsTracker {
     pub fn reset(&self) {
         let mut stats = self.stats.lock().unwrap();
         *stats = ConnectionStats::default();
+        let mut ports = self.seen_ports.lock().unwrap();
+        ports.clear();
     }
 }
 
 impl Default for PoolStatsTracker {
     fn default() -> Self {
-        // Default threshold of 100ms to distinguish new vs reused connections
-        // TLS handshake typically adds 50-150ms depending on network conditions
-        Self::new(100)
+        Self::new()
     }
 }
 
@@ -319,127 +304,130 @@ mod tests {
     fn test_connection_stats_rates() {
         let stats = ConnectionStats {
             total_requests: 100,
-            likely_new_connections: 20,
-            likely_reused_connections: 80,
+            new_connections: 10,
+            reused_connections: 90,
             first_request: Some(Instant::now()),
             last_request: Some(Instant::now()),
         };
 
-        assert_eq!(stats.reuse_rate(), 80.0);
-        assert_eq!(stats.new_connection_rate(), 20.0);
+        assert_eq!(stats.reuse_rate(), 90.0);
+        assert_eq!(stats.new_connection_rate(), 10.0);
     }
 
     #[test]
-    fn test_pool_stats_tracker_fast_requests() {
-        let tracker = PoolStatsTracker::new(100);
+    fn test_port_tracking_new_connections() {
+        let tracker = PoolStatsTracker::new();
 
-        // Simulate 10 fast requests (likely reused connections)
-        for _ in 0..10 {
-            tracker.record_request(20); // 20ms - fast
-        }
+        let addr1: SocketAddr = "127.0.0.1:50001".parse().unwrap();
+        let addr2: SocketAddr = "127.0.0.1:50002".parse().unwrap();
+        let addr3: SocketAddr = "127.0.0.1:50003".parse().unwrap();
+
+        tracker.record_request(Some(addr1));
+        tracker.record_request(Some(addr2));
+        tracker.record_request(Some(addr3));
 
         let stats = tracker.stats();
-        assert_eq!(stats.total_requests, 10);
-        assert_eq!(stats.likely_reused_connections, 10);
-        assert_eq!(stats.likely_new_connections, 0);
-        assert_eq!(stats.reuse_rate(), 100.0);
+        assert_eq!(stats.total_requests, 3);
+        assert_eq!(stats.new_connections, 3);
+        assert_eq!(stats.reused_connections, 0);
+        assert_eq!(stats.reuse_rate(), 0.0);
     }
 
     #[test]
-    fn test_pool_stats_tracker_slow_requests() {
-        let tracker = PoolStatsTracker::new(100);
+    fn test_port_tracking_reused_connections() {
+        let tracker = PoolStatsTracker::new();
 
-        // Simulate 10 slow requests (likely new connections)
-        for _ in 0..10 {
-            tracker.record_request(150); // 150ms - slow (includes TLS handshake)
-        }
+        let addr: SocketAddr = "127.0.0.1:50001".parse().unwrap();
+
+        tracker.record_request(Some(addr));
+        tracker.record_request(Some(addr));
+        tracker.record_request(Some(addr));
 
         let stats = tracker.stats();
-        assert_eq!(stats.total_requests, 10);
-        assert_eq!(stats.likely_reused_connections, 0);
-        assert_eq!(stats.likely_new_connections, 10);
-        assert_eq!(stats.new_connection_rate(), 100.0);
+        assert_eq!(stats.total_requests, 3);
+        assert_eq!(stats.new_connections, 1);
+        assert_eq!(stats.reused_connections, 2);
     }
 
     #[test]
-    fn test_pool_stats_tracker_mixed() {
-        let tracker = PoolStatsTracker::new(100);
+    fn test_port_tracking_mixed() {
+        let tracker = PoolStatsTracker::new();
 
-        // Simulate mixed requests
-        tracker.record_request(150); // New connection (slow)
-        tracker.record_request(30); // Reused (fast)
-        tracker.record_request(25); // Reused (fast)
-        tracker.record_request(120); // New connection (slow)
-        tracker.record_request(40); // Reused (fast)
+        let addr1: SocketAddr = "127.0.0.1:50001".parse().unwrap();
+        let addr2: SocketAddr = "127.0.0.1:50002".parse().unwrap();
+
+        tracker.record_request(Some(addr1)); // New
+        tracker.record_request(Some(addr1)); // Reused
+        tracker.record_request(Some(addr2)); // New
+        tracker.record_request(Some(addr1)); // Reused
+        tracker.record_request(Some(addr2)); // Reused
 
         let stats = tracker.stats();
-        assert_eq!(stats.total_requests, 5);
-        assert_eq!(stats.likely_reused_connections, 3);
-        assert_eq!(stats.likely_new_connections, 2);
+        assert_eq!(stats.new_connections, 2);
+        assert_eq!(stats.reused_connections, 3);
         assert_eq!(stats.reuse_rate(), 60.0);
-        assert_eq!(stats.new_connection_rate(), 40.0);
     }
 
     #[test]
-    fn test_pool_stats_tracker_reset() {
-        let tracker = PoolStatsTracker::new(100);
+    fn test_port_tracking_none_addr() {
+        let tracker = PoolStatsTracker::new();
 
-        tracker.record_request(50);
-        tracker.record_request(150);
+        tracker.record_request(None);
+        tracker.record_request(None);
 
         let stats = tracker.stats();
         assert_eq!(stats.total_requests, 2);
+        assert_eq!(stats.new_connections, 0);
+        assert_eq!(stats.reused_connections, 0);
+    }
+
+    #[test]
+    fn test_reset_clears_ports() {
+        let tracker = PoolStatsTracker::new();
+
+        let addr: SocketAddr = "127.0.0.1:50001".parse().unwrap();
+        tracker.record_request(Some(addr));
+        tracker.record_request(Some(addr));
+
+        assert_eq!(tracker.stats().new_connections, 1);
+        assert_eq!(tracker.stats().reused_connections, 1);
 
         tracker.reset();
 
-        let stats = tracker.stats();
-        assert_eq!(stats.total_requests, 0);
-        assert_eq!(stats.likely_reused_connections, 0);
-        assert_eq!(stats.likely_new_connections, 0);
+        tracker.record_request(Some(addr));
+        assert_eq!(tracker.stats().new_connections, 1);
+        assert_eq!(tracker.stats().reused_connections, 0);
     }
 
     #[test]
     fn test_connection_stats_format() {
         let stats = ConnectionStats {
             total_requests: 100,
-            likely_new_connections: 25,
-            likely_reused_connections: 75,
+            new_connections: 20,
+            reused_connections: 80,
             first_request: Some(Instant::now()),
             last_request: Some(Instant::now()),
         };
 
         let formatted = stats.format();
         assert!(formatted.contains("Total: 100"));
-        assert!(formatted.contains("Reused: 75"));
-        assert!(formatted.contains("75.0%"));
-        assert!(formatted.contains("New: 25"));
-        assert!(formatted.contains("25.0%"));
+        assert!(formatted.contains("Reused: 80"));
+        assert!(formatted.contains("80.0%"));
+        assert!(formatted.contains("New: 20"));
+        assert!(formatted.contains("20.0%"));
     }
 
     #[test]
     fn test_pool_stats_timing() {
-        let tracker = PoolStatsTracker::new(100);
+        let tracker = PoolStatsTracker::new();
 
-        tracker.record_request(50);
+        tracker.record_request(None);
         std::thread::sleep(Duration::from_millis(100));
-        tracker.record_request(50);
+        tracker.record_request(None);
 
         let stats = tracker.stats();
         let duration = stats.duration().unwrap();
-
         assert!(duration >= Duration::from_millis(100));
         assert!(duration < Duration::from_millis(200));
-    }
-
-    #[test]
-    fn test_custom_threshold() {
-        let tracker = PoolStatsTracker::new(200); // Higher threshold
-
-        tracker.record_request(150); // Under threshold - reused
-        tracker.record_request(250); // Over threshold - new
-
-        let stats = tracker.stats();
-        assert_eq!(stats.likely_reused_connections, 1);
-        assert_eq!(stats.likely_new_connections, 1);
     }
 }

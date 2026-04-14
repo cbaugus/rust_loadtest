@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 reqwest = { version = "0.12", features = ["json", "rustls-tls-native-roots", "cookies"], default-features = false } # Using rustls-tls-native-roots with cookie support
+hyper-util = "0.1" # For HttpInfo — accurate connection tracking (Issue #119)
 tokio = { version = "1", features = ["full"] } # "full" includes everything you need for async main
 prometheus = "0.13"
 hyper = { version = "0.14", features = ["full"] } # For the HTTP server

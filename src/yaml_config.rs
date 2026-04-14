@@ -119,12 +119,6 @@ pub struct YamlPoolConfig {
     #[serde(rename = "idleTimeoutSecs")]
     pub idle_timeout_secs: Option<u64>,
 
-    /// Latency threshold in milliseconds used by Prometheus metrics to classify
-    /// a request as a new connection vs a reused one (default: 100).  Requests
-    /// slower than this are counted as "likely new connection".  Does NOT affect
-    /// actual connection behavior — only the metrics heuristic.
-    #[serde(rename = "metricsReuseThresholdMs")]
-    pub metrics_reuse_threshold_ms: Option<u64>,
 }
 
 fn default_timeout() -> YamlDuration {

@@ -7,6 +7,7 @@
 use crate::assertions;
 use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::extractor;
+use hyper_util::client::legacy::connect::HttpInfo;
 use crate::metrics::{
     CONCURRENT_SCENARIOS, SCENARIO_ASSERTIONS_TOTAL, SCENARIO_DURATION_SECONDS,
     SCENARIO_EXECUTIONS_TOTAL, SCENARIO_STEPS_TOTAL, SCENARIO_STEP_DURATION_SECONDS,
@@ -348,10 +349,15 @@ impl ScenarioExecutor {
         let response_result = request_builder.send().await;
 
         let response_time_ms = step_start.elapsed().as_millis() as u64;
-        GLOBAL_POOL_STATS.record_request(response_time_ms);
 
         match response_result {
             Ok(response) => {
+                let local_addr = response
+                    .extensions()
+                    .get::<HttpInfo>()
+                    .map(|info| info.local_addr());
+                GLOBAL_POOL_STATS.record_request(local_addr);
+
                 let status = response.status();
                 let headers = response.headers().clone();
 
@@ -569,6 +575,7 @@ impl ScenarioExecutor {
                 }
             }
             Err(e) => {
+                GLOBAL_POOL_STATS.record_request(None);
                 error!(
                     step = %step.name,
                     error = %e,

@@ -23,6 +23,7 @@ fn should_sample(rate: u8) -> bool {
 use crate::client::{build_client, ClientConfig};
 use crate::connection_pool::GLOBAL_POOL_STATS;
 use crate::errors::ErrorCategory;
+use hyper_util::client::legacy::connect::HttpInfo;
 use crate::executor::{ScenarioExecutor, SessionStore};
 use crate::load_models::LoadModel;
 use crate::memory_guard::is_percentile_tracking_active;
@@ -172,8 +173,14 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
         // Build and send request
         let req = build_request(&client, &config);
 
+        let mut local_addr = None;
         match req.send().await {
             Ok(mut response) => {
+                local_addr = response
+                    .extensions()
+                    .get::<HttpInfo>()
+                    .map(|info| info.local_addr());
+
                 let status = response.status().as_u16();
                 // Use static strings to avoid a heap allocation on every request
                 let status_str = status_code_label(status);
@@ -276,8 +283,8 @@ pub async fn run_worker(client: reqwest::Client, config: WorkerConfig, start_tim
             GLOBAL_REQUEST_PERCENTILES.record_ms(actual_latency_ms);
         }
 
-        // Record connection pool statistics (Issue #36)
-        GLOBAL_POOL_STATS.record_request(actual_latency_ms);
+        // Record connection pool statistics (Issue #36, #119)
+        GLOBAL_POOL_STATS.record_request(local_addr);
 
         // No explicit sleep here — sleep_until(next_fire) at the top of the next
         // iteration handles all timing with sub-millisecond precision.
